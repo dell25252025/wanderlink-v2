@@ -10,6 +10,4 @@ const config: CapacitorConfig = {
   }
 };
 
-export default config;cd WanderLink-App-main
-npm install
-
+export default config;
