@@ -4,9 +4,9 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.wanderlink.app',
   appName: 'WanderLink',
-  webDir: 'src',  // Changé de .next à src
+  webDir: 'src',
   server: {
-    url: 'http://192.168.1.13:3000', // Assurez-vous que cette IP est correcte
+    url: 'http://192.168.100.26:3000',
     cleartext: true
   }
 };
