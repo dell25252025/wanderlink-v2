@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Crosshair, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { Geolocation } from '@capacitor/geolocation';
 
 const allLanguages = [
     { id: 'fr', label: 'Français' },
@@ -57,50 +58,46 @@ const Step2 = () => {
   const [isLocating, setIsLocating] = useState(false);
   const { toast } = useToast();
 
-  const handleLocate = () => {
+  const handleLocate = async () => {
     setIsLocating(true);
-    if (!navigator.geolocation) {
-      toast({ variant: 'destructive', title: "Géolocalisation non supportée", description: "Votre navigateur ne supporte pas la géolocalisation." });
-      setIsLocating(false);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { latitude, longitude } = position.coords;
-          const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=fr`);
-          const data = await response.json();
-          if (data?.address?.country) {
-            setValue('location', data.address.country, { shouldValidate: true });
-            toast({ title: "Position trouvée !", description: `Pays défini sur : ${data.address.country}` });
-          } else {
-            throw new Error("Pays non trouvé dans la réponse de l'API.");
-          }
-        } catch (error) {
-          console.error("Error reverse geocoding:", error);
-          toast({ variant: 'destructive', title: "Erreur de localisation", description: "Impossible de déterminer votre pays. Veuillez le sélectionner manuellement." });
-        } finally {
+    try {
+      const permissionStatus = await Geolocation.checkPermissions();
+      if (permissionStatus.location !== 'granted') {
+        const requestStatus = await Geolocation.requestPermissions();
+        if (requestStatus.location !== 'granted') {
+          toast({ variant: 'destructive', title: "Erreur de géolocalisation", description: "Veuillez autoriser l'accès à votre position." });
           setIsLocating(false);
+          return;
         }
-      },
-      (error) => {
-        let description = "Une erreur est survenue.";
-        if (error.code === error.PERMISSION_DENIED) {
-          description = "Veuillez autoriser l'accès à votre position.";
-        } else if (error.code === error.POSITION_UNAVAILABLE) {
-          description = "Les informations de localisation ne sont pas disponibles.";
-        }
-        toast({ variant: 'destructive', title: "Erreur de géolocalisation", description });
-        setIsLocating(false);
       }
-    );
+
+      const position = await Geolocation.getCurrentPosition();
+      const { latitude, longitude } = position.coords;
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=fr`);
+      const data = await response.json();
+      if (data?.address?.country) {
+        setValue('location', data.address.country, { shouldValidate: true });
+        toast({ title: "Position trouvée !", description: `Pays défini sur : ${data.address.country}` });
+      } else {
+        throw new Error("Pays non trouvé dans la réponse de l'API.");
+      }
+    } catch (error: any) {
+      console.error("Error with geolocation:", error);
+      let description = "Une erreur est survenue lors de la localisation.";
+      if (error.message === 'User denied geolocation') {
+          description = "Veuillez autoriser l'accès à votre position.";
+      }
+      toast({ variant: 'destructive', title: "Erreur de géolocalisation", description });
+    } finally {
+      setIsLocating(false);
+    }
   };
 
   useEffect(() => {
     const currentLocation = getValues('location');
     if (!currentLocation) {
-      handleLocate();
+      // We don't automatically locate anymore to avoid spamming the user
+      // handleLocate();
     }
   }, []); // Empty dependency array ensures this runs only once when the component mounts
 
