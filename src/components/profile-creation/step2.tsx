@@ -65,7 +65,7 @@ const Step2 = () => {
       if (permissionStatus.location !== 'granted') {
         const requestStatus = await Geolocation.requestPermissions();
         if (requestStatus.location !== 'granted') {
-          toast({ variant: 'destructive', title: "Erreur de géolocalisation", description: "Veuillez autoriser l'accès à votre position." });
+          // User did not grant permission
           setIsLocating(false);
           return;
         }
@@ -83,11 +83,10 @@ const Step2 = () => {
       }
     } catch (error: any) {
       console.error("Error with geolocation:", error);
-      let description = "Une erreur est survenue lors de la localisation.";
-      if (error.message === 'User denied geolocation') {
-          description = "Veuillez autoriser l'accès à votre position.";
+      // Avoid showing a toast if the user simply denied permission on the initial prompt
+      if (error.message && !error.message.includes("denied")) {
+          toast({ variant: 'destructive', title: "Erreur de localisation", description: "Impossible de déterminer votre position. Veuillez réessayer ou sélectionner manuellement." });
       }
-      toast({ variant: 'destructive', title: "Erreur de géolocalisation", description });
     } finally {
       setIsLocating(false);
     }
@@ -96,8 +95,7 @@ const Step2 = () => {
   useEffect(() => {
     const currentLocation = getValues('location');
     if (!currentLocation) {
-      // We don't automatically locate anymore to avoid spamming the user
-      // handleLocate();
+      handleLocate();
     }
   }, []); // Empty dependency array ensures this runs only once when the component mounts
 
