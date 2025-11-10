@@ -18,6 +18,7 @@ import { Crosshair, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Geolocation } from '@capacitor/geolocation';
+import { countries } from '@/lib/countries'; // Import the countries list
 
 const allLanguages = [
     { id: 'fr', label: 'Français' },
@@ -81,15 +82,23 @@ const Step2 = () => {
       });
 
       const { latitude, longitude } = position.coords;
-      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=fr`);
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=fr&zoom=3`);
       const data = await response.json();
-      if (data?.address?.country) {
-        setValue('location', data.address.country, { shouldValidate: true });
-        if (!isAutomatic) {
-            toast({ title: "Position trouvée !", description: `Pays défini sur : ${data.address.country}` });
+      
+      const countryCode = data?.address?.country_code;
+
+      if (countryCode) {
+        const foundCountry = countries.find(c => c.code.toLowerCase() === countryCode.toLowerCase());
+        if (foundCountry) {
+            setValue('location', foundCountry.name, { shouldValidate: true });
+            if (!isAutomatic) {
+                toast({ title: "Position trouvée !", description: `Pays défini sur : ${foundCountry.name}` });
+            }
+        } else {
+             throw new Error(`Code pays "${countryCode}" non trouvé dans notre liste.`);
         }
       } else {
-        throw new Error("Pays non trouvé dans la réponse de l'API.");
+        throw new Error("Code pays non trouvé dans la réponse de l'API.");
       }
     } catch (error: any) {
       console.error("Error with geolocation:", error);
