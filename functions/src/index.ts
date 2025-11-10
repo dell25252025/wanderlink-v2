@@ -1,75 +1,94 @@
 
-import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
-import {ImageAnnotatorClient} from "@google-cloud/vision";
+import { ImageAnnotatorClient } from "@google-cloud/vision";
 import algoliasearch from "algoliasearch";
+import * as logger from "firebase-functions/logger";
+
+// Import v2 functions
+import { onDocumentWritten } from "firebase-functions/v2/firestore";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onObjectFinalized } from "firebase-functions/v2/storage";
+
+// Define parameters for environment variables
+import { defineString } from "firebase-functions/params";
+const ALGOLIA_APP_ID = defineString("ALGOLIA_APP_ID");
+const ALGOLIA_ADMIN_KEY = defineString("ALGOLIA_ADMIN_KEY");
+const ALGOLIA_SEARCH_KEY = defineString("ALGOLIA_SEARCH_KEY");
+
 
 admin.initializeApp();
 
-// Initialize Algolia
-const ALGOLIA_ID = functions.config().algolia.app_id;
-const ALGOLIA_ADMIN_KEY = functions.config().algolia.api_key;
-const algoliaClient = algoliasearch(ALGOLIA_ID, ALGOLIA_ADMIN_KEY);
-const usersIndex = algoliaClient.initIndex("users");
+// Initialize Algolia client lazily
+let algoliaClient: algoliasearch.SearchClient | null = null;
+const getAlgoliaClient = () => {
+    if (!algoliaClient) {
+        const appId = ALGOLIA_APP_ID.value();
+        const adminKey = ALGOLIA_ADMIN_KEY.value();
+        if (!appId || !adminKey) {
+            logger.error("Algolia App ID or Admin Key is not configured.");
+            throw new Error("Algolia configuration is missing.");
+        }
+        algoliaClient = algoliasearch(appId, adminKey);
+    }
+    return algoliaClient;
+};
 
 const visionClient = new ImageAnnotatorClient();
 
 // This single function handles creations, updates, and deletions.
-export const syncUserToAlgolia = functions.firestore
-    .document('users/{userId}')
-    .onWrite(async (change, context) => {
-        const objectID = context.params.userId;
+export const syncUserToAlgolia = onDocumentWritten("users/{userId}", async (event) => {
+    const objectID = event.params.userId;
+    const usersIndex = getAlgoliaClient().initIndex("users");
 
-        // If the document does not exist, it has been deleted.
-        if (!change.after.exists) {
-            try {
-                await usersIndex.deleteObject(objectID);
-                functions.logger.log(`User ${objectID} deleted from Algolia.`);
-            } catch (error) {
-                functions.logger.error(`Error deleting user ${objectID} from Algolia:`, error);
-            }
-            return;
-        }
-
-        const newData = change.after.data();
-
-        if (!newData) {
-            functions.logger.warn(`No data found for user ${objectID} on write event.`);
-            return;
-        }
-
-        // We don't want to index sensitive data. 
-        // By destructuring, we create a new object 'rest' that excludes these fields.
-        const { privateData, email, ...rest } = newData;
-
-        const algoliaRecord: any = {
-            objectID,
-            ...rest,
-        };
-
-        // Add geolocation data for proximity search.
-        if (newData.latitude && newData.longitude) {
-            algoliaRecord._geoloc = {
-                lat: newData.latitude,
-                lng: newData.longitude,
-            };
-        }
-
+    // If the document does not exist, it has been deleted.
+    if (!event.data?.after.exists) {
         try {
-            await usersIndex.saveObject(algoliaRecord);
-            functions.logger.log(`User ${objectID} indexed in Algolia.`);
+            await usersIndex.deleteObject(objectID);
+            logger.log(`User ${objectID} deleted from Algolia.`);
         } catch (error) {
-            functions.logger.error(`Error indexing user ${objectID} in Algolia:`, error);
+            logger.error(`Error deleting user ${objectID} from Algolia:`, error);
         }
-    });
+        return;
+    }
+
+    const newData = event.data.after.data();
+
+    if (!newData) {
+        logger.warn(`No data found for user ${objectID} on write event.`);
+        return;
+    }
+
+    // We don't want to index sensitive data.
+    const { privateData, email, ...rest } = newData;
+
+    const algoliaRecord: any = {
+        objectID,
+        ...rest,
+    };
+
+    // Add geolocation data for proximity search.
+    if (newData.latitude && newData.longitude) {
+        algoliaRecord._geoloc = {
+            lat: newData.latitude,
+            lng: newData.longitude,
+        };
+    }
+
+    try {
+        await usersIndex.saveObject(algoliaRecord);
+        logger.log(`User ${objectID} indexed in Algolia.`);
+    } catch (error) {
+        logger.error(`Error indexing user ${objectID} in Algolia:`, error);
+    }
+});
 
 // This function securely provides the frontend with the keys it needs.
-export const getAlgoliaConfig = functions.https.onCall((data, context) => {
-  const appId = functions.config().algolia.app_id;
-  const searchKey = functions.config().algolia.search_key;
+export const getAlgoliaConfig = onCall((request) => {
+  const appId = ALGOLIA_APP_ID.value();
+  const searchKey = ALGOLIA_SEARCH_KEY.value();
 
   if (!appId || !searchKey) {
-      throw new functions.https.HttpsError('internal', 'Algolia configuration is missing on the server.');
+      throw new HttpsError('internal', 'Algolia configuration is missing on the server.');
   }
 
   return {
@@ -84,14 +103,17 @@ export const getAlgoliaConfig = functions.https.onCall((data, context) => {
  * It uses the Google Cloud Vision API to detect inappropriate content.
  * If the image is flagged as adult or violent, it is deleted from Storage.
  */
-export const moderateProfilePicture = functions.storage
-  .object()
-  .onFinalize(async (object) => {
+export const moderateProfilePicture = onObjectFinalized(async (event) => {
+    const object = event.data;
+    
     // We only want to moderate images in the profilePictures folder.
     if (!object.name?.startsWith("profilePictures/")) {
-      return null;
+        logger.log(`File ${object.name} is not a profile picture. Ignoring.`);
+        return null;
     }
+    // Ignore folder creation events and non-image files.
     if (object.contentType?.endsWith("/") || !object.contentType?.startsWith("image/")) {
+        logger.log(`File ${object.name} is a folder or not an image. Ignoring.`);
         return null;
     }
 
@@ -103,19 +125,24 @@ export const moderateProfilePicture = functions.storage
       const [result] = await visionClient.safeSearchDetection(gcsUri);
       const safeSearch = result.safeSearchAnnotation;
 
-      if (!safeSearch) return null;
+      if (!safeSearch) {
+        logger.log(`No safe search annotation for ${filePath}.`);
+        return null;
+      }
 
       const isAdult = safeSearch.adult === "LIKELY" || safeSearch.adult === "VERY_LIKELY";
       const isViolent = safeSearch.violence === "LIKELY" || safeSearch.violence === "VERY_LIKELY";
 
       if (isAdult || isViolent) {
-        functions.logger.warn(`Inappropriate image detected: ${filePath}. Deleting...`);
+        logger.warn(`Inappropriate image detected: ${filePath}. Deleting...`);
         const bucket = admin.storage().bucket(bucketName);
         await bucket.file(filePath).delete();
-      } 
+      } else {
+        logger.log(`Image ${filePath} is clean.`);
+      }
       return null;
     } catch (error) {
-      functions.logger.error(`Error analyzing image ${filePath}:`, error);
+      logger.error(`Error analyzing image ${filePath}:`, error);
       return null;
     }
-  });
+});
