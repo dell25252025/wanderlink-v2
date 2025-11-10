@@ -52,26 +52,29 @@ const allLanguages = [
     { id: 'he', label: 'Hébreu' },
 ];
 
-
 const Step2 = () => {
   const { control, setValue, getValues } = useFormContext();
   const [isLocating, setIsLocating] = useState(false);
   const { toast } = useToast();
 
-  const handleLocate = async () => {
+  const handleLocate = async (isAutomatic = false) => {
     setIsLocating(true);
     try {
-      const permissionStatus = await Geolocation.checkPermissions();
+      let permissionStatus = await Geolocation.checkPermissions();
+
       if (permissionStatus.location !== 'granted') {
-        const requestStatus = await Geolocation.requestPermissions();
-        if (requestStatus.location !== 'granted') {
-          // User did not grant permission
+        if (isAutomatic) {
+          setIsLocating(false);
+          return; 
+        }
+        permissionStatus = await Geolocation.requestPermissions();
+        if (permissionStatus.location !== 'granted') {
+          toast({ variant: 'destructive', title: "Permission refusée", description: "L'accès à la localisation a été refusé." });
           setIsLocating(false);
           return;
         }
       }
 
-      // Get position with increased timeout and lower accuracy for better compatibility
       const position = await Geolocation.getCurrentPosition({ 
         timeout: 15000, 
         enableHighAccuracy: false 
@@ -82,14 +85,15 @@ const Step2 = () => {
       const data = await response.json();
       if (data?.address?.country) {
         setValue('location', data.address.country, { shouldValidate: true });
-        toast({ title: "Position trouvée !", description: `Pays défini sur : ${data.address.country}` });
+        if (!isAutomatic) {
+            toast({ title: "Position trouvée !", description: `Pays défini sur : ${data.address.country}` });
+        }
       } else {
         throw new Error("Pays non trouvé dans la réponse de l'API.");
       }
     } catch (error: any) {
       console.error("Error with geolocation:", error);
-      // Avoid showing a toast if the user simply denied permission on the initial prompt
-      if (error.message && !error.message.includes("denied")) {
+      if (!isAutomatic) {
           toast({ variant: 'destructive', title: "Erreur de localisation", description: "Impossible de déterminer votre position. Veuillez réessayer ou sélectionner manuellement." });
       }
     } finally {
@@ -100,9 +104,9 @@ const Step2 = () => {
   useEffect(() => {
     const currentLocation = getValues('location');
     if (!currentLocation) {
-      handleLocate();
+      handleLocate(true);
     }
-  }, []); // Empty dependency array ensures this runs only once when the component mounts
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -129,7 +133,7 @@ const Step2 = () => {
                 )}
               />
               <Separator />
-               <Button type="button" variant="outline" onClick={handleLocate} disabled={isLocating} className="w-full">
+               <Button type="button" variant="outline" onClick={() => handleLocate(false)} disabled={isLocating} className="w-full">
                   {isLocating ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
