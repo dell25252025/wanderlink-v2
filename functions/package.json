@@ -19,8 +19,11 @@
     "firebase-functions": "^4.9.0"
   },
   "devDependencies": {
-    "typescript": "^4.9.5",
+    "typescript": "^5.4.5",
     "firebase-functions-test": "^3.2.0"
+  },
+  "overrides": {
+    "@types/glob": "7.2.0"
   },
   "private": true
 }
