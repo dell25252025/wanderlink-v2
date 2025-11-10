@@ -1,8 +1,6 @@
-
 {
   "name": "functions",
   "scripts": {
-    "lint": "eslint --ext .js,.ts .",
     "build": "tsc",
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
@@ -11,21 +9,18 @@
     "logs": "firebase functions:log"
   },
   "engines": {
-    "node": "18"
+    "node": "20"
   },
   "main": "lib/index.js",
   "dependencies": {
     "@google-cloud/vision": "^4.3.0",
-    "firebase-admin": "^12.1.1",
-    "firebase-functions": "^5.0.1"
+    "algoliasearch": "^4.23.3",
+    "firebase-admin": "^11.11.1",
+    "firebase-functions": "^4.9.0"
   },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^7.11.0",
-    "@typescript-eslint/parser": "^7.11.0",
-    "eslint": "^8.57.0",
-    "eslint-config-google": "^0.14.0",
-    "eslint-plugin-import": "^2.29.1",
-    "typescript": "^5.4.5"
+    "typescript": "^4.9.5",
+    "firebase-functions-test": "^3.2.0"
   },
   "private": true
 }

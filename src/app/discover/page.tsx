@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -17,11 +17,16 @@ import { AgeRangeSlider } from '@/components/ui/age-range-slider';
 import type { DateRange } from 'react-day-picker';
 import { travelIntentions, travelStyles, travelActivities } from '@/lib/options';
 import { onAuthStateChanged, type User } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, functions } from '@/lib/firebase';
 import { getUserProfile } from '@/lib/firebase-actions';
 import type { DocumentData } from 'firebase/firestore';
 import { Loader2, Search, Crown } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import algoliasearch from 'algoliasearch/lite';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+
+// Initialize Algolia
+const getAlgoliaConfig = httpsCallable(functions, 'getAlgoliaConfig');
 
 export default function DiscoverPage() {
     const router = useRouter();
@@ -29,6 +34,21 @@ export default function DiscoverPage() {
     const [userProfile, setUserProfile] = useState<DocumentData | null>(null);
     const [loading, setLoading] = useState(true);
     const [isPremiumDialogOpen, setIsPremiumDialogOpen] = useState(false);
+    const [algoliaConfig, setAlgoliaConfig] = useState<{ appId: string, searchKey: string } | null>(null);
+
+    const algoliaClient = useMemo(() => {
+        if (algoliaConfig) {
+            return algoliasearch(algoliaConfig.appId, algoliaConfig.searchKey);
+        }
+        return null;
+    }, [algoliaConfig]);
+
+    const usersIndex = useMemo(() => {
+        if (algoliaClient) {
+            return algoliaClient.initIndex("users");
+        }
+        return null;
+    }, [algoliaClient]);
 
     const [showMe, setShowMe] = useState('Femme');
     const [ageRange, setAgeRange] = useState<[number, number]>([25, 45]);
@@ -58,6 +78,15 @@ export default function DiscoverPage() {
                     }
                     setLoading(false);
                 });
+
+                getAlgoliaConfig()
+                    .then((result) => {
+                        setAlgoliaConfig(result.data as any);
+                    })
+                    .catch((error) => {
+                        console.error("Error fetching Algolia config:", error);
+                    });
+
             } else {
                 setLoading(false);
                 router.push('/login');
@@ -85,25 +114,40 @@ export default function DiscoverPage() {
         }
     };
 
-    const handleSearch = () => {
-        const params = new URLSearchParams();
+    const handleSearch = async () => {
+        if (!usersIndex || !userProfile) return;
+
+        const filters = [];
+        if (showMe) filters.push(`gender: ${showMe}`);
         
-        if (showMe) params.set('showMe', showMe);
-        if (ageRange) {
-            params.set('minAge', ageRange[0].toString());
-            params.set('maxAge', ageRange[1].toString());
+        const numericFilters = [];
+        numericFilters.push(`age >= ${ageRange[0]}`);
+        numericFilters.push(`age <= ${ageRange[1]}`);
+
+        if (country && !nearby && userProfile.isPremium) filters.push(`location: ${country}`);
+        if (destination && destination !== 'Toutes') filters.push(`destinations: ${destination}`);
+        if (intention && userProfile.isPremium) filters.push(`travelIntentions: ${intention}`);
+        if (travelStyle && travelStyle !== 'Tous' && userProfile.isPremium) filters.push(`travelStyle: ${travelStyle}`);
+        if (activities && activities !== 'Toutes' && userProfile.isPremium) filters.push(`activities: ${activities}`);
+
+        const searchOptions: any = {
+            filters: filters.join(' AND '),
+            numericFilters: numericFilters.join(' AND '),
+        };
+
+        if (nearby && userProfile.latitude && userProfile.longitude) {
+            searchOptions.aroundLatLng = `${userProfile.latitude}, ${userProfile.longitude}`;
+            searchOptions.aroundRadius = 50000; // 50km in meters
         }
-        if (date?.from) params.set('dateFrom', date.from.toISOString());
-        if (date?.to) params.set('dateTo', date.to.toISOString());
-        if (flexibleDates) params.set('flexibleDates', 'true');
-        if (nearby && userProfile?.isPremium) params.set('nearby', 'true');
-        if (country && !nearby && userProfile?.isPremium) params.set('country', country);
-        if (destination && destination !== 'Toutes') params.set('destination', destination);
-        if (intention && userProfile?.isPremium) params.set('intention', intention);
-        if (travelStyle && travelStyle !== 'Tous' && userProfile?.isPremium) params.set('travelStyle', travelStyle);
-        if (activities && activities !== 'Toutes' && userProfile?.isPremium) params.set('activities', activities);
-        
-        router.push(`/?${params.toString()}`);
+
+        try {
+            const { hits } = await usersIndex.search('', searchOptions);
+            const searchResults = hits.map(hit => ({ ...hit, objectID: undefined }));
+            localStorage.setItem('searchResults', JSON.stringify(searchResults));
+            router.push('/');
+        } catch (error) {
+            console.error("Error searching with Algolia:", error);
+        }
     };
     
     const handlePremiumFeatureClick = () => {
@@ -115,7 +159,7 @@ export default function DiscoverPage() {
     const uniformSelectClass = "w-3/5 md:w-[45%] h-9 text-sm";
     const isPremium = userProfile?.isPremium ?? false;
 
-    if (loading) {
+    if (loading || !algoliaConfig) {
          return (
             <div className="flex h-screen w-full flex-col items-center justify-center bg-background">
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
