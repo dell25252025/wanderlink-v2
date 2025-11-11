@@ -22,7 +22,7 @@ import { getUserProfile } from '@/lib/firebase-actions';
 import type { DocumentData } from 'firebase/firestore';
 import { Loader2, Search, Crown } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { algoliasearch } from 'algoliasearch/lite';
+const { algoliasearch } = require('algoliasearch/lite');
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { functions } from '@/lib/firebase';
 
