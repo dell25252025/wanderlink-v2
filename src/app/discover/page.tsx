@@ -96,7 +96,16 @@ export default function DiscoverPage() {
             if (algoliaConfig && !algoliaClient) {
                 try {
                     const algoliasearchModule = await import('algoliasearch/lite');
-                    const algoliasearch = algoliasearchModule.algoliasearch;
+
+                    // --- ALGOLIA DEBUG ---
+                    console.log("--- ALGOLIA DEBUG START ---");
+                    console.log("Module content:", JSON.stringify(algoliasearchModule));
+                    console.log("Module keys:", Object.keys(algoliasearchModule));
+                    console.log("Is .default a function?", typeof algoliasearchModule.default);
+                    console.log("Is .algoliasearch a function?", typeof algoliasearchModule.algoliasearch);
+                    console.log("--- ALGOLIA DEBUG END ---");
+
+                    const algoliasearch = algoliasearchModule.algoliasearch || algoliasearchModule.default;
                     if (typeof algoliasearch === 'function') {
                         const client = algoliasearch(algoliaConfig.appId, algoliaConfig.searchKey);
                         setAlgoliaClient(client);
