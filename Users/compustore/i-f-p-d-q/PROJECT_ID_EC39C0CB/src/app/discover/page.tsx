@@ -157,7 +157,7 @@ export default function DiscoverPage() {
         try {
             const { hits } = await usersIndex.search('', searchOptions);
             const searchResults = hits.map(hit => {
-                const { _highlightResult, _snippetResult, objectID, ...rest } = hit;
+                const { _highlightResult, _snippetResult, ...rest } = hit;
                 return { id: (hit as any).objectID, ...rest };
             });
 
@@ -363,3 +363,5 @@ export default function DiscoverPage() {
         </div>
     );
 }
+
+    

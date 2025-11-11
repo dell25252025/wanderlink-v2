@@ -18,7 +18,7 @@ import IncomingCallManager from '@/components/incoming-call-manager';
 
 function DiscoverPage({ user }: { user: User }) {
   const { toast } = useToast();
-  const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [currentUserProfile, setCurrentUserProfile] = useState<DocumentData | null>(null);
   const [allUsers, setAllUsers] = useState<DocumentData[]>([]);
@@ -29,23 +29,26 @@ function DiscoverPage({ user }: { user: User }) {
     async function fetchProfiles() {
       try {
         setProfilesLoading(true);
-        // Check for search results in localStorage
+        
         const searchResultsJSON = localStorage.getItem('searchResults');
         const searchTimestamp = localStorage.getItem('searchTimestamp');
         
-        // Clear old search results after 5 minutes
+        let profilesToDisplay;
+
+        // Clear old search results after 5 minutes to ensure data is fresh
         if (searchTimestamp && Date.now() - parseInt(searchTimestamp, 10) > 5 * 60 * 1000) {
             localStorage.removeItem('searchResults');
             localStorage.removeItem('searchTimestamp');
+            profilesToDisplay = null;
+        } else {
+            profilesToDisplay = searchResultsJSON ? JSON.parse(searchResultsJSON) : null;
         }
 
-        if (searchResultsJSON) {
-            const searchResults = JSON.parse(searchResultsJSON);
-            setDisplayMatches(searchResults);
-            // Optionally, clear the stored results so they aren't shown on next visit
+        if (profilesToDisplay) {
+            setDisplayMatches(profilesToDisplay);
+            // Clear the stored results so they aren't shown on the next visit without a new search
             localStorage.removeItem('searchResults');
             localStorage.removeItem('searchTimestamp');
-
         } else {
             // No search results, fetch default users
             const [userProfile, users] = await Promise.all([
@@ -53,6 +56,7 @@ function DiscoverPage({ user }: { user: User }) {
               getAllUsers(12), // Fetch a limited number of users
             ]);
             setCurrentUserProfile(userProfile);
+            // Exclude the current user from the list of profiles to display
             const otherUsers = users.filter(u => u.id !== user.uid);
             setAllUsers(otherUsers);
             setDisplayMatches(otherUsers);
@@ -60,13 +64,13 @@ function DiscoverPage({ user }: { user: User }) {
 
       } catch (error) {
         console.error("Failed to fetch profiles:", error);
-        toast({ variant: 'destructive', title: 'Error fetching profiles' });
+        toast({ variant: 'destructive', title: 'Error fetching profiles', description: 'Could not load user profiles.' });
       } finally {
         setProfilesLoading(false);
       }
     }
     fetchProfiles();
-  }, [user, toast]);
+  }, [user.uid, toast]);
   
 
   const getMappedProfiles = (profiles: DocumentData[]): UserProfile[] => {
@@ -112,7 +116,11 @@ function DiscoverPage({ user }: { user: User }) {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-muted-foreground mt-8">Aucun profil ne correspond à votre recherche.</p>
+                    <div className='flex flex-col items-center justify-center text-center h-96'>
+                        <p className="text-muted-foreground mt-8 text-lg">Aucun profil trouvé.</p>
+                        <p className="text-muted-foreground mt-2 text-sm max-w-sm">Essayez d'élargir vos critères de recherche ou revenez plus tard.</p>
+                        <Button onClick={() => router.push('/discover')} className="mt-6">Modifier la recherche</Button>
+                    </div>
                   )}
                 </div>
               </>
@@ -173,3 +181,5 @@ function ConditionalHome() {
 }
 
 export default ConditionalHome;
+
+    

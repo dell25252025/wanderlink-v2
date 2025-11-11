@@ -83,6 +83,10 @@ const Step2 = () => {
           enableHighAccuracy: false
       });
       const { latitude, longitude } = coordinates.coords;
+      
+      setValue('latitude', latitude);
+      setValue('longitude', longitude);
+
       // Using a reverse geocoding service that returns country code
       const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=en&zoom=3`);
       const data = await response.json();
@@ -258,3 +262,5 @@ const Step2 = () => {
 };
 
 export default Step2;
+
+    
