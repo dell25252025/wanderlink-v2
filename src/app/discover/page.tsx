@@ -17,13 +17,15 @@ import { AgeRangeSlider } from '@/components/ui/age-range-slider';
 import type { DateRange } from 'react-day-picker';
 import { travelIntentions, travelStyles, travelActivities } from '@/lib/options';
 import { onAuthStateChanged, type User } from 'firebase/auth';
-import { auth, functions } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
 import { getUserProfile } from '@/lib/firebase-actions';
 import type { DocumentData } from 'firebase/firestore';
 import { Loader2, Search, Crown } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import algoliasearch from 'algoliasearch/lite';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { functions } from '@/lib/firebase';
+
 
 // Initialize Algolia
 const getAlgoliaConfig = httpsCallable(functions, 'getAlgoliaConfig');
@@ -35,6 +37,8 @@ export default function DiscoverPage() {
     const [loading, setLoading] = useState(true);
     const [isPremiumDialogOpen, setIsPremiumDialogOpen] = useState(false);
     const [algoliaConfig, setAlgoliaConfig] = useState<{ appId: string, searchKey: string } | null>(null);
+    const [isSearching, setIsSearching] = useState(false);
+
 
     const algoliaClient = useMemo(() => {
         if (algoliaConfig) {
@@ -116,39 +120,46 @@ export default function DiscoverPage() {
 
     const handleSearch = async () => {
         if (!usersIndex || !userProfile) return;
-
+        setIsSearching(true);
+    
         const filters = [];
-        if (showMe) filters.push(`gender: ${showMe}`);
+        if (showMe) filters.push(`gender:${showMe}`);
         
         const numericFilters = [];
         numericFilters.push(`age >= ${ageRange[0]}`);
         numericFilters.push(`age <= ${ageRange[1]}`);
-
-        if (country && !nearby && userProfile.isPremium) filters.push(`location: ${country}`);
-        if (destination && destination !== 'Toutes') filters.push(`destinations: ${destination}`);
-        if (intention && userProfile.isPremium) filters.push(`travelIntentions: ${intention}`);
-        if (travelStyle && travelStyle !== 'Tous' && userProfile.isPremium) filters.push(`travelStyle: ${travelStyle}`);
-        if (activities && activities !== 'Toutes' && userProfile.isPremium) filters.push(`activities: ${activities}`);
-
+    
+        if (country && !nearby && userProfile.isPremium) filters.push(`location:"${country}"`);
+        if (destination && destination !== 'Toutes') filters.push(`destination:"${destination}"`);
+        if (intention && userProfile.isPremium) filters.push(`intention:"${intention}"`);
+        if (travelStyle && travelStyle !== 'Tous' && userProfile.isPremium) filters.push(`travelStyle:"${travelStyle}"`);
+        if (activities && activities !== 'Toutes' && userProfile.isPremium) filters.push(`activities:"${activities}"`);
+    
+        // Ensure we don't find the current user in the results
+        filters.push(`NOT objectID:${userProfile.id}`);
+    
         const searchOptions: any = {
             filters: filters.join(' AND '),
             numericFilters: numericFilters.join(' AND '),
         };
-
+    
         if (nearby && userProfile.latitude && userProfile.longitude) {
             searchOptions.aroundLatLng = `${userProfile.latitude}, ${userProfile.longitude}`;
             searchOptions.aroundRadius = 50000; // 50km in meters
         }
-
+    
         try {
             const { hits } = await usersIndex.search('', searchOptions);
-            const searchResults = hits.map(hit => ({ ...hit, objectID: undefined }));
+            const searchResults = hits.map(hit => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined, objectID: undefined }));
             localStorage.setItem('searchResults', JSON.stringify(searchResults));
             router.push('/');
         } catch (error) {
             console.error("Error searching with Algolia:", error);
+        } finally {
+            setIsSearching(false);
         }
     };
+    
     
     const handlePremiumFeatureClick = () => {
         if (!userProfile?.isPremium) {
@@ -307,9 +318,9 @@ export default function DiscoverPage() {
                 </div>
             </main>
             <footer className="fixed bottom-0 z-10 w-full p-2 bg-background/80 backdrop-blur-sm border-t">
-                <Button onClick={handleSearch} size="lg" className="w-full">
-                    <Search className="mr-2 h-4 w-4" />
-                    Recherche
+                <Button onClick={handleSearch} size="lg" className="w-full" disabled={isSearching}>
+                    {isSearching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                    {isSearching ? 'Recherche...' : 'Recherche'}
                 </Button>
             </footer>
 
