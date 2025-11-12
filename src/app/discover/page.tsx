@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import * as algoliasearch from 'algoliasearch/lite'; // Correct import method
+=import * as algoliasearch from 'algoliasearch/lite'; // Correct import method
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
