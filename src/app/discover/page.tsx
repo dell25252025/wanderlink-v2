@@ -27,7 +27,6 @@ import { functions } from '@/lib/firebase';
 
 
 const getAlgoliaConfig = httpsCallable(functions, 'getAlgoliaConfig');
-// This is the safest way to get the function, regardless of module format
 const algoliaInit = (algoliasearch as any).default ?? algoliasearch;
 
 export default function DiscoverPage() {
