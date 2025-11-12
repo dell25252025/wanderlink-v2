@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import algoliasearch from 'algoliasearch/lite'; // Corrected import
+import * as algoliasearch from 'algoliasearch/lite'; 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -26,8 +26,9 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { functions } from '@/lib/firebase';
 
 
-// Initialize Algolia
 const getAlgoliaConfig = httpsCallable(functions, 'getAlgoliaConfig');
+// This is the safest way to get the function, regardless of module format
+const algoliaInit = (algoliasearch as any).default ?? algoliasearch;
 
 export default function DiscoverPage() {
     const router = useRouter();
@@ -77,10 +78,10 @@ export default function DiscoverPage() {
                     .then((result) => {
                         const config = result.data as { appId: string, searchKey: string };
                         if (config && config.appId && config.searchKey) {
-                            const client = algoliasearch(config.appId, config.searchKey);
+                            const client = algoliaInit(config.appId, config.searchKey);
                             setAlgoliaClient(client);
                         } else {
-                            console.error('Could not initialize Algolia. Invalid config received from Firebase function.');
+                            console.error('Could not initialize Algolia. Invalid config received.');
                         }
                     })
                     .catch((error) => {
