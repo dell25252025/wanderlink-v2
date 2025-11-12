@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { liteClient as algoliasearch } from 'algoliasearch/lite';
+import * as algoliasearch from 'algoliasearch/lite';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -28,6 +28,9 @@ import { functions } from '@/lib/firebase';
 
 // Initialize Algolia
 const getAlgoliaConfig = httpsCallable(functions, 'getAlgoliaConfig');
+
+// The algolia object is not a function, so we need to use the `liteClient` property
+const algoliaSearchFunction = (algoliasearch as any).liteClient || (algoliasearch as any).default;
 
 export default function DiscoverPage() {
     const router = useRouter();
@@ -79,8 +82,12 @@ export default function DiscoverPage() {
                     .then((result) => {
                         const config = result.data as { appId: string, searchKey: string };
                         setAlgoliaConfig(config);
-                        const client = algoliasearch(config.appId, config.searchKey);
-                        setAlgoliaClient(client);
+                        if (typeof algoliaSearchFunction === 'function') {
+                            const client = algoliaSearchFunction(config.appId, config.searchKey);
+                            setAlgoliaClient(client);
+                        } else {
+                            console.error('Could not initialize Algolia search. The search function is not available.');
+                        }
                     })
                     .catch((error) => {
                         console.error("Error fetching Algolia config:", error);
