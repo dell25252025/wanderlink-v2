@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getUserProfile } from '@/lib/firebase-actions';
 import { auth, db } from '@/lib/firebase';
-import { doc, getDoc, setDoc, onSnapshot, updateDoc, deleteDoc, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, updateDoc, deleteDoc, collection, addDoc, query, where, getDocs, DocumentSnapshot } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -124,7 +124,7 @@ function CallUI() {
         await updateDoc(callDocRef, { offer });
 
         // Écouter la réponse et le statut
-        onSnapshot(callDocRef, (snapshot) => {
+        onSnapshot(callDocRef, (snapshot: DocumentSnapshot) => {
             const data = snapshot.data();
             if(data?.status === 'declined'){
                 setCallStatus('declined');
@@ -213,7 +213,7 @@ function CallUI() {
 
   return (
     <div className="relative flex h-screen w-full flex-col items-center justify-between bg-slate-900 text-white p-8">
-       {/* Vidéo de l'interlocuteur en arrière-plan */}
+       {/* Vidéo de l\'interlocuteur en arrière-plan */}
       <video ref={remoteVideoRef} autoPlay playsInline className="absolute inset-0 w-full h-full object-cover" />
       <div className="absolute inset-0 bg-black/30" />
 
