@@ -1,7 +1,7 @@
 
 import { db } from './src/lib/firebase';
 import { collection, getDocs, writeBatch } from 'firebase/firestore';
-import algoliasearch from 'algoliasearch';
+const algoliasearch = require('algoliasearch');
 
 // --- ATTENTION ---
 // Ce script supprime TOUS les utilisateurs de Firestore et de l'index Algolia.
@@ -51,6 +51,11 @@ async function cleanup() {
 
   } catch (error) {
     console.error("❌ Une erreur est survenue pendant le nettoyage:", error);
+    // Ensure process exits with an error code to prevent hanging
+    process.exit(1);
+  } finally {
+    // Ensure the process exits cleanly on success
+    process.exit(0);
   }
 }
 
