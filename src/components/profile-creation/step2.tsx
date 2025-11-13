@@ -18,7 +18,8 @@ import { Crosshair, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Geolocation } from '@capacitor/geolocation';
-import { countries } from '@/lib/countries'; // Import the countries list
+import { Http } from '@capacitor/http';
+import { countries } from '@/lib/countries'; 
 
 const allLanguages = [
     { id: 'fr', label: 'Français' },
@@ -82,8 +83,21 @@ const Step2 = () => {
       });
 
       const { latitude, longitude } = position.coords;
-      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=fr&zoom=3`);
-      const data = await response.json();
+      
+      const options = {
+        url: 'https://nominatim.openstreetmap.org/reverse',
+        params: {
+          format: 'json',
+          lat: latitude.toString(),
+          lon: longitude.toString(),
+          'accept-language': 'fr',
+          zoom: '3'
+        },
+        headers: { 'User-Agent': 'WanderLink/1.0 (tech.wanderlink.app)' }
+      };
+
+      const response = await Http.get(options);
+      const data = response.data;
       
       const countryCode = data?.address?.country_code;
 
