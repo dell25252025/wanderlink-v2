@@ -2,7 +2,7 @@
 import { db } from './src/lib/firebase';
 import { collection, getDocs, writeBatch } from 'firebase/firestore';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const algoliasearch = require('algoliasearch');
+const algoliasearchModule = require('algoliasearch');
 
 // --- CONFIGURATION ---
 const ALGOLIA_APP_ID = "H38LS2Y5J2";
@@ -32,6 +32,10 @@ async function cleanup() {
     if (!ALGOLIA_APP_ID || !ALGOLIA_ADMIN_KEY) {
         throw new Error("Les identifiants Admin d'Algolia ne sont pas configurés.");
     }
+
+    // Correction définitive de l'importation
+    const algoliasearch = algoliasearchModule.default || algoliasearchModule;
+
     const client = algoliasearch(ALGOLIA_APP_ID, ALGOLIA_ADMIN_KEY);
     const index = client.initIndex(ALGOLIA_INDEX_NAME);
     
