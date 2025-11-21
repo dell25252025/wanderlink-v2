@@ -1,4 +1,3 @@
-// Force git update
 
 'use client';
 
@@ -18,8 +17,8 @@ import { Button } from '@/components/ui/button';
 import { Crosshair, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { countries } from '@/lib/countries';
 import { Capacitor } from '@capacitor/core';
-import { countries } from '@/lib/countries'; 
 
 const allLanguages = [
     { id: 'fr', label: 'Français' },
@@ -60,111 +59,75 @@ const Step2 = () => {
   const { toast } = useToast();
 
   const handleLocate = async (isAutomatic = false) => {
+    if (!Capacitor.isNativePlatform()) {
+        console.log("Capacitor features are not available in the browser.");
+        if (!isAutomatic) {
+            toast({ variant: 'destructive', title: "Fonctionnalité non disponible", description: "La géolocalisation n'est disponible que sur l'application mobile." });
+        }
+        return;
+    }
+
     setIsLocating(true);
     try {
-      let latitude, longitude;
+      const { Geolocation } = await import('@capacitor/geolocation');
+      const { Http } = await import('@capacitor/http');
 
-      if (Capacitor.isNativePlatform()) {
-        const { Geolocation } = await import('@capacitor/geolocation');
-        const { Http } = await import('@capacitor/http');
+      let permissionStatus = await Geolocation.checkPermissions();
 
-        let permissionStatus = await Geolocation.checkPermissions();
-
-        if (permissionStatus.location !== 'granted') {
-          if (isAutomatic) {
-            setIsLocating(false);
-            return;
-          }
-          permissionStatus = await Geolocation.requestPermissions();
-          if (permissionStatus.location !== 'granted') {
-            toast({ variant: 'destructive', title: "Permission refusée", description: "L'accès à la localisation a été refusé." });
-            setIsLocating(false);
-            return;
-          }
+      if (permissionStatus.location !== 'granted') {
+        if (isAutomatic) {
+          setIsLocating(false);
+          return; 
         }
+        permissionStatus = await Geolocation.requestPermissions();
+        if (permissionStatus.location !== 'granted') {
+          toast({ variant: 'destructive', title: "Permission refusée", description: "L'accès à la localisation a été refusé." });
+          setIsLocating(false);
+          return;
+        }
+      }
 
-        const position = await Geolocation.getCurrentPosition({
-          timeout: 15000,
-          enableHighAccuracy: false
-        });
-        latitude = position.coords.latitude;
-        longitude = position.coords.longitude;
+      const position = await Geolocation.getCurrentPosition({ 
+        timeout: 15000, 
+        enableHighAccuracy: false 
+      });
 
-        const options = {
-          url: 'https://nominatim.openstreetmap.org/reverse',
-          params: {
-            format: 'json',
-            lat: latitude.toString(),
-            lon: longitude.toString(),
-            'accept-language': 'fr',
-            zoom: '3'
-          },
-          headers: { 'User-Agent': 'WanderLink/1.0 (tech.wanderlink.app)' }
-        };
-        const response = await Http.get(options);
-        const data = response.data;
-        const countryCode = data?.address?.country_code;
+      const { latitude, longitude } = position.coords;
+      
+      const options = {
+        url: 'https://nominatim.openstreetmap.org/reverse',
+        params: {
+          format: 'json',
+          lat: latitude.toString(),
+          lon: longitude.toString(),
+          'accept-language': 'fr',
+          zoom: '3'
+        },
+        headers: { 'User-Agent': 'WanderLink/1.0 (tech.wanderlink.app)' }
+      };
 
-        if (countryCode) {
-            const foundCountry = countries.find(c => c.code.toLowerCase() === countryCode.toLowerCase());
-            if (foundCountry) {
-                setValue('location', foundCountry.name, { shouldValidate: true });
-                if (!isAutomatic) {
-                    toast({ title: "Position trouvée !", description: `Pays défini sur : ${foundCountry.name}` });
-                }
-            } else {
-                 throw new Error(`Code pays "${countryCode}" non trouvé dans notre liste.`);
+      const response = await Http.get(options);
+      const data = response.data;
+      
+      const countryCode = data?.address?.country_code;
+
+      if (countryCode) {
+        const foundCountry = countries.find(c => c.code.toLowerCase() === countryCode.toLowerCase());
+        if (foundCountry) {
+            setValue('location', foundCountry.name, { shouldValidate: true });
+            if (!isAutomatic) {
+                toast({ title: "Position trouvée !", description: `Pays défini sur : ${foundCountry.name}` });
             }
         } else {
-            throw new Error("Code pays non trouvé dans la réponse de l'API.");
+             throw new Error(`Code pays "${countryCode}" non trouvé dans notre liste.`);
         }
-
       } else {
-        // Web implementation
-        await new Promise((resolve, reject) => {
-            if (!navigator.geolocation) {
-                reject(new Error("La géolocalisation n'est pas supportée par votre navigateur."));
-                return;
-            }
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-                timeout: 15000,
-                enableHighAccuracy: false
-            });
-        }).then(async (position) => {
-            const pos = position as GeolocationPosition;
-            latitude = pos.coords.latitude;
-            longitude = pos.coords.longitude;
-
-            const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=fr&zoom=3`;
-            const response = await fetch(url, {
-                headers: { 'User-Agent': 'WanderLink/1.0 (tech.wanderlink.app)' }
-            });
-            const data = await response.json();
-            const countryCode = data?.address?.country_code;
-
-            if (countryCode) {
-                const foundCountry = countries.find(c => c.code.toLowerCase() === countryCode.toLowerCase());
-                if (foundCountry) {
-                    setValue('location', foundCountry.name, { shouldValidate: true });
-                    if (!isAutomatic) {
-                        toast({ title: "Position trouvée !", description: `Pays défini sur : ${foundCountry.name}` });
-                    }
-                } else {
-                     throw new Error(`Code pays "${countryCode}" non trouvé dans notre liste.`);
-                }
-            } else {
-                throw new Error("Code pays non trouvé dans la réponse de l'API.");
-            }
-        });
+        throw new Error("Code pays non trouvé dans la réponse de l'API.");
       }
     } catch (error: any) {
       console.error("Error with geolocation:", error);
       if (!isAutomatic) {
-          let errorMessage = "Impossible de déterminer votre position. Veuillez réessayer ou sélectionner manuellement.";
-          if (error.code === 1) { // PERMISSION_DENIED
-              errorMessage = "L'accès à la localisation a été refusé.";
-          }
-          toast({ variant: 'destructive', title: "Erreur de localisation", description: errorMessage });
+          toast({ variant: 'destructive', title: "Erreur de localisation", description: "Impossible de déterminer votre position. Veuillez réessayer ou sélectionner manuellement." });
       }
     } finally {
       setIsLocating(false);
