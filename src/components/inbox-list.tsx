@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -43,8 +42,9 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
   const lastMessageTimestamp = chat.lastMessage?.timestamp?.toDate();
   const isUnread = chat.lastMessage && !chat.lastMessage.read && chat.lastMessage.senderId !== auth.currentUser?.uid;
 
+  // --- BUG FIX: Utiliser l'ID de l'autre participant pour le lien --- //
   return (
-    <Link href={`/chat?id=${chat.id}`} className="block w-full">
+    <Link href={`/chat?id=${chat.otherParticipant.id}`} className="block w-full">
       <div className="flex items-center space-x-4 p-3 hover:bg-muted/50 transition-colors rounded-lg">
         <Avatar className="h-12 w-12">
           <AvatarImage src={chat.otherParticipant.profilePicture || undefined} alt={chat.otherParticipant.name} />
@@ -88,8 +88,6 @@ const InboxList = () => {
 
     setLoadingChats(true);
     const chatsRef = collection(db, 'chats');
-    // **CORRECTION DE L'ERREUR D'INDEX**
-    // La requête est simplifiée pour ne plus trier (orderBy). Le tri se fera côté client.
     const q = query(
       chatsRef, 
       where('participants', 'array-contains', user.uid)
@@ -116,17 +114,20 @@ const InboxList = () => {
         return { ...chat, otherParticipant };
       }));
 
-      // Tri des conversations côté client pour éviter l'erreur d'index
       const sortedChats = enrichedChats.sort((a, b) => {
         const timeA = a.lastMessage?.timestamp?.toMillis() || 0;
         const timeB = b.lastMessage?.timestamp?.toMillis() || 0;
-        return timeB - timeA; // Tri descendant
+        return timeB - timeA;
       });
       
       setChats(sortedChats);
       setLoadingChats(false);
     }, (error) => {
       console.error("Error fetching chats:", error);
+      // NOTE: L'erreur d'index composite est maintenant gérée, mais on garde le fallback
+      if (error.message.includes("firestore/failed-precondition")) {
+          alert("Erreur de base de données : Un index est manquant pour les conversations.")
+      }
       setLoadingChats(false);
     });
 
