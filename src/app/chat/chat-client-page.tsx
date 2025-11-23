@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Phone, Video, Loader2, CheckCircle, PlusCircle, Trash2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -23,22 +23,76 @@ import type { DocumentData, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 
+// --- Interfaces ---
 interface Message {
   id: string;
   text: string;
   senderId: string;
   timestamp: Timestamp;
   imageUrl?: string | null;
-  audioUrl?: string | null;
   reactions?: { [userId: string]: string };
 }
 
-const getChatId = (uid1: string, uid2: string) => {
-  return [uid1, uid2].sort().join('_');
-};
+interface MessageItemProps {
+  message: Message;
+  isSender: boolean;
+  isLastRead: boolean;
+  otherUserImage: string;
+  otherUserName: string;
+  onLongPressStart: (messageId: string) => void;
+  onLongPressEnd: () => void;
+  onReact: (message: Message, emoji: string) => void;
+  onSetupDelete: (message: Message) => void;
+  onZoomImage: (imageUrl: string) => void;
+  showReactionPopoverFor: string | null;
+  setShowReactionPopoverFor: (id: string | null) => void;
+}
 
+// --- Constants ---
 const availableReactions = ['❤️', '😂', '👍', '😢', '😮', '😡'];
+const getChatId = (uid1: string, uid2: string) => [uid1, uid2].sort().join('_');
 
+// --- Memoized Message Component ---
+const MessageItem = memo<MessageItemProps>(({ 
+    message, isSender, isLastRead, otherUserImage, otherUserName, 
+    onLongPressStart, onLongPressEnd, onReact, onSetupDelete, onZoomImage,
+    showReactionPopoverFor, setShowReactionPopoverFor
+}) => {
+    const reactions = message.reactions ? Object.entries(message.reactions) : [];
+
+    return (
+        <div onContextMenu={(e) => e.preventDefault()}>
+            <Popover open={showReactionPopoverFor === message.id} onOpenChange={(isOpen) => !isOpen && setShowReactionPopoverFor(null)}>
+                <PopoverTrigger asChild>
+                    <div 
+                        onTouchStart={() => onLongPressStart(message.id)}
+                        onTouchEnd={onLongPressEnd}
+                        onMouseDown={() => onLongPressStart(message.id)}
+                        onMouseUp={onLongPressEnd}
+                        onMouseLeave={onLongPressEnd}
+                        className={`flex items-end gap-2 relative ${isSender ? 'justify-end' : 'justify-start'}`}>
+                        {!isSender && <Avatar className="h-6 w-6 self-end"><AvatarImage src={otherUserImage} /><AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback></Avatar>}
+                        <div className={`max-w-[75%] rounded-2xl break-words relative ${isSender ? 'active:scale-95 transition-transform duration-150' : ''} ${message.imageUrl ? 'p-0 overflow-hidden' : 'px-3 py-2 ' + (isSender ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-secondary')}`}>
+                            {message.imageUrl ? <button onClick={() => onZoomImage(message.imageUrl!)}><Image src={message.imageUrl} alt="" width={250} height={300} className="object-cover" /></button> : message.text}
+                            {reactions.length > 0 && <div className={`absolute -bottom-3 text-xs rounded-full bg-secondary border px-1.5 py-0.5 ${isSender ? 'right-2' : 'left-2'}`}>{reactions.map(([_, emoji]) => emoji)[0]} {reactions.length > 1 ? `+${reactions.length - 1}`: ''}</div>}
+                        </div>
+                    </div>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-1 rounded-full">
+                    <div className="flex items-center gap-1">
+                        {availableReactions.map(emoji => <Button key={emoji} onClick={() => onReact(message, emoji)} variant="ghost" size="icon" className="rounded-full h-8 w-8 text-lg">{emoji}</Button>)}
+                        {isSender && <Button onClick={() => onSetupDelete(message)} variant="ghost" size="icon" className="rounded-full h-8 w-8"><Trash2 className="h-4 w-4" /></Button>}
+                    </div>
+                </PopoverContent>
+            </Popover>
+            {isLastRead && <div className="text-right text-xs text-muted-foreground pr-2 pt-1">Vu</div>}
+        </div>
+    );
+});
+MessageItem.displayName = 'MessageItem';
+
+
+// --- Main Chat Page Component ---
 export default function ChatClientPage({ otherUserId }: { otherUserId: string }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -85,7 +139,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         setLoadingMessages(false);
     }, (error) => {
         console.error("Error fetching messages: ", error);
-        toast({ variant: 'destructive', title: 'Erreur de chargement', description: 'Impossible de récupérer les messages.' });
+        toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de récupérer les messages.' });
         setLoadingMessages(false);
     });
     return () => { unsubscribeChat(); unsubscribeMessages(); };
@@ -101,9 +155,9 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
   }, [messages, loadingMessages]);
 
-  const handleSendMessage = async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, imageUrl: string | null = null) => {
+  const handleSendMessage = useCallback(async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, imageUrl: string | null = null) => {
     if(e) e.preventDefault();
-    if (!newMessage.trim() && !imageUrl || !currentUser || !otherUser) return;
+    if ((!newMessage.trim() && !imageUrl) || !currentUser || !otherUser) return;
     const chatId = getChatId(currentUser.uid, otherUserId);
     const chatDocRef = doc(db, 'chats', chatId);
     const messagesColRef = collection(chatDocRef, 'messages');
@@ -117,10 +171,10 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
       setNewMessage(messageText);
     }
-  };
+  }, [newMessage, currentUser, otherUser, toast]);
 
-  const handleDeleteMessage = async () => {
-    if (!messageToDelete || !currentUser) return;
+  const handleDeleteMessage = useCallback(async () => {
+    if (!messageToDelete || !currentUser || !otherUser) return;
     const chatId = getChatId(currentUser.uid, otherUserId);
     const messageRef = doc(db, 'chats', chatId, 'messages', messageToDelete.id);
     const chatRef = doc(db, 'chats', chatId);
@@ -140,10 +194,10 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     } finally {
         setMessageToDelete(null);
     }
-  };
+  }, [messageToDelete, currentUser, otherUser, chat, toast]);
 
-  const handleReact = async (message: Message, emoji: string) => {
-    if (!currentUser) return;
+  const handleReact = useCallback(async (message: Message, emoji: string) => {
+    if (!currentUser || !otherUser) return;
     const chatId = getChatId(currentUser.uid, otherUserId);
     const messageRef = doc(db, 'chats', chatId, 'messages', message.id);
     const currentReaction = message.reactions?.[currentUser.uid];
@@ -158,20 +212,17 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible d\'ajouter une réaction.' });
     }
     setShowReactionPopoverFor(null);
-  };
+  }, [currentUser, otherUser, toast]);
 
-  const handleLongPressStart = (messageId: string) => {
+  const handleLongPressStart = useCallback((messageId: string) => {
     longPressTimer.current = setTimeout(() => { setShowReactionPopoverFor(messageId); }, 500);
-  };
-  const handleLongPressEnd = () => { if(longPressTimer.current) clearTimeout(longPressTimer.current); };
+  }, []);
+  const handleLongPressEnd = useCallback(() => { if(longPressTimer.current) clearTimeout(longPressTimer.current); }, []);
+  const handleSetupDelete = useCallback((message: Message) => { setShowReactionPopoverFor(null); setMessageToDelete(message); }, []);
+  const handleZoomImage = useCallback((imageUrl: string) => setZoomedImageUrl(imageUrl), []);
 
-  const setupDelete = (message: Message) => {
-    setShowReactionPopoverFor(null);
-    setMessageToDelete(message);
-  }
-
-  const handlePhotoAttachment = async () => {
-    if (!currentUser) return;
+  const handlePhotoAttachment = useCallback(async () => {
+    if (!currentUser || !otherUser) return;
     try {
       const image = await Camera.getPhoto({ quality: 90, allowEditing: false, resultType: CameraResultType.Uri, source: CameraSource.Photos });
       if (!image.webPath) return;
@@ -191,7 +242,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         () => { getDownloadURL(uploadTask.snapshot.ref).then((url) => { handleSendMessage(undefined, url); setIsUploading(false); }); }
       );
     } catch (error) { console.info("Photo selection cancelled."); setIsUploading(false); }
-  };
+  }, [currentUser, otherUser, handleSendMessage, toast]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && !e.shiftKey && !isDesktop) { e.preventDefault(); handleSendMessage(e); } };
   useEffect(() => { if(textareaRef.current){ textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`; } }, [newMessage]);
@@ -216,32 +267,23 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         {loadingMessages ? <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>
         : messages.length === 0 ? <div className="p-4 text-center text-muted-foreground">Commencez la conversation !</div>
         : <div className="p-4 space-y-4">
-            {messages.map((message) => {
-              const isSender = message.senderId === currentUser?.uid;
-              const reactions = message.reactions ? Object.entries(message.reactions) : [];
-              return (
-                <div key={message.id} onContextMenu={(e) => e.preventDefault()}>
-                  <Popover open={showReactionPopoverFor === message.id} onOpenChange={(isOpen) => !isOpen && setShowReactionPopoverFor(null)}>
-                    <PopoverTrigger asChild>
-                        <div onTouchStart={() => handleLongPressStart(message.id)} onTouchEnd={handleLongPressEnd} onMouseDown={() => handleLongPressStart(message.id)} onMouseUp={handleLongPressEnd} onMouseLeave={handleLongPressEnd} className={`flex items-end gap-2 relative ${isSender ? 'justify-end' : 'justify-start'}`}>
-                          {!isSender && <Avatar className="h-6 w-6 self-end"><AvatarImage src={otherUserImage} /><AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback></Avatar>}
-                          <div className={`max-w-[75%] rounded-2xl break-words relative ${isSender ? 'active:scale-95 transition-transform duration-150' : ''} ${message.imageUrl ? 'p-0 overflow-hidden' : 'px-3 py-2 ' + (isSender ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-secondary')}`}>
-                            {message.imageUrl ? <button onClick={() => setZoomedImageUrl(message.imageUrl)}><Image src={message.imageUrl} alt="" width={250} height={300} className="object-cover" /></button> : message.text}
-                            {reactions.length > 0 && <div className={`absolute -bottom-3 text-xs rounded-full bg-secondary border px-1.5 py-0.5 ${isSender ? 'right-2' : 'left-2'}`}>{reactions.map(([_, emoji]) => emoji)[0]} {reactions.length > 1 ? `+${reactions.length - 1}`: ''}</div>}
-                          </div>
-                        </div>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-1 rounded-full">
-                      <div className="flex items-center gap-1">
-                        {availableReactions.map(emoji => <Button key={emoji} onClick={() => handleReact(message, emoji)} variant="ghost" size="icon" className="rounded-full h-8 w-8 text-lg">{emoji}</Button>)}
-                        {isSender && <Button onClick={() => setupDelete(message)} variant="ghost" size="icon" className="rounded-full h-8 w-8"><Trash2 className="h-4 w-4" /></Button>}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                  {message.id === chat?.lastMessage?.id && isSender && chat.lastMessage.read && <div className="text-right text-xs text-muted-foreground pr-2 pt-1">Vu</div>}
-                </div>
-            )})
-            }
+            {messages.map((message) => (
+                <MessageItem
+                    key={message.id}
+                    message={message}
+                    isSender={message.senderId === currentUser?.uid}
+                    isLastRead={message.id === chat?.lastMessage?.id && message.senderId === currentUser?.uid && !!chat.lastMessage.read}
+                    otherUserImage={otherUserImage}
+                    otherUserName={otherUserName}
+                    onLongPressStart={handleLongPressStart}
+                    onLongPressEnd={handleLongPressEnd}
+                    onReact={handleReact}
+                    onSetupDelete={handleSetupDelete}
+                    onZoomImage={handleZoomImage}
+                    showReactionPopoverFor={showReactionPopoverFor}
+                    setShowReactionPopoverFor={setShowReactionPopoverFor}
+                />
+            ))}
             {isUploading && <div className="flex justify-end pt-2"><div className="p-2 rounded-2xl bg-primary/50"><Loader2 className="h-6 w-6 animate-spin" /></div></div>}
         </div>}
       </main>
