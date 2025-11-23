@@ -95,7 +95,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     return () => unsubscribe();
   }, [currentUser, otherUserId, toast]);
 
-  // --- CORRECTIF DÉFINITIF : Logique de défilement à double détente --- //
   useEffect(() => {
     if (loadingMessages) return;
     
@@ -103,13 +102,10 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
     }
 
-    // Défilement instantané pour une réactivité immédiate
     scrollToBottom('auto');
-
-    // Défilement retardé pour s'assurer que tout est rendu
     const timer = setTimeout(() => {
         scrollToBottom('auto');
-    }, 250); // Délai de sécurité
+    }, 250);
 
     return () => clearTimeout(timer);
   }, [messages, loadingMessages]);
@@ -318,7 +314,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
                     </Avatar>
                   )}
                   <div
-                    className={`max-w-[70%] rounded-2xl text-sm md:text-base ${message.imageUrl ? 'p-0 overflow-hidden' : 'px-3 py-2 ' + (message.senderId === currentUser?.uid ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-secondary text-secondary-foreground')}`}>
+                    className={`max-w-[70%] rounded-2xl text-sm md:text-base break-words ${message.imageUrl ? 'p-0 overflow-hidden' : 'px-3 py-2 ' + (message.senderId === currentUser?.uid ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-secondary text-secondary-foreground')}`}>
                     {message.imageUrl ? (
                        <button onClick={() => setZoomedImageUrl(message.imageUrl)} className="block">
                          <Image src={message.imageUrl} alt="Image envoyée" width={250} height={300} className="object-cover" />
