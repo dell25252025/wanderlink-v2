@@ -95,13 +95,15 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     return () => unsubscribe();
   }, [currentUser, otherUserId, toast]);
 
-  // --- FIX: Amélioration du défilement automatique vers le bas --- //
+  // --- FIX 2: Défilement automatique robuste et instantané --- //
   useEffect(() => {
+    // Ne rien faire si les messages sont en cours de chargement
     if (loadingMessages) return;
 
+    // Attendre un cycle de rendu pour s'assurer que le DOM est à jour
     const timer = setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-    }, 0);
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
+    }, 50); // Un petit délai pour plus de fiabilité
 
     return () => clearTimeout(timer);
   }, [messages, loadingMessages]);
@@ -225,8 +227,9 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         )
   }
 
+  // --- FIX 1: Ajout de styles pour empêcher le débordement horizontal --- //
   return (
-    <div className="flex h-screen flex-col bg-background">
+    <div className="flex h-screen flex-col bg-background w-full overflow-x-hidden">
       <header className="fixed top-0 z-10 flex w-full items-center gap-2 border-b bg-background/95 px-2 py-1 backdrop-blur-sm h-12">
         <Button onClick={() => router.back()} variant="ghost" size="icon" className="h-8 w-8">
           <ArrowLeft className="h-4 w-4" />
