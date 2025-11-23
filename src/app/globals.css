@@ -69,6 +69,9 @@ body {
   * {
     @apply border-border;
   }
+  html, body {
+    @apply w-full overflow-x-hidden;
+  }
   body {
     @apply bg-background text-foreground;
   }

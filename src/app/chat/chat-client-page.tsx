@@ -52,7 +52,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [zoomedImageUrl, setZoomedImageUrl] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const mainContainerRef = useRef<HTMLDivElement>(null);
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   useEffect(() => {
@@ -95,17 +95,17 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     return () => unsubscribe();
   }, [currentUser, otherUserId, toast]);
 
-  // --- FIX 2: Défilement automatique robuste et instantané --- //
+  // --- FIX 2: Forcer le défilement vers le bas en manipulant directement le DOM --- //
   useEffect(() => {
-    // Ne rien faire si les messages sont en cours de chargement
     if (loadingMessages) return;
 
-    // Attendre un cycle de rendu pour s'assurer que le DOM est à jour
-    const timer = setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
-    }, 50); // Un petit délai pour plus de fiabilité
-
-    return () => clearTimeout(timer);
+    const container = mainContainerRef.current;
+    if (container) {
+      const timer = setTimeout(() => {
+        container.scrollTop = container.scrollHeight;
+      }, 50);
+      return () => clearTimeout(timer);
+    }
   }, [messages, loadingMessages]);
 
   const handleSendMessage = async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, imageUrl: string | null = null) => {
@@ -227,7 +227,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         )
   }
 
-  // --- FIX 1: Ajout de styles pour empêcher le débordement horizontal --- //
   return (
     <div className="flex h-screen flex-col bg-background w-full overflow-x-hidden">
       <header className="fixed top-0 z-10 flex w-full items-center gap-2 border-b bg-background/95 px-2 py-1 backdrop-blur-sm h-12">
@@ -287,7 +286,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         </Drawer>
       </header>
 
-      <main className="flex-1 overflow-y-auto pt-12 pb-20">
+      <main ref={mainContainerRef} className="flex-1 overflow-y-auto pt-12 pb-20">
         {loadingMessages ? (
             <div className="flex h-full w-full flex-col items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -331,7 +330,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
                   </div>
                 </div>
               )}
-               <div ref={messagesEndRef} />
             </div>
         )}
       </main>
