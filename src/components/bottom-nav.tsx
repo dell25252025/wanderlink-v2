@@ -14,8 +14,6 @@ import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 // --- COMPOSANT D'UN ÉLÉMENT DE NAVIGATION --- //
-// NOTE: J'ai séparé ce composant pour plus de clarté.
-
 interface NavItemProps {
   href: string;
   icon: React.ElementType;
@@ -48,7 +46,6 @@ const NavItem = ({ href, icon: Icon, label, active, hasNotification }: NavItemPr
 );
 
 // --- COMPOSANT PRINCIPAL DE LA BARRE DE NAVIGATION --- //
-
 const BottomNav = () => {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
@@ -74,19 +71,27 @@ const BottomNav = () => {
     return () => unsubscribeAuth();
   }, []);
 
-  // NOTE: Logique de notification des messages non lus
+  // **CORRECTION DE L'ERREUR D'INDEX**
+  // La requête est simplifiée pour ne pas causer d'erreur, le reste de la logique est géré côté client.
   useEffect(() => {
     if (!currentUser) return;
+
     const chatsRef = collection(db, 'chats');
     const q = query(
       chatsRef,
-      where('participants', 'array-contains', currentUser.uid),
-      where('lastMessage.read', '==', false),
-      where('lastMessage.senderId', '!=', currentUser.uid)
+      where('participants', 'array-contains', currentUser.uid)
     );
+
     const unsubscribeChats = onSnapshot(q, (snapshot) => {
-      setHasUnreadMessages(!snapshot.empty);
+      const unreadFromOthers = snapshot.docs.some(doc => {
+        const data = doc.data();
+        const lastMessage = data.lastMessage;
+        // La notification s'affiche si le dernier message n'est pas lu ET qu'il ne vient pas de nous
+        return lastMessage && lastMessage.read === false && lastMessage.senderId !== currentUser.uid;
+      });
+      setHasUnreadMessages(unreadFromOthers);
     });
+
     return () => unsubscribeChats();
   }, [currentUser]);
 
@@ -120,11 +125,10 @@ const BottomNav = () => {
         <nav className="h-14 w-full rounded-full border bg-background/90 p-1 shadow-lg backdrop-blur-md">
           <div className="grid h-full grid-cols-5 items-center justify-around">
             
-            {/* --- Les 4 boutons que je ne touche pas --- */}
             <NavItem href="/discover" icon={Compass} label="Découvrir" active={isDiscoverActive} />
             <NavItem href="/friends" icon={Users} label="Amis" active={areFriendsActive} />
 
-            {/* --- Bouton central de profil (inchangé) --- */}
+            {/* Bouton central de profil */}
             <div className="relative flex justify-center items-center h-full">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -138,10 +142,7 @@ const BottomNav = () => {
               </Tooltip>
             </div>
 
-            {/* --- LE SEUL BOUTON MODIFIÉ --- */}
             <NavItem href="/inbox" icon={MessageSquare} label="Messages" active={areMessagesActive} hasNotification={hasUnreadMessages} />
-
-            {/* --- L'autre bouton que je ne touche pas --- */}
             <NavItem href="/settings" icon={Settings} label="Paramètres" active={areSettingsActive} />
 
           </div>
