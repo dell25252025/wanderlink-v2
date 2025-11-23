@@ -52,7 +52,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [zoomedImageUrl, setZoomedImageUrl] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const mainContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   useEffect(() => {
@@ -95,17 +95,15 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     return () => unsubscribe();
   }, [currentUser, otherUserId, toast]);
 
-  // --- FIX 2: Forcer le défilement vers le bas en manipulant directement le DOM --- //
+  // --- FIX DÉFINITIF : Défilement forcé et instantané vers le bas --- //
   useEffect(() => {
     if (loadingMessages) return;
 
-    const container = mainContainerRef.current;
-    if (container) {
-      const timer = setTimeout(() => {
-        container.scrollTop = container.scrollHeight;
-      }, 50);
-      return () => clearTimeout(timer);
-    }
+    const timer = setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
+    }, 100); // Augmentation du délai pour plus de fiabilité
+
+    return () => clearTimeout(timer);
   }, [messages, loadingMessages]);
 
   const handleSendMessage = async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, imageUrl: string | null = null) => {
@@ -140,7 +138,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       }, { merge: true });
 
     } catch (error) {
-      console.error("Erreur lors de l'envoi du message:", error);
+      console.error("Erreur lors de l\'envoi du message:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
       setNewMessage(messageText);
     }
@@ -286,7 +284,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         </Drawer>
       </header>
 
-      <main ref={mainContainerRef} className="flex-1 overflow-y-auto pt-12 pb-20">
+      <main className="flex-1 overflow-y-auto pt-12 pb-20">
         {loadingMessages ? (
             <div className="flex h-full w-full flex-col items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -330,6 +328,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
                   </div>
                 </div>
               )}
+               <div ref={messagesEndRef} />
             </div>
         )}
       </main>

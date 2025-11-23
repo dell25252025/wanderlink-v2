@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
 };
 
-// --- FIX: Ajout des propriétés pour bloquer le zoom sur mobile --- //
+// --- FIX DÉFINITIF : Blocage du zoom et du défilement horizontal --- //
 export const viewport: Viewport = {
   themeColor: '#ffffff',
   width: 'device-width',
