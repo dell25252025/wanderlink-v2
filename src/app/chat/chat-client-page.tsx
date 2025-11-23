@@ -95,13 +95,21 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     return () => unsubscribe();
   }, [currentUser, otherUserId, toast]);
 
-  // --- FIX DÉFINITIF : Défilement forcé et instantané vers le bas --- //
+  // --- CORRECTIF DÉFINITIF : Logique de défilement à double détente --- //
   useEffect(() => {
     if (loadingMessages) return;
+    
+    const scrollToBottom = (behavior: 'auto' | 'smooth') => {
+        messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
+    }
 
+    // Défilement instantané pour une réactivité immédiate
+    scrollToBottom('auto');
+
+    // Défilement retardé pour s'assurer que tout est rendu
     const timer = setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
-    }, 100); // Augmentation du délai pour plus de fiabilité
+        scrollToBottom('auto');
+    }, 250); // Délai de sécurité
 
     return () => clearTimeout(timer);
   }, [messages, loadingMessages]);
