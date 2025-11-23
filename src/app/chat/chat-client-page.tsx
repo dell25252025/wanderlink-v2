@@ -207,7 +207,9 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       <header className="fixed top-0 z-10 flex w-full items-center gap-2 border-b bg-background/95 px-2 py-1 backdrop-blur-sm h-12">
         <Button onClick={() => router.back()} variant="ghost" size="icon" className="h-8 w-8"><ArrowLeft className="h-4 w-4" /></Button>
         <Link href={`/profile?id=${otherUserId}`} className="flex min-w-0 flex-1 items-center gap-2 truncate"><Avatar className="h-8 w-8"><AvatarImage src={otherUserImage} alt={otherUserName} /><AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback></Avatar><div className="flex-1 truncate"><h1 className="truncate text-sm font-semibold">{otherUserName}</h1></div></Link>
-        {/* Call/Video/More buttons... */}
+        <Button variant="ghost" size="icon" className="h-8 w-8"><Phone className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8"><Video className="h-4 w-4" /></Button>
+        <Drawer><DrawerTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DrawerTrigger><DrawerContent><div className="mx-auto w-full max-w-sm"><DrawerHeader><DrawerTitle>Options</DrawerTitle><DrawerDescription>Gérez votre interaction avec {otherUserName}.</DrawerDescription></DrawerHeader><div className="p-4 pt-0"><div className="mt-3 h-full"><DrawerClose asChild><Button variant="outline" className="w-full justify-start p-4 h-auto text-base"><Ban className="mr-2 h-5 w-5" /> Bloquer</Button></DrawerClose><div className="my-2 border-t"></div><DrawerClose asChild><Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={() => setIsReportModalOpen(true)}><ShieldAlert className="mr-2 h-5 w-5" /> Signaler</Button></DrawerClose></div></div><div className="p-4"><DrawerClose asChild><Button variant="secondary" className="w-full h-12 text-base">Annuler</Button></DrawerClose></div></div></DrawerContent></Drawer>
       </header>
 
       <main ref={scrollContainerRef} className="flex-1 overflow-y-auto pt-14 pb-20">
@@ -245,7 +247,29 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       </main>
       
       <footer className="fixed bottom-0 z-10 w-full border-t bg-background/95 backdrop-blur-sm px-2 py-1.5">
-        {/* Footer form... */}
+        <form onSubmit={handleSendMessage} className="flex items-end gap-1.5 w-full">
+            <Button type="button" variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={handlePhotoAttachment} disabled={isUploading}><PlusCircle className="h-5 w-5 text-muted-foreground" /></Button>
+            <div className="flex-1 relative flex items-center min-w-0 bg-secondary rounded-xl">
+                <Textarea
+                    ref={textareaRef}
+                    rows={1}
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Message..."
+                    className="w-full resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent py-2.5 px-3 pr-8 min-h-[20px] max-h-32 overflow-y-auto text-sm"
+                />
+                <Popover open={isEmojiPickerOpen} onOpenChange={setIsEmojiPickerOpen}>
+                  <PopoverTrigger asChild>
+                      <Button type="button" variant="ghost" size="icon" className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6"><Smile className="h-4 w-4 text-muted-foreground" /></Button>
+                  </PopoverTrigger>
+                  <PopoverContent side="top" align="end" className="w-full max-w-[320px] p-0 border-none mb-2"><Picker onEmojiClick={handleEmojiClick} emojiStyle={EmojiStyle.NATIVE} width="100%" /></PopoverContent>
+                </Popover>
+            </div>
+            <div className="shrink-0">
+              <Button type="submit" variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-primary" disabled={!newMessage.trim()}><Send className="h-4 w-4" /></Button>
+            </div>
+        </form>
       </footer>
 
       <Dialog open={!!messageToDelete} onOpenChange={(isOpen) => !isOpen && setMessageToDelete(null)}>
@@ -255,7 +279,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         </DialogContent>
       </Dialog>
 
-      {zoomedImageUrl && <Dialog open={!!zoomedImageUrl} onOpenChange={(isOpen) => !isOpen && setZoomedImageUrl(null)}>{/* Zoomed image dialog... */}</Dialog>}
+      {zoomedImageUrl && <Dialog open={!!zoomedImageUrl} onOpenChange={(isOpen) => !isOpen && setZoomedImageUrl(null)}><DialogContent className="p-0 m-0 w-full h-full max-w-full max-h-screen bg-black/80 backdrop-blur-sm border-0 flex flex-col items-center justify-center"><DialogClose asChild className="absolute top-2 right-2 z-50"><Button variant="ghost" size="icon" className="h-9 w-9 text-white bg-black/30 hover:bg-black/50 hover:text-white"><X className="h-5 w-5" /></Button></DialogClose><div className="relative w-full h-full flex items-center justify-center p-4"><Image src={zoomedImageUrl} alt="Image zoomée" fill className="object-contain" /></div></DialogContent></Dialog>}
       <ReportAbuseDialog isOpen={isReportModalOpen} onOpenChange={setIsReportModalOpen} reportedUser={otherUser} />
     </div>
   );
