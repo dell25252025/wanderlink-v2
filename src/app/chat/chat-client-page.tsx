@@ -3,15 +3,17 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Phone, Video, Loader2, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Phone, Video, Loader2, CheckCircle, PlusCircle, Paperclip } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getUserProfile } from '@/lib/firebase-actions';
-import { auth, db } from '@/lib/firebase';
+// NOTE: Ajout de 'storage' pour l'upload d'images
+import { auth, db, storage } from '@/lib/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { Drawer, DrawerContent, DrawerTrigger, DrawerClose, DrawerHeader, DrawerTitle, DrawerDescription } from '@/components/ui/drawer';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import Picker, { type EmojiClickData, Categories, EmojiStyle } from 'emoji-picker-react';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,10 +21,13 @@ import { ReportAbuseDialog } from '@/components/report-abuse-dialog';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import type { DocumentData, Timestamp } from 'firebase/firestore';
+// NOTE: Ajout des imports pour Firebase Storage
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+// NOTE: Ajout des imports pour Capacitor Camera
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 
-// NOTE: Interface mise à jour pour correspondre à la structure Firestore
 interface Message {
-  id: string; // L'ID du document Firestore
+  id: string;
   text: string;
   senderId: string;
   timestamp: Timestamp;
@@ -30,7 +35,6 @@ interface Message {
   audioUrl?: string | null;
 }
 
-// NOTE: Helper pour générer un ID de chat cohérent
 const getChatId = (uid1: string, uid2: string) => {
   return [uid1, uid2].sort().join('_');
 };
@@ -42,24 +46,24 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   
   const [currentUser, loadingAuth] = useAuthState(auth);
   const [otherUser, setOtherUser] = useState<DocumentData | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]); // NOTE: Initialisé à vide
+  const [messages, setMessages] = useState<Message[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [newMessage, setNewMessage] = useState('');
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  // NOTE: Ajout d'un état pour le chargement de l'image
+  const [isUploading, setIsUploading] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
-  // NOTE: Récupération du profil de l'autre utilisateur
   useEffect(() => {
     if (otherUserId) {
       getUserProfile(otherUserId).then(setOtherUser);
     }
   }, [otherUserId]);
 
-  // NOTE: Le COEUR de la fonctionnalité : écoute des messages en temps réel
   useEffect(() => {
     if (!currentUser) return;
 
@@ -80,15 +84,15 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     return () => unsubscribe();
   }, [currentUser, otherUserId]);
 
-  // Scroll automatique vers le bas
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // NOTE: Fonction d'envoi de message mise à jour pour Firestore
-  const handleSendMessage = async (e: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !currentUser || !otherUser) return;
+  // NOTE: Fonction mise à jour pour gérer le texte OU les URLs d'image
+  const handleSendMessage = async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, imageUrl: string | null = null) => {
+    if(e) e.preventDefault();
+    if (!newMessage.trim() && !imageUrl) return;
+    if (!currentUser || !otherUser) return;
 
     const chatId = getChatId(currentUser.uid, otherUserId);
     const chatDocRef = doc(db, 'chats', chatId);
@@ -98,16 +102,14 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     setNewMessage('');
 
     try {
-      // Ajouter le nouveau message à la sous-collection
       await addDoc(messagesColRef, {
         text: messageText,
         senderId: currentUser.uid,
         timestamp: serverTimestamp(),
-        imageUrl: null,
+        imageUrl: imageUrl, // Ajout de l'URL de l'image
         audioUrl: null,
       });
 
-      // Mettre à jour le document principal du chat pour la boîte de réception
       await setDoc(chatDocRef, {
         participants: [currentUser.uid, otherUserId],
         participantDetails: {
@@ -122,16 +124,63 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
           }
         },
         lastMessage: {
-          text: messageText,
+          text: imageUrl ? '📷 Photo' : messageText,
           senderId: currentUser.uid,
           timestamp: serverTimestamp(),
         },
-      }, { merge: true }); // merge: true est crucial pour ne pas écraser les données existantes
+      }, { merge: true });
 
     } catch (error) {
       console.error("Erreur lors de l'envoi du message:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
-      setNewMessage(messageText); // Remettre le texte en cas d'erreur
+      setNewMessage(messageText);
+    }
+  };
+  
+  // NOTE: Nouvelle fonction pour sélectionner et uploader une photo
+  const handlePhotoAttachment = async () => {
+    if (!currentUser) return;
+    try {
+      const image = await Camera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: CameraResultType.Uri,
+        source: CameraSource.Photos, // Ouvre la galerie
+      });
+
+      if (image && image.webPath) {
+        setIsUploading(true);
+        const response = await fetch(image.webPath);
+        const blob = await response.blob();
+        
+        const fileExtension = image.webPath.split('.').pop() || 'jpg';
+        const fileName = `${new Date().getTime()}.${fileExtension}`;
+        const chatId = getChatId(currentUser.uid, otherUserId);
+        const storageRef = ref(storage, `chat_images/${chatId}/${fileName}`);
+        
+        const uploadTask = uploadBytesResumable(storageRef, blob);
+
+        uploadTask.on('state_changed',
+          (snapshot) => {
+            // On peut ajouter une barre de progression ici si on veut
+          },
+          (error) => {
+            console.error("Upload failed:", error);
+            toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer l\'image.' });
+            setIsUploading(false);
+          },
+          () => {
+            getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
+              handleSendMessage(undefined, downloadURL);
+              setIsUploading(false);
+            });
+          }
+        );
+      }
+    } catch (error) {
+        // Gère le cas où l'utilisateur annule la sélection de photo
+      console.info("Photo selection cancelled by user.");
+      setIsUploading(false);
     }
   };
 
@@ -253,17 +302,24 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
                     </Avatar>
                   )}
                   <div
-                    className={`max-w-[70%] rounded-2xl px-3 py-2 text-sm md:text-base ${
-                      message.senderId === currentUser?.uid
-                        ? 'rounded-br-none bg-primary text-primary-foreground'
-                        : 'rounded-bl-none bg-secondary text-secondary-foreground'
-                    }`}
+                    className={`max-w-[70%] rounded-2xl px-3 py-2 text-sm md:text-base ${!message.imageUrl && (message.senderId === currentUser?.uid ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-secondary text-secondary-foreground')}`}
                   >
-                    {message.text}
-                    {/* TODO: L'envoi d'images et d'audio nécessite Firebase Storage - une prochaine étape */}
+                    {/* NOTE: Affichage de l'image si elle existe */}
+                    {message.imageUrl ? (
+                       <Image src={message.imageUrl} alt="Image envoyée" width={250} height={250} className="rounded-md object-cover" />
+                    ) : (
+                        message.text
+                    )}
                   </div>
                 </div>
               ))}
+               {isUploading && (
+                <div className="flex justify-end">
+                  <div className="max-w-[70%] rounded-2xl p-2 bg-primary/50">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary-foreground" />
+                  </div>
+                </div>
+              )}
                <div ref={messagesEndRef} />
             </div>
         )}
@@ -271,7 +327,10 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
        <footer className="fixed bottom-0 z-10 w-full border-t bg-background/95 backdrop-blur-sm px-2 py-1.5">
         <form onSubmit={handleSendMessage} className="flex items-end gap-1.5 w-full">
-             {/* NOTE: Le bouton '+' peut être réactivé plus tard avec Firebase Storage */}
+            {/* NOTE: Bouton '+' réactivé pour l'envoi de photos */}
+            <Button type="button" variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={handlePhotoAttachment} disabled={isUploading}>
+                <Paperclip className="h-4 w-4" />
+            </Button>
             <div className="flex-1 relative flex items-center min-w-0 bg-secondary rounded-xl">
                 <Textarea
                     ref={textareaRef}
