@@ -53,6 +53,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [zoomedImageUrl, setZoomedImageUrl] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
@@ -69,20 +70,17 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
     const chatId = getChatId(currentUser.uid, otherUserId);
 
-    // Listen to chat document for real-time read status
     const chatDocRef = doc(db, 'chats', chatId);
     const unsubscribeChat = onSnapshot(chatDocRef, (doc) => {
         if (doc.exists()) {
             const chatData = doc.data();
             setChat(chatData);
-            // Mark as read
             if (chatData.lastMessage && chatData.lastMessage.senderId !== currentUser.uid && !chatData.lastMessage.read) {
                 updateDoc(chatDocRef, { 'lastMessage.read': true });
             }
         }
     });
 
-    // Listen to messages subcollection
     const messagesRef = collection(db, 'chats', chatId, 'messages');
     const q = query(messagesRef, orderBy('timestamp', 'asc'));
 
@@ -109,13 +107,16 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, [currentUser, otherUserId, toast]);
 
   useEffect(() => {
-    if (loadingMessages) return;
-    const scrollToBottom = (behavior: 'auto' | 'smooth') => {
-        messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
+    const scrollToBottom = () => {
+        if(scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
     }
-    scrollToBottom('auto');
-    const timer = setTimeout(() => { scrollToBottom('auto'); }, 250);
-    return () => clearTimeout(timer);
+    if (!loadingMessages) {
+        // A short delay to allow the DOM to update before scrolling
+        const timer = setTimeout(scrollToBottom, 100);
+        return () => clearTimeout(timer);
+    }
   }, [messages, loadingMessages]);
 
   const handleSendMessage = async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, imageUrl: string | null = null) => {
@@ -142,7 +143,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       await setDoc(chatDocRef, {
         participants: [currentUser.uid, otherUserId],
         lastMessage: {
-          id: newDocRef.id, // --- Store the ID of the last message
+          id: newDocRef.id, 
           text: imageUrl ? '📷 Photo' : messageText,
           senderId: currentUser.uid,
           timestamp: serverTimestamp(),
@@ -277,7 +278,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         </Drawer>
       </header>
 
-      <main className="flex-1 overflow-y-auto pt-12 pb-20">
+      <main ref={scrollContainerRef} className="flex-1 overflow-y-auto pt-12 pb-20">
         {loadingMessages ? (
             <div className="flex h-full w-full flex-col items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
         ) : messages.length === 0 ? (
