@@ -18,7 +18,7 @@ import Picker, { type EmojiClickData, EmojiStyle } from 'emoji-picker-react';
 import { Textarea } from '@/components/ui/textarea';
 import { ReportAbuseDialog } from '@/components/report-abuse-dialog';
 import { useMediaQuery } from '@/hooks/use-media-query';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, setDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, setDoc, updateDoc } from 'firebase/firestore';
 import type { DocumentData, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
@@ -44,6 +44,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [currentUser, loadingAuth] = useAuthState(auth);
   const [otherUser, setOtherUser] = useState<DocumentData | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [chat, setChat] = useState<DocumentData | null>(null);
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [newMessage, setNewMessage] = useState('');
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
@@ -66,14 +67,27 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       setLoadingMessages(false);
       return;
     }
-
     const chatId = getChatId(currentUser.uid, otherUserId);
+
+    // Listen to chat document for real-time read status
+    const chatDocRef = doc(db, 'chats', chatId);
+    const unsubscribeChat = onSnapshot(chatDocRef, (doc) => {
+        if (doc.exists()) {
+            const chatData = doc.data();
+            setChat(chatData);
+            // Mark as read
+            if (chatData.lastMessage && chatData.lastMessage.senderId !== currentUser.uid && !chatData.lastMessage.read) {
+                updateDoc(chatDocRef, { 'lastMessage.read': true });
+            }
+        }
+    });
+
+    // Listen to messages subcollection
     const messagesRef = collection(db, 'chats', chatId, 'messages');
     const q = query(messagesRef, orderBy('timestamp', 'asc'));
 
     setLoadingMessages(true);
-    const unsubscribe = onSnapshot(q,
-      (querySnapshot) => {
+    const unsubscribeMessages = onSnapshot(q, (querySnapshot) => {
         const msgs: Message[] = [];
         querySnapshot.forEach((doc) => {
           msgs.push({ id: doc.id, ...doc.data() } as Message);
@@ -83,30 +97,24 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       },
       (error) => {
         console.error("Error fetching messages: ", error);
-        toast({
-          variant: 'destructive',
-          title: 'Erreur de chargement',
-          description: 'Impossible de récupérer les messages. Un index Firestore est peut-être nécessaire.',
-        });
+        toast({ variant: 'destructive', title: 'Erreur de chargement', description: 'Impossible de récupérer les messages.' });
         setLoadingMessages(false);
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+        unsubscribeChat();
+        unsubscribeMessages();
+    };
   }, [currentUser, otherUserId, toast]);
 
   useEffect(() => {
     if (loadingMessages) return;
-    
     const scrollToBottom = (behavior: 'auto' | 'smooth') => {
         messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
     }
-
     scrollToBottom('auto');
-    const timer = setTimeout(() => {
-        scrollToBottom('auto');
-    }, 250);
-
+    const timer = setTimeout(() => { scrollToBottom('auto'); }, 250);
     return () => clearTimeout(timer);
   }, [messages, loadingMessages]);
 
@@ -123,7 +131,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     setNewMessage('');
 
     try {
-      await addDoc(messagesColRef, {
+      const newDocRef = await addDoc(messagesColRef, {
         text: messageText,
         senderId: currentUser.uid,
         timestamp: serverTimestamp(),
@@ -134,6 +142,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       await setDoc(chatDocRef, {
         participants: [currentUser.uid, otherUserId],
         lastMessage: {
+          id: newDocRef.id, // --- Store the ID of the last message
           text: imageUrl ? '📷 Photo' : messageText,
           senderId: currentUser.uid,
           timestamp: serverTimestamp(),
@@ -170,8 +179,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         
         const uploadTask = uploadBytesResumable(storageRef, blob);
 
-        uploadTask.on('state_changed',
-          (snapshot) => {},
+        uploadTask.on('state_changed', () => {},
           (error) => {
             console.error("Upload failed:", error);
             toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer l\'image.' });
@@ -245,44 +253,25 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
             {otherUserIsVerified && <CheckCircle className="h-3.5 w-3.5 text-blue-500 shrink-0" />}
           </div>
         </Link>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {}}>
-          <Phone className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {}}>
-          <Video className="h-4 w-4" />
-        </Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {}}><Phone className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {}}><Video className="h-4 w-4" /></Button>
         <Drawer>
-          <DrawerTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DrawerTrigger>
+          <DrawerTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DrawerTrigger>
           <DrawerContent>
             <div className="mx-auto w-full max-w-sm">
-                <DrawerHeader>
-                    <DrawerTitle>Options</DrawerTitle>
-                    <DrawerDescription>Gérez votre interaction avec {otherUserName}.</DrawerDescription>
-                </DrawerHeader>
+                <DrawerHeader><DrawerTitle>Options</DrawerTitle><DrawerDescription>Gérez votre interaction avec {otherUserName}.</DrawerDescription></DrawerHeader>
                 <div className="p-4 pt-0">
                     <div className="mt-3 h-full">
                         <DrawerClose asChild>
-                              <Button variant="outline" className="w-full justify-start p-4 h-auto text-base">
-                                  <Ban className="mr-2 h-5 w-5" /> Bloquer
-                              </Button>
+                              <Button variant="outline" className="w-full justify-start p-4 h-auto text-base"><Ban className="mr-2 h-5 w-5" /> Bloquer</Button>
                         </DrawerClose>
                         <div className="my-2 border-t"></div>
                         <DrawerClose asChild>
-                              <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={() => setIsReportModalOpen(true)}>
-                                  <ShieldAlert className="mr-2 h-5 w-5" /> Signaler
-                              </Button>
+                              <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={() => setIsReportModalOpen(true)}><ShieldAlert className="mr-2 h-5 w-5" /> Signaler</Button>
                         </DrawerClose>
                     </div>
                 </div>
-                <div className="p-4">
-                    <DrawerClose asChild>
-                        <Button variant="secondary" className="w-full h-12 text-base">Annuler</Button>
-                    </DrawerClose>
-                </div>
+                <div className="p-4"><DrawerClose asChild><Button variant="secondary" className="w-full h-12 text-base">Annuler</Button></DrawerClose></div>
             </div>
           </DrawerContent>
         </Drawer>
@@ -290,43 +279,45 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
       <main className="flex-1 overflow-y-auto pt-12 pb-20">
         {loadingMessages ? (
-            <div className="flex h-full w-full flex-col items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
+            <div className="flex h-full w-full flex-col items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
         ) : messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center p-4 text-center">
                 <p className="text-muted-foreground">Commencez la conversation !</p>
-                <p className="text-xs text-muted-foreground">Le premier message que vous enverrez créera le chat.</p>
             </div>
         ) : (
-            <div className="space-y-4 p-4">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex items-end gap-2 ${
-                    message.senderId === currentUser?.uid ? 'justify-end' : 'justify-start'
-                  }`}
-                >
-                  {message.senderId !== currentUser?.uid && (
-                    <Avatar className="h-6 w-6">
-                       <AvatarImage src={otherUserImage} alt={otherUserName} />
-                       <AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                  )}
-                  <div
-                    className={`max-w-[70%] rounded-2xl text-sm md:text-base break-words ${message.imageUrl ? 'p-0 overflow-hidden' : 'px-3 py-2 ' + (message.senderId === currentUser?.uid ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-secondary text-secondary-foreground')}`}>
-                    {message.imageUrl ? (
-                       <button onClick={() => setZoomedImageUrl(message.imageUrl)} className="block">
-                         <Image src={message.imageUrl} alt="Image envoyée" width={250} height={300} className="object-cover" />
-                       </button>
-                    ) : (
-                        message.text
+            <div className="space-y-2 p-4">
+              {messages.map((message) => {
+                const isTheVeryLastMessage = message.id === chat?.lastMessage?.id;
+                return (
+                <div key={message.id}>
+                    <div className={`flex items-end gap-2 ${
+                        message.senderId === currentUser?.uid ? 'justify-end' : 'justify-start'
+                    }`}>
+                    {message.senderId !== currentUser?.uid && (
+                        <Avatar className="h-6 w-6">
+                        <AvatarImage src={otherUserImage} alt={otherUserName} />
+                        <AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback>
+                        </Avatar>
                     )}
-                  </div>
+                    <div
+                        className={`max-w-[75%] rounded-2xl text-sm md:text-base break-words ${message.imageUrl ? 'p-0 overflow-hidden' : 'px-3 py-2 ' + (message.senderId === currentUser?.uid ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-secondary text-secondary-foreground')}`}>
+                        {message.imageUrl ? (
+                        <button onClick={() => setZoomedImageUrl(message.imageUrl)} className="block">
+                            <Image src={message.imageUrl} alt="Image envoyée" width={250} height={300} className="object-cover" />
+                        </button>
+                        ) : (
+                            message.text
+                        )}
+                    </div>
+                    </div>
+                    {isTheVeryLastMessage && message.senderId === currentUser?.uid && chat?.lastMessage?.read && (
+                        <div className="text-right text-xs text-muted-foreground pr-2 pt-1">Vu</div>
+                    )}
                 </div>
-              ))}
+              )})
+              }
                {isUploading && (
-                <div className="flex justify-end">
+                <div className="flex justify-end pt-2">
                   <div className="max-w-[70%] rounded-2xl p-2 bg-primary/50">
                     <Loader2 className="h-6 w-6 animate-spin text-primary-foreground" />
                   </div>
@@ -339,9 +330,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
        <footer className="fixed bottom-0 z-10 w-full border-t bg-background/95 backdrop-blur-sm px-2 py-1.5">
         <form onSubmit={handleSendMessage} className="flex items-end gap-1.5 w-full">
-            <Button type="button" variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={handlePhotoAttachment} disabled={isUploading}>
-                <PlusCircle className="h-5 w-5 text-muted-foreground" />
-            </Button>
+            <Button type="button" variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={handlePhotoAttachment} disabled={isUploading}><PlusCircle className="h-5 w-5 text-muted-foreground" /></Button>
             <div className="flex-1 relative flex items-center min-w-0 bg-secondary rounded-xl">
                 <Textarea
                     ref={textareaRef}
@@ -352,23 +341,17 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
                     placeholder="Message..."
                     className="w-full resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent py-2.5 px-3 pr-8 min-h-[20px] max-h-32 overflow-y-auto text-sm"
                 />
-                
                 <Popover open={isEmojiPickerOpen} onOpenChange={setIsEmojiPickerOpen}>
                   <PopoverTrigger asChild>
-                      <Button type="button" variant="ghost" size="icon" className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6">
-                          <Smile className="h-4 w-4 text-muted-foreground" />
-                      </Button>
+                      <Button type="button" variant="ghost" size="icon" className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6"><Smile className="h-4 w-4 text-muted-foreground" /></Button>
                   </PopoverTrigger>
                   <PopoverContent side="top" align="end" className="w-full max-w-[320px] p-0 border-none mb-2">
                     <Picker onEmojiClick={handleEmojiClick} emojiStyle={EmojiStyle.NATIVE} width="100%" />
                   </PopoverContent>
                 </Popover>
             </div>
-          
             <div className="shrink-0">
-              <Button type="submit" variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-primary" disabled={!showSendButton}>
-                  <Send className="h-4 w-4" />
-              </Button>
+              <Button type="submit" variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-primary" disabled={!showSendButton}><Send className="h-4 w-4" /></Button>
             </div>
         </form>
       </footer>
@@ -376,28 +359,13 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       {zoomedImageUrl && (
         <Dialog open={!!zoomedImageUrl} onOpenChange={(isOpen) => !isOpen && setZoomedImageUrl(null)}>
             <DialogContent className="p-0 m-0 w-full h-full max-w-full max-h-screen bg-black/80 backdrop-blur-sm border-0 flex flex-col items-center justify-center">
-                <DialogClose asChild className="absolute top-2 right-2 z-50">
-                     <Button variant="ghost" size="icon" className="h-9 w-9 text-white bg-black/30 hover:bg-black/50 hover:text-white">
-                        <X className="h-5 w-5" />
-                    </Button>
-                </DialogClose>
-                <div className="relative w-full h-full flex items-center justify-center p-4">
-                     <Image
-                        src={zoomedImageUrl}
-                        alt="Image zoomée"
-                        fill
-                        className="object-contain"
-                    />
-                </div>
+                <DialogClose asChild className="absolute top-2 right-2 z-50"><Button variant="ghost" size="icon" className="h-9 w-9 text-white bg-black/30 hover:bg-black/50 hover:text-white"><X className="h-5 w-5" /></Button></DialogClose>
+                <div className="relative w-full h-full flex items-center justify-center p-4"><Image src={zoomedImageUrl} alt="Image zoomée" fill className="object-contain" /></div>
             </DialogContent>
         </Dialog>
      )}
       
-      <ReportAbuseDialog 
-        isOpen={isReportModalOpen} 
-        onOpenChange={setIsReportModalOpen} 
-        reportedUser={otherUser}
-      />
+      <ReportAbuseDialog isOpen={isReportModalOpen} onOpenChange={setIsReportModalOpen} reportedUser={otherUser} />
     </div>
   );
 }
