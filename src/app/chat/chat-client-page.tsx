@@ -61,7 +61,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
   }, [otherUserId]);
 
-  // --- BUG FIX: Ajout de la gestion des erreurs --- //
   useEffect(() => {
     if (!currentUser) {
       setLoadingMessages(false);
@@ -80,26 +79,32 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
           msgs.push({ id: doc.id, ...doc.data() } as Message);
         });
         setMessages(msgs);
-        setLoadingMessages(false); // Chargement terminé avec succès
+        setLoadingMessages(false);
       },
       (error) => {
-        // Gestion de l'erreur
         console.error("Error fetching messages: ", error);
         toast({
           variant: 'destructive',
           title: 'Erreur de chargement',
           description: 'Impossible de récupérer les messages. Un index Firestore est peut-être nécessaire.',
         });
-        setLoadingMessages(false); // Fin du chargement même en cas d'erreur
+        setLoadingMessages(false);
       }
     );
 
     return () => unsubscribe();
   }, [currentUser, otherUserId, toast]);
 
+  // --- FIX: Amélioration du défilement automatique vers le bas --- //
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (loadingMessages) return;
+
+    const timer = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [messages, loadingMessages]);
 
   const handleSendMessage = async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, imageUrl: string | null = null) => {
     if(e) e.preventDefault();
@@ -128,7 +133,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
           text: imageUrl ? '📷 Photo' : messageText,
           senderId: currentUser.uid,
           timestamp: serverTimestamp(),
-          read: false // Le message est non lu par défaut
+          read: false
         },
       }, { merge: true });
 

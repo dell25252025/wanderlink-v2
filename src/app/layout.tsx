@@ -14,8 +14,13 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
 };
 
+// --- FIX: Ajout des propriétés pour bloquer le zoom sur mobile --- //
 export const viewport: Viewport = {
   themeColor: '#ffffff',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 const fontBody = PT_Sans({
