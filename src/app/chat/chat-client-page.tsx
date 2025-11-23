@@ -1,22 +1,20 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Phone, Video, Loader2, CheckCircle, PlusCircle, Paperclip } from 'lucide-react';
+import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Phone, Video, Loader2, CheckCircle, PlusCircle } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getUserProfile } from '@/lib/firebase-actions';
 import { auth, db, storage } from '@/lib/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { Drawer, DrawerContent, DrawerTrigger, DrawerClose, DrawerHeader, DrawerTitle, DrawerDescription } from '@/components/ui/drawer';
-// NOTE: Ajout du Dialog pour le zoom d'image
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import Picker, { type EmojiClickData, Categories, EmojiStyle } from 'emoji-picker-react';
+import Picker, { type EmojiClickData, EmojiStyle } from 'emoji-picker-react';
 import { Textarea } from '@/components/ui/textarea';
 import { ReportAbuseDialog } from '@/components/report-abuse-dialog';
 import { useMediaQuery } from '@/hooks/use-media-query';
@@ -51,7 +49,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  // NOTE: Ajout de l'état pour l'image zoomée
   const [zoomedImageUrl, setZoomedImageUrl] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -64,25 +61,41 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
   }, [otherUserId]);
 
+  // --- BUG FIX: Ajout de la gestion des erreurs --- //
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      setLoadingMessages(false);
+      return;
+    }
 
     const chatId = getChatId(currentUser.uid, otherUserId);
     const messagesRef = collection(db, 'chats', chatId, 'messages');
     const q = query(messagesRef, orderBy('timestamp', 'asc'));
 
     setLoadingMessages(true);
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const msgs: Message[] = [];
-      querySnapshot.forEach((doc) => {
-        msgs.push({ id: doc.id, ...doc.data() } as Message);
-      });
-      setMessages(msgs);
-      setLoadingMessages(false);
-    });
+    const unsubscribe = onSnapshot(q,
+      (querySnapshot) => {
+        const msgs: Message[] = [];
+        querySnapshot.forEach((doc) => {
+          msgs.push({ id: doc.id, ...doc.data() } as Message);
+        });
+        setMessages(msgs);
+        setLoadingMessages(false); // Chargement terminé avec succès
+      },
+      (error) => {
+        // Gestion de l'erreur
+        console.error("Error fetching messages: ", error);
+        toast({
+          variant: 'destructive',
+          title: 'Erreur de chargement',
+          description: 'Impossible de récupérer les messages. Un index Firestore est peut-être nécessaire.',
+        });
+        setLoadingMessages(false); // Fin du chargement même en cas d'erreur
+      }
+    );
 
     return () => unsubscribe();
-  }, [currentUser, otherUserId]);
+  }, [currentUser, otherUserId, toast]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -111,21 +124,11 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
       await setDoc(chatDocRef, {
         participants: [currentUser.uid, otherUserId],
-        participantDetails: {
-          [currentUser.uid]: {
-            displayName: currentUser.displayName || 'Utilisateur',
-            photoURL: currentUser.photoURL || '',
-          },
-          [otherUserId]: {
-            displayName: otherUser.firstName || 'Utilisateur',
-            photoURL: otherUser.profilePictures?.[0] || '',
-            isVerified: otherUser.isVerified ?? false,
-          }
-        },
         lastMessage: {
           text: imageUrl ? '📷 Photo' : messageText,
           senderId: currentUser.uid,
           timestamp: serverTimestamp(),
+          read: false // Le message est non lu par défaut
         },
       }, { merge: true });
 
@@ -281,6 +284,11 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
             <div className="flex h-full w-full flex-col items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
+        ) : messages.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center p-4 text-center">
+                <p className="text-muted-foreground">Commencez la conversation !</p>
+                <p className="text-xs text-muted-foreground">Le premier message que vous enverrez créera le chat.</p>
+            </div>
         ) : (
             <div className="space-y-4 p-4">
               {messages.map((message) => (
@@ -298,7 +306,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
                   )}
                   <div
                     className={`max-w-[70%] rounded-2xl text-sm md:text-base ${message.imageUrl ? 'p-0 overflow-hidden' : 'px-3 py-2 ' + (message.senderId === currentUser?.uid ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-secondary text-secondary-foreground')}`}>
-                    {/* NOTE: L'image est maintenant cliquable pour le zoom */}
                     {message.imageUrl ? (
                        <button onClick={() => setZoomedImageUrl(message.imageUrl)} className="block">
                          <Image src={message.imageUrl} alt="Image envoyée" width={250} height={300} className="object-cover" />
@@ -323,7 +330,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
        <footer className="fixed bottom-0 z-10 w-full border-t bg-background/95 backdrop-blur-sm px-2 py-1.5">
         <form onSubmit={handleSendMessage} className="flex items-end gap-1.5 w-full">
-            {/* NOTE: Icône changée pour un '+' (PlusCircle) */}
             <Button type="button" variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={handlePhotoAttachment} disabled={isUploading}>
                 <PlusCircle className="h-5 w-5 text-muted-foreground" />
             </Button>
@@ -358,7 +364,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         </form>
       </footer>
       
-      {/* NOTE: Fenêtre modale pour le zoom d'image */}
       {zoomedImageUrl && (
         <Dialog open={!!zoomedImageUrl} onOpenChange={(isOpen) => !isOpen && setZoomedImageUrl(null)}>
             <DialogContent className="p-0 m-0 w-full h-full max-w-full max-h-screen bg-black/80 backdrop-blur-sm border-0 flex flex-col items-center justify-center">
