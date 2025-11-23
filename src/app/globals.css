@@ -5,11 +5,6 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
-  overscroll-behavior-y: contain; /* FIX DÉFINITIF : Empêche le "pull-to-refresh" */
-}
-
 @layer base {
   :root {
     --background: 207 30% 98%;
@@ -70,21 +65,27 @@ body {
   * {
     @apply border-border;
   }
-  html, body {
-    @apply w-full overflow-x-hidden;
+
+  html {
+    /* FIX FINAL ET DÉFINITIF: Empêche le défilement horizontal et la navigation par "swipe" */
+    overscroll-behavior-x: contain;
+    /* Hide scrollbar for IE, Edge and Firefox */
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
   }
-  body {
-    @apply bg-background text-foreground;
-  }
-  
+
   /* Hide scrollbar for Chrome, Safari and Opera */
   ::-webkit-scrollbar {
     display: none;
   }
+  
+  html, 
+  body {
+    @apply w-full overflow-x-hidden;
+  }
 
-  /* Hide scrollbar for IE, Edge and Firefox */
-  html {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+  body {
+    @apply bg-background text-foreground;
+    font-family: Arial, Helvetica, sans-serif;
   }
 }
