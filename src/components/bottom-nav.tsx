@@ -71,8 +71,7 @@ const BottomNav = () => {
     return () => unsubscribeAuth();
   }, []);
 
-  // **CORRECTION DE L'ERREUR D'INDEX**
-  // La requête est simplifiée pour ne pas causer d'erreur, le reste de la logique est géré côté client.
+  // Gère l'état des messages non lus
   useEffect(() => {
     if (!currentUser) return;
 

@@ -1,49 +1,75 @@
 
-import React from 'react';
-import Link from 'next/link';
-import { cn } from '@/lib/utils';
-import { Button } from './ui/button';
-import { Bell } from 'lucide-react';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from './ui/tooltip';
+'use client';
 
-const WanderlinkHeader = () => {
+import Link from 'next/link';
+import { Bell, Search } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { cn } from '@/lib/utils';
+import { useEffect, useState } from 'react';
+import { auth, db } from '@/lib/firebase';
+import { collection, onSnapshot, query, where, limit } from 'firebase/firestore';
+
+const WanderLinkHeader = () => {
+  const pathname = usePathname();
+  const [hasUnread, setHasUnread] = useState(false);
+  const [user, setUser] = useState(auth.currentUser);
+
+  useEffect(() => {
+    const unsubscribeAuth = auth.onAuthStateChanged(currentUser => {
+      setUser(currentUser);
+    });
+    return () => unsubscribeAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setHasUnread(false);
+      return;
+    }
+
+    const notifsRef = collection(db, 'notifications');
+    const q = query(
+      notifsRef,
+      where('userId', '==', user.uid),
+      where('read', '==', false),
+      limit(1)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setHasUnread(!snapshot.empty);
+    }, (error) => {
+      console.error("Error fetching notification status:", error);
+      setHasUnread(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Ne pas afficher le header sur certaines pages
+  const noHeaderPaths = ['/login', '/create-profile', '/call'];
+  if (noHeaderPaths.some(path => pathname.startsWith(path))) {
+    return null;
+  }
+
   return (
-    <header className={cn(
-        "fixed top-0 left-0 z-20 w-full h-12 md:h-14 transition-all duration-300",
-        "bg-background/90 backdrop-blur-sm border-b"
-      )}>
-      <div className={cn(
-        "flex items-center justify-between h-full",
-        "px-2 md:px-4"
-        )}>
-        <Link href="/" className="flex items-center gap-2 group">
-             <h1 className="text-2xl md:text-3xl font-bold font-logo">
-              <span className="text-foreground">Wander</span><span className="text-accent">Link</span>
-            </h1>
+    <header className="fixed top-0 left-0 right-0 z-10 flex items-center justify-between bg-background/80 px-4 py-3 backdrop-blur-md md:px-6">
+      <Link href="/" className="text-2xl font-bold text-primary">
+        WanderLink
+      </Link>
+
+      <div className="flex items-center space-x-4">
+        <Link href="/discover?search=true" className={cn('text-muted-foreground transition-colors hover:text-foreground', { 'text-primary': pathname === '/discover' } )}>
+          <Search className="h-6 w-6" />
         </Link>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link href="/notifications" passHref>
-                <Button variant="ghost" size="icon" className="text-muted-foreground hover:bg-transparent hover:text-muted-foreground">
-                  <Bell className="h-6 w-6" />
-                  <span className="sr-only">Notifications</span>
-                </Button>
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Notifications</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <Link href="/notifications" className={cn('relative text-muted-foreground transition-colors hover:text-foreground', { 'text-primary': pathname === '/notifications' } )}>
+          <Bell className="h-6 w-6" />
+          {hasUnread && (
+            <span className="absolute top-0 right-0 block h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-background" />
+          )}
+        </Link>
       </div>
     </header>
   );
 };
 
-export default WanderlinkHeader;
+export default WanderLinkHeader;
