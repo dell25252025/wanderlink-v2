@@ -7,10 +7,11 @@ import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Phone, Video
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getUserProfile } from '@/lib/firebase-actions';
-// NOTE: Ajout de 'storage' pour l'upload d'images
 import { auth, db, storage } from '@/lib/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { Drawer, DrawerContent, DrawerTrigger, DrawerClose, DrawerHeader, DrawerTitle, DrawerDescription } from '@/components/ui/drawer';
+// NOTE: Ajout du Dialog pour le zoom d'image
+import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -21,9 +22,7 @@ import { ReportAbuseDialog } from '@/components/report-abuse-dialog';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import type { DocumentData, Timestamp } from 'firebase/firestore';
-// NOTE: Ajout des imports pour Firebase Storage
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-// NOTE: Ajout des imports pour Capacitor Camera
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 
 interface Message {
@@ -51,8 +50,9 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [newMessage, setNewMessage] = useState('');
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  // NOTE: Ajout d'un état pour le chargement de l'image
   const [isUploading, setIsUploading] = useState(false);
+  // NOTE: Ajout de l'état pour l'image zoomée
+  const [zoomedImageUrl, setZoomedImageUrl] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -88,7 +88,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // NOTE: Fonction mise à jour pour gérer le texte OU les URLs d'image
   const handleSendMessage = async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, imageUrl: string | null = null) => {
     if(e) e.preventDefault();
     if (!newMessage.trim() && !imageUrl) return;
@@ -106,7 +105,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         text: messageText,
         senderId: currentUser.uid,
         timestamp: serverTimestamp(),
-        imageUrl: imageUrl, // Ajout de l'URL de l'image
+        imageUrl: imageUrl,
         audioUrl: null,
       });
 
@@ -137,7 +136,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
   };
   
-  // NOTE: Nouvelle fonction pour sélectionner et uploader une photo
   const handlePhotoAttachment = async () => {
     if (!currentUser) return;
     try {
@@ -145,7 +143,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         quality: 90,
         allowEditing: false,
         resultType: CameraResultType.Uri,
-        source: CameraSource.Photos, // Ouvre la galerie
+        source: CameraSource.Photos,
       });
 
       if (image && image.webPath) {
@@ -161,9 +159,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         const uploadTask = uploadBytesResumable(storageRef, blob);
 
         uploadTask.on('state_changed',
-          (snapshot) => {
-            // On peut ajouter une barre de progression ici si on veut
-          },
+          (snapshot) => {},
           (error) => {
             console.error("Upload failed:", error);
             toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer l\'image.' });
@@ -178,9 +174,8 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         );
       }
     } catch (error) {
-        // Gère le cas où l'utilisateur annule la sélection de photo
-      console.info("Photo selection cancelled by user.");
-      setIsUploading(false);
+        console.info("Photo selection cancelled by user.");
+        setIsUploading(false);
     }
   };
 
@@ -302,11 +297,12 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
                     </Avatar>
                   )}
                   <div
-                    className={`max-w-[70%] rounded-2xl px-3 py-2 text-sm md:text-base ${!message.imageUrl && (message.senderId === currentUser?.uid ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-secondary text-secondary-foreground')}`}
-                  >
-                    {/* NOTE: Affichage de l'image si elle existe */}
+                    className={`max-w-[70%] rounded-2xl text-sm md:text-base ${message.imageUrl ? 'p-0 overflow-hidden' : 'px-3 py-2 ' + (message.senderId === currentUser?.uid ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-secondary text-secondary-foreground')}`}>
+                    {/* NOTE: L'image est maintenant cliquable pour le zoom */}
                     {message.imageUrl ? (
-                       <Image src={message.imageUrl} alt="Image envoyée" width={250} height={250} className="rounded-md object-cover" />
+                       <button onClick={() => setZoomedImageUrl(message.imageUrl)} className="block">
+                         <Image src={message.imageUrl} alt="Image envoyée" width={250} height={300} className="object-cover" />
+                       </button>
                     ) : (
                         message.text
                     )}
@@ -327,9 +323,9 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
        <footer className="fixed bottom-0 z-10 w-full border-t bg-background/95 backdrop-blur-sm px-2 py-1.5">
         <form onSubmit={handleSendMessage} className="flex items-end gap-1.5 w-full">
-            {/* NOTE: Bouton '+' réactivé pour l'envoi de photos */}
+            {/* NOTE: Icône changée pour un '+' (PlusCircle) */}
             <Button type="button" variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={handlePhotoAttachment} disabled={isUploading}>
-                <Paperclip className="h-4 w-4" />
+                <PlusCircle className="h-5 w-5 text-muted-foreground" />
             </Button>
             <div className="flex-1 relative flex items-center min-w-0 bg-secondary rounded-xl">
                 <Textarea
@@ -361,6 +357,27 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
             </div>
         </form>
       </footer>
+      
+      {/* NOTE: Fenêtre modale pour le zoom d'image */}
+      {zoomedImageUrl && (
+        <Dialog open={!!zoomedImageUrl} onOpenChange={(isOpen) => !isOpen && setZoomedImageUrl(null)}>
+            <DialogContent className="p-0 m-0 w-full h-full max-w-full max-h-screen bg-black/80 backdrop-blur-sm border-0 flex flex-col items-center justify-center">
+                <DialogClose asChild className="absolute top-2 right-2 z-50">
+                     <Button variant="ghost" size="icon" className="h-9 w-9 text-white bg-black/30 hover:bg-black/50 hover:text-white">
+                        <X className="h-5 w-5" />
+                    </Button>
+                </DialogClose>
+                <div className="relative w-full h-full flex items-center justify-center p-4">
+                     <Image
+                        src={zoomedImageUrl}
+                        alt="Image zoomée"
+                        fill
+                        className="object-contain"
+                    />
+                </div>
+            </DialogContent>
+        </Dialog>
+     )}
       
       <ReportAbuseDialog 
         isOpen={isReportModalOpen} 
