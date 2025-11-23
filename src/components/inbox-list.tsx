@@ -88,16 +88,16 @@ const InboxList = () => {
 
     setLoadingChats(true);
     const chatsRef = collection(db, 'chats');
+    // **CORRECTION DE L'ERREUR D'INDEX**
+    // La requête est simplifiée pour ne plus trier (orderBy). Le tri se fera côté client.
     const q = query(
       chatsRef, 
-      where('participants', 'array-contains', user.uid),
-      orderBy('lastMessage.timestamp', 'desc')
+      where('participants', 'array-contains', user.uid)
     );
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       const chatData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
       
-      // Enrichir les données de chat avec les profils des participants
       const enrichedChats = await Promise.all(chatData.map(async (chat) => {
         const otherParticipantId = chat.participants.find(p => p !== user.uid);
         let otherParticipant: ParticipantProfile | null = null;
@@ -115,8 +115,15 @@ const InboxList = () => {
         }
         return { ...chat, otherParticipant };
       }));
+
+      // Tri des conversations côté client pour éviter l'erreur d'index
+      const sortedChats = enrichedChats.sort((a, b) => {
+        const timeA = a.lastMessage?.timestamp?.toMillis() || 0;
+        const timeB = b.lastMessage?.timestamp?.toMillis() || 0;
+        return timeB - timeA; // Tri descendant
+      });
       
-      setChats(enrichedChats);
+      setChats(sortedChats);
       setLoadingChats(false);
     }, (error) => {
       console.error("Error fetching chats:", error);
