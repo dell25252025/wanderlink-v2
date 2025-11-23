@@ -68,8 +68,8 @@
 
   html, body {
     /* --- CORRECTIF DÉFINITIF : Blocage absolu du défilement horizontal --- */
-    overflow-x: hidden !important;
     overscroll-behavior-x: contain !important;
+    overflow-x: hidden !important;
     width: 100%;
   }
 
