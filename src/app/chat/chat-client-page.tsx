@@ -24,7 +24,6 @@ import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebas
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
-import { PermissionRequester } from '@/components/permission-requester';
 
 // --- Interfaces ---
 interface Message {
@@ -112,21 +111,40 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [zoomedImageUrl, setZoomedImageUrl] = useState<string | null>(null);
   const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
   const [showReactionPopoverFor, setShowReactionPopoverFor] = useState<string | null>(null);
-  const [allPermissionsGranted, setAllPermissionsGranted] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<NodeJS.Timeout>();
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
-  useEffect(() => { 
-    if (allPermissionsGranted && otherUserId) { 
-        getUserProfile(otherUserId).then(setOtherUser);
+  useEffect(() => {
+    if (otherUserId) {
+      getUserProfile(otherUserId).then(setOtherUser);
     }
-  }, [otherUserId, toast, allPermissionsGranted]);
+
+    const requestNativePermissions = async () => {
+      try {
+        // Request Photos permission (for gallery access)
+        await Camera.requestPermissions({ permissions: ['photos'] });
+
+        // Request Camera permission (for camera and microphone for video)
+        await Camera.requestPermissions({ permissions: ['camera'] });
+
+      } catch (e) {
+        console.error("Erreur lors de la demande de permissions natives", e);
+        toast({
+          variant: "destructive",
+          title: "Erreur de permission",
+          description: "Impossible de demander les permissions nécessaires.",
+        });
+      }
+    };
+
+    requestNativePermissions();
+  }, [otherUserId, toast]);
 
   useEffect(() => {
-    if (!currentUser || !allPermissionsGranted) { setLoadingMessages(false); return; }
+    if (!currentUser) { setLoadingMessages(false); return; }
     const chatId = getChatId(currentUser.uid, otherUserId);
     const chatDocRef = doc(db, 'chats', chatId);
     const unsubscribeChat = onSnapshot(chatDocRef, (doc) => {
@@ -151,7 +169,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         setLoadingMessages(false);
     });
     return () => { unsubscribeChat(); unsubscribeMessages(); };
-  }, [currentUser, otherUserId, toast, allPermissionsGranted]);
+  }, [currentUser, otherUserId, toast]);
 
   useLayoutEffect(() => {
     const scrollToBottom = () => {
@@ -300,10 +318,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
   const otherUserName = otherUser?.firstName || 'Utilisateur';
   const otherUserImage = otherUser?.profilePictures?.[0] || `https://picsum.photos/seed/${otherUserId}/200`;
-  
-  if (!allPermissionsGranted) {
-    return <PermissionRequester onAllPermissionsGranted={() => setAllPermissionsGranted(true)} />;
-  }
 
   if (loadingAuth || !otherUser) return <div className="flex h-screen w-full items-center justify-center"><Loader2 className="h-16 w-16 animate-spin text-primary" /></div>;
 
