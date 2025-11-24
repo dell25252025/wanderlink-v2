@@ -300,12 +300,12 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
   const otherUserName = otherUser?.firstName || 'Utilisateur';
   const otherUserImage = otherUser?.profilePictures?.[0] || `https://picsum.photos/seed/${otherUserId}/200`;
-
-  if (loadingAuth || !otherUser) return <div className="flex h-screen w-full items-center justify-center"><Loader2 className="h-16 w-16 animate-spin text-primary" /></div>;
   
   if (!allPermissionsGranted) {
     return <PermissionRequester onAllPermissionsGranted={() => setAllPermissionsGranted(true)} />;
   }
+
+  if (loadingAuth || !otherUser) return <div className="flex h-screen w-full items-center justify-center"><Loader2 className="h-16 w-16 animate-spin text-primary" /></div>;
 
   return (
     <div className="flex h-screen flex-col bg-background w-full overflow-x-hidden">
