@@ -22,6 +22,7 @@ import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, s
 import type { DocumentData, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
 // --- Interfaces ---
 interface Message {
@@ -321,7 +322,19 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         </DialogContent>
       </Dialog>
 
-      {zoomedImageUrl && <Dialog open={!!zoomedImageUrl} onOpenChange={(isOpen) => !isOpen && setZoomedImageUrl(null)}><DialogContent className="p-0 m-0 w-full h-full max-w-full max-h-screen bg-black/80 backdrop-blur-sm border-0 flex flex-col items-center justify-center"><DialogClose asChild className="absolute top-2 right-2 z-50"><Button variant="ghost" size="icon" className="h-9 w-9 text-white bg-black/30 hover:bg-black/50 hover:text-white"><X className="h-5 w-5" /></Button></DialogClose><div className="relative w-full h-full flex items-center justify-center p-4"><Image src={zoomedImageUrl} alt="Image zoomée" fill className="object-contain" /></div></DialogContent></Dialog>}
+      {zoomedImageUrl && (
+        <Dialog open={!!zoomedImageUrl} onOpenChange={(isOpen) => !isOpen && setZoomedImageUrl(null)}>
+          <DialogContent className="p-0 m-0 w-full h-full max-w-full max-h-screen bg-black/80 backdrop-blur-sm border-0 flex flex-col items-center justify-center">
+            <DialogHeader>
+              <DialogTitle>
+                <VisuallyHidden>Image en plein écran</VisuallyHidden>
+              </DialogTitle>
+            </DialogHeader>
+            <DialogClose asChild className="absolute top-2 right-2 z-50"><Button variant="ghost" size="icon" className="h-9 w-9 text-white bg-black/30 hover:bg-black/50 hover:text-white"><X className="h-5 w-5" /></Button></DialogClose>
+            <div className="relative w-full h-full flex items-center justify-center p-4"><Image src={zoomedImageUrl} alt="Image zoomée" fill className="object-contain" /></div>
+          </DialogContent>
+        </Dialog>
+      )}
       <ReportAbuseDialog isOpen={isReportModalOpen} onOpenChange={setIsReportModalOpen} reportedUser={otherUser} />
     </div>
   );
