@@ -235,8 +235,10 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, [currentUser, otherUser, toast]);
   
   const handleDownloadImage = useCallback(async () => {
-    if (!zoomedImageUrl) return;
+    const urlToDownload = zoomedImageUrl;
+    if (!urlToDownload) return;
 
+    // Fermer le dialogue
     setZoomedImageUrl(null);
 
     try {
@@ -249,10 +251,9 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
             }
         }
 
-        // Simplification : Enregistrer directement dans le dossier Téléchargements
         const fileName = `WanderLink_${new Date().getTime()}.jpeg`;
         await Filesystem.downloadFile({
-            url: zoomedImageUrl,
+            url: urlToDownload, // Utiliser la variable locale
             path: fileName,
             directory: Directory.Downloads,
         });
