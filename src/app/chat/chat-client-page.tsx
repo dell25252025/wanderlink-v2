@@ -121,10 +121,8 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     if (otherUserId) { 
         getUserProfile(otherUserId).then(setOtherUser); 
     }
-    // Demander la permission pour le système de fichiers au chargement de la page
     const requestFilePermissions = async () => {
         try {
-            // Pour iOS et Android, cette méthode vérifie et demande la permission si nécessaire.
             await Filesystem.requestPermissions();
         } catch (e) {
             console.error('Error requesting filesystem permissions', e);
@@ -166,14 +164,12 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     return () => { unsubscribeChat(); unsubscribeMessages(); };
   }, [currentUser, otherUserId, toast]);
 
-  // Utiliser useLayoutEffect pour un défilement plus fiable après le rendu
   useLayoutEffect(() => {
     const scrollToBottom = () => {
         if(scrollContainerRef.current) {
             scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
         }
     }
-    // Pas de timeout, exécution directe après le chargement des messages
     if (!loadingMessages && messages.length > 0) {
         scrollToBottom();
     }
@@ -238,13 +234,17 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     setShowReactionPopoverFor(null);
   }, [currentUser, otherUser, toast]);
   
-    const handleDownloadImage = useCallback(async () => {
-        if (!zoomedImageUrl) return;
+  const handleDownloadImage = useCallback(async () => {
+    if (!zoomedImageUrl) return;
 
-        try {
-            // Vérifier/demander la permission
-            const permissions = await Filesystem.requestPermissions();
-            if (permissions.publicStorage !== 'granted') {
+    setZoomedImageUrl(null); // Close the dialog immediately for better UX
+
+    try {
+        // 1. Check permissions (already requested on page load, but good practice to check again)
+        const permissions = await Filesystem.checkPermissions();
+        if (permissions.publicStorage !== 'granted') {
+            const result = await Filesystem.requestPermissions();
+            if (result.publicStorage !== 'granted') {
                 toast({
                     variant: 'destructive',
                     title: 'Permission refusée',
@@ -252,55 +252,44 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
                 });
                 return;
             }
-            
-            // Lire l'image en base64 depuis l'URL
-            const response = await fetch(zoomedImageUrl);
-            const blob = await response.blob();
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-                const base64data = reader.result as string;
-
-                const fileName = `WanderLink_${new Date().getTime()}.jpeg`;
-
-                // Créer le dossier WanderLink s'il n'existe pas
-                try {
-                    await Filesystem.mkdir({
-                        path: 'WanderLink',
-                        directory: Directory.Downloads,
-                    });
-                } catch (e: any) {
-                    // Ignorer l'erreur si le dossier existe déjà
-                    if (e.message !== 'Current directory does already exist.') {
-                         console.error('Unable to create directory', e);
-                    }
-                }
-
-                // Enregistrer le fichier
-                await Filesystem.writeFile({
-                    path: `WanderLink/${fileName}`,
-                    data: base64data,
-                    directory: Directory.Downloads,
-                });
-
-                toast({
-                    title: 'Image téléchargée',
-                    description: `L\'image a été enregistrée dans le dossier WanderLink.`,
-                    action: <CheckCircle className="h-5 w-5 text-green-500" />,
-                });
-            };
-            reader.readAsDataURL(blob);
-
-        } catch (e: any) {
-            console.error('Error downloading image', e);
-            toast({
-                variant: 'destructive',
-                title: 'Erreur de téléchargement',
-                description: e.message || 'Une erreur est survenue lors du téléchargement de l\'image.',
-            });
-        } finally {
-            setZoomedImageUrl(null); // Fermer le dialogue après la tentative
         }
-    }, [zoomedImageUrl, toast]);
+
+        // 2. Create the destination directory if it doesn't exist
+        const directoryPath = 'WanderLink';
+        try {
+            await Filesystem.mkdir({
+                path: directoryPath,
+                directory: Directory.Downloads,
+            });
+        } catch (e: any) {
+            if (e.message !== 'Current directory does already exist.') {
+                throw e; // Re-throw if it's not the "directory already exists" error
+            }
+        }
+
+        // 3. Use native download functionality
+        const fileName = `WanderLink/${new Date().getTime()}.jpeg`;
+        await Filesystem.downloadFile({
+            url: zoomedImageUrl,
+            path: fileName,
+            directory: Directory.Downloads,
+        });
+
+        toast({
+            title: 'Image téléchargée',
+            description: `Enregistrée dans le dossier ${directoryPath}.`,
+            action: <CheckCircle className="h-5 w-5 text-green-500" />,
+        });
+
+    } catch (e: any) {
+        console.error('Error downloading image', e);
+        toast({
+            variant: 'destructive',
+            title: 'Erreur de téléchargement',
+            description: e.message || 'Une erreur est survenue lors du téléchargement de l\'image.',
+        });
+    }
+}, [zoomedImageUrl, toast]);
 
 
   const handleLongPressStart = useCallback((messageId: string) => {
