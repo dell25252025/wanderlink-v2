@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef, memo, useCallback } from 'react';
+import { useState, useEffect, useRef, memo, useCallback, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Phone, Video, Loader2, CheckCircle, PlusCircle, Trash2 } from 'lucide-react';
+import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Phone, Video, Loader2, CheckCircle, PlusCircle, Trash2, Download } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getUserProfile } from '@/lib/firebase-actions';
@@ -22,6 +22,7 @@ import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, s
 import type { DocumentData, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
 // --- Interfaces ---
@@ -116,7 +117,26 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const longPressTimer = useRef<NodeJS.Timeout>();
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
-  useEffect(() => { if (otherUserId) { getUserProfile(otherUserId).then(setOtherUser); } }, [otherUserId]);
+  useEffect(() => { 
+    if (otherUserId) { 
+        getUserProfile(otherUserId).then(setOtherUser); 
+    }
+    // Demander la permission pour le système de fichiers au chargement de la page
+    const requestFilePermissions = async () => {
+        try {
+            // Pour iOS et Android, cette méthode vérifie et demande la permission si nécessaire.
+            await Filesystem.requestPermissions();
+        } catch (e) {
+            console.error('Error requesting filesystem permissions', e);
+            toast({
+                variant: 'destructive',
+                title: 'Erreur d\'autorisation',
+                description: 'Impossible de demander l\'accès au stockage.',
+            });
+        }
+    };
+    requestFilePermissions();
+  }, [otherUserId, toast]);
 
   useEffect(() => {
     if (!currentUser) { setLoadingMessages(false); return; }
@@ -146,13 +166,16 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     return () => { unsubscribeChat(); unsubscribeMessages(); };
   }, [currentUser, otherUserId, toast]);
 
-  useEffect(() => {
+  // Utiliser useLayoutEffect pour un défilement plus fiable après le rendu
+  useLayoutEffect(() => {
     const scrollToBottom = () => {
-        if(scrollContainerRef.current) { scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight; }
+        if(scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
     }
-    if (!loadingMessages) {
-        const timer = setTimeout(scrollToBottom, 100);
-        return () => clearTimeout(timer);
+    // Pas de timeout, exécution directe après le chargement des messages
+    if (!loadingMessages && messages.length > 0) {
+        scrollToBottom();
     }
   }, [messages, loadingMessages]);
 
@@ -214,6 +237,71 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
     setShowReactionPopoverFor(null);
   }, [currentUser, otherUser, toast]);
+  
+    const handleDownloadImage = useCallback(async () => {
+        if (!zoomedImageUrl) return;
+
+        try {
+            // Vérifier/demander la permission
+            const permissions = await Filesystem.requestPermissions();
+            if (permissions.publicStorage !== 'granted') {
+                toast({
+                    variant: 'destructive',
+                    title: 'Permission refusée',
+                    description: "L\'autorisation d'accéder au stockage est nécessaire pour télécharger l\'image.",
+                });
+                return;
+            }
+            
+            // Lire l'image en base64 depuis l'URL
+            const response = await fetch(zoomedImageUrl);
+            const blob = await response.blob();
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                const base64data = reader.result as string;
+
+                const fileName = `WanderLink_${new Date().getTime()}.jpeg`;
+
+                // Créer le dossier WanderLink s'il n'existe pas
+                try {
+                    await Filesystem.mkdir({
+                        path: 'WanderLink',
+                        directory: Directory.Downloads,
+                    });
+                } catch (e: any) {
+                    // Ignorer l'erreur si le dossier existe déjà
+                    if (e.message !== 'Current directory does already exist.') {
+                         console.error('Unable to create directory', e);
+                    }
+                }
+
+                // Enregistrer le fichier
+                await Filesystem.writeFile({
+                    path: `WanderLink/${fileName}`,
+                    data: base64data,
+                    directory: Directory.Downloads,
+                });
+
+                toast({
+                    title: 'Image téléchargée',
+                    description: `L\'image a été enregistrée dans le dossier WanderLink.`,
+                    action: <CheckCircle className="h-5 w-5 text-green-500" />,
+                });
+            };
+            reader.readAsDataURL(blob);
+
+        } catch (e: any) {
+            console.error('Error downloading image', e);
+            toast({
+                variant: 'destructive',
+                title: 'Erreur de téléchargement',
+                description: e.message || 'Une erreur est survenue lors du téléchargement de l\'image.',
+            });
+        } finally {
+            setZoomedImageUrl(null); // Fermer le dialogue après la tentative
+        }
+    }, [zoomedImageUrl, toast]);
+
 
   const handleLongPressStart = useCallback((messageId: string) => {
     longPressTimer.current = setTimeout(() => { setShowReactionPopoverFor(messageId); }, 500);
@@ -325,14 +413,19 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       {zoomedImageUrl && (
         <Dialog open={!!zoomedImageUrl} onOpenChange={(isOpen) => !isOpen && setZoomedImageUrl(null)}>
           <DialogContent className="p-0 m-0 w-full h-full max-w-full max-h-screen bg-black/80 backdrop-blur-sm border-0 flex flex-col items-center justify-center">
-            <DialogHeader>
-              <DialogTitle>
-                <VisuallyHidden>Image en plein écran</VisuallyHidden>
-              </DialogTitle>
-            </DialogHeader>
-            <DialogClose asChild className="absolute top-2 right-2 z-50"><Button variant="ghost" size="icon" className="h-9 w-9 text-white bg-black/30 hover:bg-black/50 hover:text-white"><X className="h-5 w-5" /></Button></DialogClose>
-            <div className="relative w-full h-full flex items-center justify-center p-4"><Image src={zoomedImageUrl} alt="Image zoomée" fill className="object-contain" /></div>
-          </DialogContent>
+                <DialogHeader>
+                    <DialogTitle>
+                        <VisuallyHidden>Image en plein écran</VisuallyHidden>
+                    </DialogTitle>
+                </DialogHeader>
+                <DialogClose asChild className="absolute top-2 right-2 z-50"><Button variant="ghost" size="icon" className="h-9 w-9 text-white bg-black/30 hover:bg-black/50 hover:text-white"><X className="h-5 w-5" /></Button></DialogClose>
+                <div className="relative w-full h-full flex items-center justify-center p-4">
+                    <Image src={zoomedImageUrl} alt="Image zoomée" fill className="object-contain" />
+                </div>
+                <DialogFooter className="absolute bottom-4 left-1/2 -translate-x-1/2">
+                    <Button variant="secondary" onClick={handleDownloadImage}><Download className="mr-2 h-4 w-4" />Télécharger</Button>
+                </DialogFooter>
+            </DialogContent>
         </Dialog>
       )}
       <ReportAbuseDialog isOpen={isReportModalOpen} onOpenChange={setIsReportModalOpen} reportedUser={otherUser} />
