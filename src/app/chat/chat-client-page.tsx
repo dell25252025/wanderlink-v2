@@ -237,38 +237,20 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const handleDownloadImage = useCallback(async () => {
     if (!zoomedImageUrl) return;
 
-    setZoomedImageUrl(null); // Close the dialog immediately for better UX
+    setZoomedImageUrl(null);
 
     try {
-        // 1. Check permissions (already requested on page load, but good practice to check again)
         const permissions = await Filesystem.checkPermissions();
         if (permissions.publicStorage !== 'granted') {
             const result = await Filesystem.requestPermissions();
             if (result.publicStorage !== 'granted') {
-                toast({
-                    variant: 'destructive',
-                    title: 'Permission refusée',
-                    description: "L\'autorisation d'accéder au stockage est nécessaire pour télécharger l\'image.",
-                });
+                toast({ variant: 'destructive', title: 'Permission refusée', description: "L\'accès au stockage est requis.", });
                 return;
             }
         }
 
-        // 2. Create the destination directory if it doesn't exist
-        const directoryPath = 'WanderLink';
-        try {
-            await Filesystem.mkdir({
-                path: directoryPath,
-                directory: Directory.Downloads,
-            });
-        } catch (e: any) {
-            if (e.message !== 'Current directory does already exist.') {
-                throw e; // Re-throw if it's not the "directory already exists" error
-            }
-        }
-
-        // 3. Use native download functionality
-        const fileName = `WanderLink/${new Date().getTime()}.jpeg`;
+        // Simplification : Enregistrer directement dans le dossier Téléchargements
+        const fileName = `WanderLink_${new Date().getTime()}.jpeg`;
         await Filesystem.downloadFile({
             url: zoomedImageUrl,
             path: fileName,
@@ -277,7 +259,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
         toast({
             title: 'Image téléchargée',
-            description: `Enregistrée dans le dossier ${directoryPath}.`,
+            description: `Enregistrée dans vos téléchargements.`,
             action: <CheckCircle className="h-5 w-5 text-green-500" />,
         });
 
@@ -286,7 +268,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         toast({
             variant: 'destructive',
             title: 'Erreur de téléchargement',
-            description: e.message || 'Une erreur est survenue lors du téléchargement de l\'image.',
+            description: e.message || 'Impossible d\'enregistrer l\'image.',
         });
     }
 }, [zoomedImageUrl, toast]);
