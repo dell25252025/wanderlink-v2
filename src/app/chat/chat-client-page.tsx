@@ -24,6 +24,7 @@ import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebas
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { PermissionRequester } from '@/components/permission-requester';
 
 // --- Interfaces ---
 interface Message {
@@ -111,6 +112,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [zoomedImageUrl, setZoomedImageUrl] = useState<string | null>(null);
   const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
   const [showReactionPopoverFor, setShowReactionPopoverFor] = useState<string | null>(null);
+  const [allPermissionsGranted, setAllPermissionsGranted] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -118,26 +120,13 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   useEffect(() => { 
-    if (otherUserId) { 
-        getUserProfile(otherUserId).then(setOtherUser); 
+    if (allPermissionsGranted && otherUserId) { 
+        getUserProfile(otherUserId).then(setOtherUser);
     }
-    const requestFilePermissions = async () => {
-        try {
-            await Filesystem.requestPermissions();
-        } catch (e) {
-            console.error('Error requesting filesystem permissions', e);
-            toast({
-                variant: 'destructive',
-                title: 'Erreur d\'autorisation',
-                description: 'Impossible de demander l\'accès au stockage.',
-            });
-        }
-    };
-    requestFilePermissions();
-  }, [otherUserId, toast]);
+  }, [otherUserId, toast, allPermissionsGranted]);
 
   useEffect(() => {
-    if (!currentUser) { setLoadingMessages(false); return; }
+    if (!currentUser || !allPermissionsGranted) { setLoadingMessages(false); return; }
     const chatId = getChatId(currentUser.uid, otherUserId);
     const chatDocRef = doc(db, 'chats', chatId);
     const unsubscribeChat = onSnapshot(chatDocRef, (doc) => {
@@ -162,7 +151,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         setLoadingMessages(false);
     });
     return () => { unsubscribeChat(); unsubscribeMessages(); };
-  }, [currentUser, otherUserId, toast]);
+  }, [currentUser, otherUserId, toast, allPermissionsGranted]);
 
   useLayoutEffect(() => {
     const scrollToBottom = () => {
@@ -313,6 +302,10 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const otherUserImage = otherUser?.profilePictures?.[0] || `https://picsum.photos/seed/${otherUserId}/200`;
 
   if (loadingAuth || !otherUser) return <div className="flex h-screen w-full items-center justify-center"><Loader2 className="h-16 w-16 animate-spin text-primary" /></div>;
+  
+  if (!allPermissionsGranted) {
+    return <PermissionRequester onAllPermissionsGranted={() => setAllPermissionsGranted(true)} />;
+  }
 
   return (
     <div className="flex h-screen flex-col bg-background w-full overflow-x-hidden">
