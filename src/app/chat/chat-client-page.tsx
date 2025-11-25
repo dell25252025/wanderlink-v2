@@ -21,10 +21,10 @@ import { useMediaQuery } from '@/hooks/use-media-query';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDocs, limit, deleteField } from 'firebase/firestore';
 import type { DocumentData, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
-import { Camera, CameraResultType, CameraSource, PermissionStatus } from '@capacitor/camera';
+import { Camera, CameraResultType, CameraSource, CameraPlugin, PermissionState } from '@capacitor/camera';
+import type { PermissionStatus } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
-
 
 // --- Interfaces ---
 interface Message {
@@ -124,37 +124,31 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
   }, [otherUserId]);
 
-  const requestPermission = useCallback(async (
-    permission: 'camera' | 'microphone' | 'photos'
-  ): Promise<boolean> => {
-    try {
-      const result = await Camera.checkPermissions();
-      let status: PermissionStatus = result[permission];
-
-      if (status === 'granted') return true;
-
-      if (status === 'denied') {
-        toast({
-          title: 'Permission requise',
-          description: "Veuillez autoriser l'accès dans les réglages du téléphone.",
-        });
-        return false;
-      }
-
-      const newResult = await Camera.requestPermissions({ permissions: [permission] });
-      return newResult[permission] === 'granted';
-
-    } catch (e) {
-      console.error(`Erreur lors de la demande de permission ${permission}`, e);
+  const requestPermission = async (permission: 'camera' | 'microphone' | 'photos'): Promise<boolean> => {
+    const result = await Camera.checkPermissions();
+    let status: PermissionState = result[permission];
+  
+    if (status === 'granted') {
+      return true;
+    }
+  
+    if (status === 'denied') {
       toast({
-        variant: "destructive",
-        title: "Erreur de permission",
-        description: "Impossible de vérifier ou demander les permissions nécessaires.",
+        title: 'Permission requise',
+        description: "Veuillez autoriser l\'accès dans les réglages du téléphone.",
       });
       return false;
     }
-  }, [toast]);
-
+  
+    if (status === 'prompt' || status === 'prompt-with-rationale') {
+      const newResult = await Camera.requestPermissions({
+        permissions: [permission],
+      });
+      return newResult[permission] === 'granted';
+    }
+  
+    return false;
+  };
 
   useEffect(() => {
     if (!currentUser) { setLoadingMessages(false); return; }
@@ -272,7 +266,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         console.error('Error downloading image', e);
         toast({ variant: 'destructive', title: 'Erreur de téléchargement', description: e.message || 'Impossible d\'enregistrer l\'image.' });
     }
-}, [zoomedImageUrl, toast, requestPermission]);
+}, [zoomedImageUrl, toast]);
 
   const takePicture = useCallback(async (source: CameraSource) => {
     const permission = source === CameraSource.Camera ? 'camera' : 'photos';
@@ -298,25 +292,21 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         () => { getDownloadURL(uploadTask.snapshot.ref).then((url) => { handleSendMessage(undefined, url); setIsUploading(false); }); }
       );
     } catch (error) { console.info("Photo selection/capture cancelled."); setIsUploading(false); }
-  }, [currentUser, otherUser, handleSendMessage, toast, requestPermission]);
+  }, [currentUser, otherUser, handleSendMessage, toast]);
 
   const handleStartCall = useCallback(async (isVideo: boolean) => {
-    const permissionsToRequest: ('camera' | 'microphone')[] = isVideo ? ['camera', 'microphone'] : ['microphone'];
-    let allPermissionsGranted = true;
-    for (const perm of permissionsToRequest) {
-        const granted = await requestPermission(perm);
-        if (!granted) {
-            allPermissionsGranted = false;
-            break;
-        }
+    const audioOk = await requestPermission('microphone');
+    if (!audioOk) return;
+
+    if (isVideo) {
+        const videoOk = await requestPermission('camera');
+        if (!videoOk) return;
     }
 
-    if (allPermissionsGranted) {
-        // Placeholder for starting the call
-        toast({ title: 'Fonctionnalité d\'appel', description: `Lancement d\'un appel ${isVideo ? 'vidéo' : 'audio'}...` });
-        // Here you would integrate with your call provider SDK
-    }
-  }, [toast, requestPermission]);
+    toast({ title: 'Fonctionnalité d\'appel', description: `Lancement d\'un appel ${isVideo ? 'vidéo' : 'audio'}...` });
+    // Here you would integrate with your call provider SDK
+
+  }, [toast]);
 
   const handleLongPressStart = useCallback((messageId: string) => { longPressTimer.current = setTimeout(() => { setShowReactionPopoverFor(messageId); }, 500); }, []);
   const handleLongPressEnd = useCallback(() => { if(longPressTimer.current) clearTimeout(longPressTimer.current); }, []);
