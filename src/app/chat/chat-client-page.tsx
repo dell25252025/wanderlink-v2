@@ -1,4 +1,4 @@
-''''use client';
+'use client';
 
 import { useState, useEffect, useRef, memo, useCallback, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -450,4 +450,3 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     </div>
   );
 }
-''''
