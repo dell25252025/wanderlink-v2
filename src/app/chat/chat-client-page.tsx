@@ -124,7 +124,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
   }, [otherUserId]);
 
-  const requestPermission = async (permission: 'camera' | 'microphone' | 'photos'): Promise<boolean> => {
+  const requestPermission = async (permission: 'camera' | 'photos'): Promise<boolean> => {
     const result = await Camera.checkPermissions();
     let status: PermissionState = result[permission];
   
@@ -295,10 +295,12 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, [currentUser, otherUser, handleSendMessage, toast]);
 
   const handleStartCall = useCallback(async (isVideo: boolean) => {
-    const audioOk = await requestPermission('microphone');
+    // Request camera permission to indirectly get microphone permission
+    const audioOk = await requestPermission('camera'); 
     if (!audioOk) return;
 
     if (isVideo) {
+        // This is already covered by the previous check, but kept for clarity
         const videoOk = await requestPermission('camera');
         if (!videoOk) return;
     }
@@ -309,9 +311,10 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, [toast]);
 
   const handleStartRecording = useCallback(async () => {
-    const hasPermission = await requestPermission('microphone');
+    // Request camera permission to indirectly get microphone permission
+    const hasPermission = await requestPermission('camera'); 
     if (!hasPermission) return;
-    toast({ title: 'Enregistrement vocal', description: "La fonctionnalité d'enregistrement est en cours de développement." });
+    toast({ title: 'Enregistrement vocal', description: "La fonctionnalité d\'enregistrement est en cours de développement." });
     // Future logic to start recording audio
   }, [toast]);
 
