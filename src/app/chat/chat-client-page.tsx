@@ -1,8 +1,8 @@
-'use client';
+''''use client';
 
 import { useState, useEffect, useRef, memo, useCallback, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Phone, Video, Loader2, CheckCircle, PlusCircle, Trash2, Download } from 'lucide-react';
+import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Phone, Video, Loader2, CheckCircle, PlusCircle, Trash2, Download, Camera as CameraIcon, Mic, Image as ImageIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getUserProfile } from '@/lib/firebase-actions';
@@ -21,9 +21,10 @@ import { useMediaQuery } from '@/hooks/use-media-query';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDocs, limit, deleteField } from 'firebase/firestore';
 import type { DocumentData, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
-import { Camera, CameraResultType, CameraSource, CameraPermissionState, PermissionStatus } from '@capacitor/camera';
+import { Camera, CameraResultType, CameraSource, PermissionStatus } from '@capacitor/camera';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+
 
 // --- Interfaces ---
 interface Message {
@@ -117,48 +118,43 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const longPressTimer = useRef<NodeJS.Timeout>();
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
-  const requestPermission = useCallback(async (permission: 'camera' | 'photos' | 'microphone'): Promise<boolean> => {
+  useEffect(() => {
+    if (otherUserId) {
+      getUserProfile(otherUserId).then(setOtherUser);
+    }
+  }, [otherUserId]);
+
+  const requestPermission = useCallback(async (
+    permission: 'camera' | 'microphone' | 'photos'
+  ): Promise<boolean> => {
     try {
       const result = await Camera.checkPermissions();
-      const status = result.camera;
+      let status: PermissionStatus = result[permission];
 
-      if (status === 'granted') {
-        return true;
-      }
+      if (status === 'granted') return true;
 
       if (status === 'denied') {
         toast({
           title: 'Permission requise',
-          description: "Veuillez autoriser l\'accès dans les réglages du téléphone.",
+          description: "Veuillez autoriser l'accès dans les réglages du téléphone.",
         });
         return false;
       }
 
-      if (status === 'prompt' || status === 'prompt-with-rationale') {
-        const newResult = await Camera.requestPermissions({
-          permissions: [permission],
-        });
-        return newResult[permission] === 'granted';
-      }
+      const newResult = await Camera.requestPermissions({ permissions: [permission] });
+      return newResult[permission] === 'granted';
 
+    } catch (e) {
+      console.error(`Erreur lors de la demande de permission ${permission}`, e);
+      toast({
+        variant: "destructive",
+        title: "Erreur de permission",
+        description: "Impossible de vérifier ou demander les permissions nécessaires.",
+      });
       return false;
-    } catch (error) {
-        toast({ variant: 'destructive', title: 'Erreur de permission', description: `Impossible de demander la permission pour ${permission}.`});
-        return false;
     }
   }, [toast]);
 
-  useEffect(() => { 
-    if (otherUserId) { 
-        getUserProfile(otherUserId).then(setOtherUser); 
-    }
-    const requestAllPermissions = async () => {
-        await requestPermission('camera');
-        await requestPermission('photos');
-        await requestPermission('microphone');
-    }
-    requestAllPermissions();
-  }, [otherUserId, requestPermission]);
 
   useEffect(() => {
     if (!currentUser) { setLoadingMessages(false); return; }
@@ -261,50 +257,30 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const handleDownloadImage = useCallback(async () => {
     const urlToDownload = zoomedImageUrl;
     if (!urlToDownload) return;
-    const ok = await requestPermission('photos');
-    if (!ok) return;
-
     setZoomedImageUrl(null);
-
     try {
+        const hasPermission = await requestPermission('photos');
+        if (!hasPermission) return;
         const fileName = `WanderLink_${new Date().getTime()}.jpeg`;
         await Filesystem.downloadFile({
             url: urlToDownload,
             path: fileName,
             directory: Directory.Downloads,
         });
-
-        toast({
-            title: 'Image téléchargée',
-            description: `Enregistrée dans vos téléchargements.`,
-            action: <CheckCircle className="h-5 w-5 text-green-500" />,
-        });
-
+        toast({ title: 'Image téléchargée', description: `Enregistrée dans vos téléchargements.`, action: <CheckCircle className="h-5 w-5 text-green-500" /> });
     } catch (e: any) {
         console.error('Error downloading image', e);
-        toast({
-            variant: 'destructive',
-            title: 'Erreur de téléchargement',
-            description: e.message || 'Impossible d\'enregistrer l\'image.',
-        });
+        toast({ variant: 'destructive', title: 'Erreur de téléchargement', description: e.message || 'Impossible d\'enregistrer l\'image.' });
     }
 }, [zoomedImageUrl, toast, requestPermission]);
 
+  const takePicture = useCallback(async (source: CameraSource) => {
+    const permission = source === CameraSource.Camera ? 'camera' : 'photos';
+    const hasPermission = await requestPermission(permission);
+    if (!hasPermission || !currentUser || !otherUser) return;
 
-  const handleLongPressStart = useCallback((messageId: string) => {
-    longPressTimer.current = setTimeout(() => { setShowReactionPopoverFor(messageId); }, 500);
-  }, []);
-  const handleLongPressEnd = useCallback(() => { if(longPressTimer.current) clearTimeout(longPressTimer.current); }, []);
-  const handleSetupDelete = useCallback((message: Message) => { setShowReactionPopoverFor(null); setMessageToDelete(message); }, []);
-  const handleZoomImage = useCallback((imageUrl: string) => setZoomedImageUrl(imageUrl), []);
-
-  const handlePhotoAttachment = useCallback(async () => {
-    const ok = await requestPermission('photos');
-    if (!ok) return;
-
-    if (!currentUser || !otherUser) return;
     try {
-      const image = await Camera.getPhoto({ quality: 90, allowEditing: false, resultType: CameraResultType.Uri, source: CameraSource.Photos });
+      const image = await Camera.getPhoto({ quality: 90, allowEditing: false, resultType: CameraResultType.Uri, source });
       if (!image.webPath) return;
       setIsUploading(true);
       const response = await fetch(image.webPath);
@@ -321,9 +297,31 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         },
         () => { getDownloadURL(uploadTask.snapshot.ref).then((url) => { handleSendMessage(undefined, url); setIsUploading(false); }); }
       );
-    } catch (error) { console.info("Photo selection cancelled."); setIsUploading(false); }
+    } catch (error) { console.info("Photo selection/capture cancelled."); setIsUploading(false); }
   }, [currentUser, otherUser, handleSendMessage, toast, requestPermission]);
 
+  const handleStartCall = useCallback(async (isVideo: boolean) => {
+    const permissionsToRequest: ('camera' | 'microphone')[] = isVideo ? ['camera', 'microphone'] : ['microphone'];
+    let allPermissionsGranted = true;
+    for (const perm of permissionsToRequest) {
+        const granted = await requestPermission(perm);
+        if (!granted) {
+            allPermissionsGranted = false;
+            break;
+        }
+    }
+
+    if (allPermissionsGranted) {
+        // Placeholder for starting the call
+        toast({ title: 'Fonctionnalité d\'appel', description: `Lancement d\'un appel ${isVideo ? 'vidéo' : 'audio'}...` });
+        // Here you would integrate with your call provider SDK
+    }
+  }, [toast, requestPermission]);
+
+  const handleLongPressStart = useCallback((messageId: string) => { longPressTimer.current = setTimeout(() => { setShowReactionPopoverFor(messageId); }, 500); }, []);
+  const handleLongPressEnd = useCallback(() => { if(longPressTimer.current) clearTimeout(longPressTimer.current); }, []);
+  const handleSetupDelete = useCallback((message: Message) => { setShowReactionPopoverFor(null); setMessageToDelete(message); }, []);
+  const handleZoomImage = useCallback((imageUrl: string) => setZoomedImageUrl(imageUrl), []);
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && !e.shiftKey && !isDesktop) { e.preventDefault(); handleSendMessage(e); } };
   useEffect(() => { if(textareaRef.current){ textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`; } }, [newMessage]);
   const handleEmojiClick = (emoji: EmojiClickData) => { setNewMessage(p => p + emoji.emoji); if (!isDesktop) setIsEmojiPickerOpen(false); };
@@ -338,8 +336,8 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       <header className="fixed top-0 z-10 flex w-full items-center gap-2 border-b bg-background/95 px-2 py-1 backdrop-blur-sm h-12">
         <Button onClick={() => router.back()} variant="ghost" size="icon" className="h-8 w-8"><ArrowLeft className="h-4 w-4" /></Button>
         <Link href={`/profile?id=${otherUserId}`} className="flex min-w-0 flex-1 items-center gap-2 truncate"><Avatar className="h-8 w-8"><AvatarImage src={otherUserImage} alt={otherUserName} /><AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback></Avatar><div className="flex-1 truncate"><h1 className="truncate text-sm font-semibold">{otherUserName}</h1></div></Link>
-        <Button variant="ghost" size="icon" className="h-8 w-8"><Phone className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8"><Video className="h-4 w-4" /></Button>
+        <Button onClick={() => handleStartCall(false)} variant="ghost" size="icon" className="h-8 w-8"><Phone className="h-4 w-4" /></Button>
+        <Button onClick={() => handleStartCall(true)} variant="ghost" size="icon" className="h-8 w-8"><Video className="h-4 w-4" /></Button>
         <Drawer><DrawerTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DrawerTrigger><DrawerContent><div className="mx-auto w-full max-w-sm"><DrawerHeader><DrawerTitle>Options</DrawerTitle><DrawerDescription>Gérez votre interaction avec {otherUserName}.</DrawerDescription></DrawerHeader><div className="p-4 pt-0"><div className="mt-3 h-full"><DrawerClose asChild><Button variant="outline" className="w-full justify-start p-4 h-auto text-base"><Ban className="mr-2 h-5 w-5" /> Bloquer</Button></DrawerClose><div className="my-2 border-t"></div><DrawerClose asChild><Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={() => setIsReportModalOpen(true)}><ShieldAlert className="mr-2 h-5 w-5" /> Signaler</Button></DrawerClose></div></div><div className="p-4"><DrawerClose asChild><Button variant="secondary" className="w-full h-12 text-base">Annuler</Button></DrawerClose></div></div></DrawerContent></Drawer>
       </header>
 
@@ -370,7 +368,36 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       
       <footer className="fixed bottom-0 z-10 w-full border-t bg-background/95 backdrop-blur-sm px-2 py-1.5">
         <form onSubmit={handleSendMessage} className="flex items-end gap-1.5 w-full">
-            <Button type="button" variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={handlePhotoAttachment} disabled={isUploading}><PlusCircle className="h-5 w-5 text-muted-foreground" /></Button>
+          <Drawer>
+              <DrawerTrigger asChild>
+                  <Button type="button" variant="ghost" size="icon" className="shrink-0 h-8 w-8" disabled={isUploading}><PlusCircle className="h-5 w-5 text-muted-foreground" /></Button>
+              </DrawerTrigger>
+              <DrawerContent>
+                  <div className="mx-auto w-full max-w-sm">
+                      <DrawerHeader>
+                          <DrawerTitle>Joindre un fichier</DrawerTitle>
+                          <DrawerDescription>Que souhaitez-vous partager ?</DrawerDescription>
+                      </DrawerHeader>
+                      <div className="p-4 pt-0 grid grid-cols-2 gap-4">
+                          <DrawerClose asChild>
+                              <Button variant="outline" className="w-full justify-center p-4 h-auto text-base flex-col gap-2" onClick={() => takePicture(CameraSource.Photos)}><ImageIcon className="h-6 w-6" /> Bibliothèque</Button>
+                          </DrawerClose>
+                          <DrawerClose asChild>
+                              <Button variant="outline" className="w-full justify-center p-4 h-auto text-base flex-col gap-2" onClick={() => takePicture(CameraSource.Camera)}><CameraIcon className="h-6 w-6" /> Appareil photo</Button>
+                          </DrawerClose>
+                          <DrawerClose asChild>
+                              <Button variant="outline" className="w-full justify-center p-4 h-auto text-base flex-col gap-2" onClick={() => handleStartCall(false)}><Mic className="h-6 w-6" /> Appel vocal</Button>
+                          </DrawerClose>
+                          <DrawerClose asChild>
+                              <Button variant="outline" className="w-full justify-center p-4 h-auto text-base flex-col gap-2" onClick={() => handleStartCall(true)}><Video className="h-6 w-6" /> Appel vidéo</Button>
+                          </DrawerClose>
+                      </div>
+                      <div className="p-4">
+                          <DrawerClose asChild><Button variant="secondary" className="w-full h-12 text-base">Annuler</Button></DrawerClose>
+                      </div>
+                  </div>
+              </DrawerContent>
+          </Drawer>
             <div className="flex-1 relative flex items-center min-w-0 bg-secondary rounded-xl">
                 <Textarea
                     ref={textareaRef}
@@ -423,3 +450,4 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     </div>
   );
 }
+''''
