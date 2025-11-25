@@ -21,8 +21,8 @@ import { useMediaQuery } from '@/hooks/use-media-query';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDocs, limit, deleteField } from 'firebase/firestore';
 import type { DocumentData, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
-import { Camera, CameraResultType, CameraSource, CameraPlugin, PermissionState } from '@capacitor/camera';
-import type { PermissionStatus } from '@capacitor/core';
+import { Camera, CameraResultType, CameraSource, PermissionState } from '@capacitor/camera';
+import { AndroidPermissions } from '@awesome-cordova-plugins/android-permissions';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
@@ -124,31 +124,101 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
   }, [otherUserId]);
 
-  const requestPermission = async (permission: 'camera' | 'photos'): Promise<boolean> => {
+  const requestCameraPermission = useCallback(async (): Promise<boolean> => {
     const result = await Camera.checkPermissions();
-    let status: PermissionState = result[permission];
-  
+    let status: PermissionState = result.camera;
+
     if (status === 'granted') {
       return true;
     }
-  
+
     if (status === 'denied') {
       toast({
         title: 'Permission requise',
-        description: "Veuillez autoriser l\'accès dans les réglages du téléphone.",
+        description: "Veuillez autoriser l\'accès à la caméra dans les réglages du téléphone.",
       });
       return false;
     }
-  
+
     if (status === 'prompt' || status === 'prompt-with-rationale') {
       const newResult = await Camera.requestPermissions({
-        permissions: [permission],
+        permissions: ['camera'],
       });
-      return newResult[permission] === 'granted';
+      return newResult.camera === 'granted';
     }
-  
+
     return false;
-  };
+  }, [toast]);
+
+  const requestMicrophonePermission = useCallback(async (): Promise<boolean> => {
+    try {
+      const checkResult = await AndroidPermissions.checkPermission(AndroidPermissions.PERMISSION.RECORD_AUDIO);
+      if (checkResult.hasPermission) {
+        return true;
+      }
+      const requestResult = await AndroidPermissions.requestPermission(AndroidPermissions.PERMISSION.RECORD_AUDIO);
+      if (requestResult.hasPermission) {
+        return true;
+      }
+      toast({
+        title: 'Permission requise',
+        description: "L\'accès au microphone a été refusé.",
+        variant: 'destructive'
+      });
+      return false;
+    } catch (error) {
+      console.error('Error requesting microphone permission:', error);
+      toast({
+        title: 'Erreur de permission',
+        description: "Impossible de demander l\'accès au microphone.",
+        variant: 'destructive'
+      });
+      return false;
+    }
+  }, [toast]);
+  
+  const requestStoragePermission = useCallback(async (): Promise<boolean> => {
+      try {
+        // On Android 13+, READ_MEDIA_IMAGES is needed. For older versions, READ_EXTERNAL_STORAGE.
+        // The plugin might not expose a direct way to check Android version, so we request what\'s needed.
+        // A robust implementation would check the device API level.
+        // For now, we request both and let the system handle it.
+        const permissionToRequest = AndroidPermissions.PERMISSION.READ_MEDIA_IMAGES;
+        
+        const checkResult = await AndroidPermissions.checkPermission(permissionToRequest);
+        if (checkResult.hasPermission) {
+          return true;
+        }
+  
+        const requestResult = await AndroidPermissions.requestPermission(permissionToRequest);
+  
+        if (requestResult.hasPermission) {
+          return true;
+        } else {
+          // Fallback for older Android versions
+          const oldPermCheck = await AndroidPermissions.checkPermission(AndroidPermissions.PERMISSION.READ_EXTERNAL_STORAGE);
+          if(oldPermCheck.hasPermission) return true;
+
+          const oldPermRequest = await AndroidPermissions.requestPermission(AndroidPermissions.PERMISSION.READ_EXTERNAL_STORAGE);
+          if(oldPermRequest.hasPermission) return true;
+        }
+  
+        toast({
+          title: 'Permission requise',
+          description: "L\'accès aux photos a été refusé.",
+          variant: 'destructive'
+        });
+        return false;
+      } catch (error) {
+        console.error('Error requesting storage permission:', error);
+        toast({
+            title: 'Erreur de permission',
+            description: "Impossible de demander l\'accès aux photos.",
+            variant: 'destructive'
+        });
+        return false;
+      }
+  }, [toast]);
 
   useEffect(() => {
     if (!currentUser) { setLoadingMessages(false); return; }
@@ -253,7 +323,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     if (!urlToDownload) return;
     setZoomedImageUrl(null);
     try {
-        const hasPermission = await requestPermission('photos');
+        const hasPermission = await requestStoragePermission();
         if (!hasPermission) return;
         const fileName = `WanderLink_${new Date().getTime()}.jpeg`;
         await Filesystem.downloadFile({
@@ -266,11 +336,15 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         console.error('Error downloading image', e);
         toast({ variant: 'destructive', title: 'Erreur de téléchargement', description: e.message || 'Impossible d\'enregistrer l\'image.' });
     }
-}, [zoomedImageUrl, toast]);
+}, [zoomedImageUrl, toast, requestStoragePermission]);
 
   const takePicture = useCallback(async (source: CameraSource) => {
-    const permission = source === CameraSource.Camera ? 'camera' : 'photos';
-    const hasPermission = await requestPermission(permission);
+    let hasPermission = false;
+    if (source === CameraSource.Camera) {
+        hasPermission = await requestCameraPermission();
+    } else {
+        hasPermission = await requestStoragePermission();
+    }
     if (!hasPermission || !currentUser || !otherUser) return;
 
     try {
@@ -292,31 +366,28 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         () => { getDownloadURL(uploadTask.snapshot.ref).then((url) => { handleSendMessage(undefined, url); setIsUploading(false); }); }
       );
     } catch (error) { console.info("Photo selection/capture cancelled."); setIsUploading(false); }
-  }, [currentUser, otherUser, handleSendMessage, toast]);
+  }, [currentUser, otherUser, handleSendMessage, toast, requestCameraPermission, requestStoragePermission]);
 
   const handleStartCall = useCallback(async (isVideo: boolean) => {
-    // Request camera permission to indirectly get microphone permission
-    const audioOk = await requestPermission('camera'); 
+    const audioOk = await requestMicrophonePermission();
     if (!audioOk) return;
 
     if (isVideo) {
-        // This is already covered by the previous check, but kept for clarity
-        const videoOk = await requestPermission('camera');
+        const videoOk = await requestCameraPermission();
         if (!videoOk) return;
     }
 
     toast({ title: 'Fonctionnalité d\'appel', description: `Lancement d\'un appel ${isVideo ? 'vidéo' : 'audio'}...` });
     // Here you would integrate with your call provider SDK
 
-  }, [toast]);
+  }, [requestMicrophonePermission, requestCameraPermission, toast]);
 
   const handleStartRecording = useCallback(async () => {
-    // Request camera permission to indirectly get microphone permission
-    const hasPermission = await requestPermission('camera'); 
+    const hasPermission = await requestMicrophonePermission(); 
     if (!hasPermission) return;
     toast({ title: 'Enregistrement vocal', description: "La fonctionnalité d\'enregistrement est en cours de développement." });
     // Future logic to start recording audio
-  }, [toast]);
+  }, [requestMicrophonePermission, toast]);
 
   const handleLongPressStart = useCallback((messageId: string) => { longPressTimer.current = setTimeout(() => { setShowReactionPopoverFor(messageId); }, 500); }, []);
   const handleLongPressEnd = useCallback(() => { if(longPressTimer.current) clearTimeout(longPressTimer.current); }, []);
