@@ -294,6 +294,20 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     } catch (error) { console.info("Photo selection/capture cancelled."); setIsUploading(false); }
   }, [currentUser, otherUser, handleSendMessage, toast]);
 
+  const handleStartCall = useCallback(async (isVideo: boolean) => {
+    const audioOk = await requestPermission('microphone');
+    if (!audioOk) return;
+
+    if (isVideo) {
+        const videoOk = await requestPermission('camera');
+        if (!videoOk) return;
+    }
+
+    toast({ title: 'Fonctionnalité d\'appel', description: `Lancement d\'un appel ${isVideo ? 'vidéo' : 'audio'}...` });
+    // Here you would integrate with your call provider SDK
+
+  }, [toast]);
+
   const handleStartRecording = useCallback(async () => {
     const hasPermission = await requestPermission('microphone');
     if (!hasPermission) return;
@@ -319,8 +333,8 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       <header className="fixed top-0 z-10 flex w-full items-center gap-2 border-b bg-background/95 px-2 py-1 backdrop-blur-sm h-12">
         <Button onClick={() => router.back()} variant="ghost" size="icon" className="h-8 w-8"><ArrowLeft className="h-4 w-4" /></Button>
         <Link href={`/profile?id=${otherUserId}`} className="flex min-w-0 flex-1 items-center gap-2 truncate"><Avatar className="h-8 w-8"><AvatarImage src={otherUserImage} alt={otherUserName} /><AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback></Avatar><div className="flex-1 truncate"><h1 className="truncate text-sm font-semibold">{otherUserName}</h1></div></Link>
-        <Button onClick={() => toast({ title: 'Fonctionnalité d\'appel', description: 'Appels non disponibles dans la version actuelle.'})} variant="ghost" size="icon" className="h-8 w-8"><Phone className="h-4 w-4" /></Button>
-        <Button onClick={() => toast({ title: 'Fonctionnalité d\'appel', description: 'Appels non disponibles dans la version actuelle.'})} variant="ghost" size="icon" className="h-8 w-8"><Video className="h-4 w-4" /></Button>
+        <Button onClick={() => handleStartCall(false)} variant="ghost" size="icon" className="h-8 w-8"><Phone className="h-4 w-4" /></Button>
+        <Button onClick={() => handleStartCall(true)} variant="ghost" size="icon" className="h-8 w-8"><Video className="h-4 w-4" /></Button>
         <Drawer><DrawerTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DrawerTrigger><DrawerContent><div className="mx-auto w-full max-w-sm"><DrawerHeader><DrawerTitle>Options</DrawerTitle><DrawerDescription>Gérez votre interaction avec {otherUserName}.</DrawerDescription></DrawerHeader><div className="p-4 pt-0"><div className="mt-3 h-full"><DrawerClose asChild><Button variant="outline" className="w-full justify-start p-4 h-auto text-base"><Ban className="mr-2 h-5 w-5" /> Bloquer</Button></DrawerClose><div className="my-2 border-t"></div><DrawerClose asChild><Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={() => setIsReportModalOpen(true)}><ShieldAlert className="mr-2 h-5 w-5" /> Signaler</Button></DrawerClose></div></div><div className="p-4"><DrawerClose asChild><Button variant="secondary" className="w-full h-12 text-base">Annuler</Button></DrawerClose></div></div></DrawerContent></Drawer>
       </header>
 
