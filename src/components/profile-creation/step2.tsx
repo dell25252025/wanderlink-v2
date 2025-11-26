@@ -70,7 +70,7 @@ const Step2 = () => {
     setIsLocating(true);
     try {
       const { Geolocation } = await import('@capacitor/geolocation');
-      const { Http } = await import('@capacitor/http');
+      const { Http } = Capacitor.isNativePlatform() ? await import('@capacitor/http') : { get: () => Promise.reject('Not a native platform') };
 
       let permissionStatus = await Geolocation.checkPermissions();
 
