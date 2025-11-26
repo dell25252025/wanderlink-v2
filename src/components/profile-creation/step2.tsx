@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useFormContext } from 'react-hook-form';
@@ -70,7 +69,15 @@ const Step2 = () => {
     setIsLocating(true);
     try {
       const { Geolocation } = await import('@capacitor/geolocation');
-      const { Http } = Capacitor.isNativePlatform() ? await import('@capacitor/http') : { get: () => Promise.reject('Not a native platform') };
+      
+      let httpModule;
+      if (Capacitor.isNativePlatform()) {
+        const moduleName = '@capacitor/http';
+        httpModule = await import(moduleName);
+      } else {
+        httpModule = { Http: { get: () => Promise.reject('Not a native platform') } };
+      }
+      const { Http } = httpModule;
 
       let permissionStatus = await Geolocation.checkPermissions();
 
