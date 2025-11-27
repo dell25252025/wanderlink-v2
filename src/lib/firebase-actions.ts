@@ -1,42 +1,19 @@
 
-'use server';
-
 import { db, storage } from "@/lib/firebase";
 import { collection, doc, getDoc, DocumentData, setDoc, updateDoc, getDocs, arrayUnion, arrayRemove, addDoc, serverTimestamp, limit, query as firestoreQuery } from "firebase/firestore";
 import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 import { v4 as uuidv4 } from 'uuid';
-import { RtcTokenBuilder, RtcRole } from 'agora-token';
 
-const AGORA_APP_ID = 'c4847da35aea485784de6794409a2806';
-const AGORA_APP_CERTIFICATE = '98e4c531d2a14a0d9e999baa71f6b71f';
+// --- VERSION CLIENT-SIDE (Compatible Mobile) ---
+// Nous avons retiré 'use server' et 'agora-token' car ils nécessitent Node.js.
+// Sur mobile (Capacitor), ce code s'exécute dans le navigateur du téléphone.
 
 export async function generateAgoraToken(channelName: string, uid: number | string) {
-  if (!AGORA_APP_ID || !AGORA_APP_CERTIFICATE) {
-    console.error("Agora credentials are not set.");
-    return { success: false, error: "Agora credentials are not set." };
-  }
-
-  const role = RtcRole.PUBLISHER;
-  const expirationTimeInSeconds = 3600; // 1 hour
-  const currentTimestamp = Math.floor(Date.now() / 1000);
-  const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
-  
-  const numericUid = typeof uid === 'string' ? 0 : uid; // Use 0 for string UIDs as per Agora recommendation for temp tokens
-
-  try {
-    const token = RtcTokenBuilder.buildTokenWithUid(
-      AGORA_APP_ID,
-      AGORA_APP_CERTIFICATE,
-      channelName,
-      numericUid,
-      role,
-      privilegeExpiredTs
-    );
-    return { success: true, token: token };
-  } catch (e: any) {
-    console.error("Error generating Agora token:", e);
-    return { success: false, error: e.message || "Unknown error generating token." };
-  }
+  // En mode production, cette fonction devrait appeler une Cloud Function Firebase via httpsCallable.
+  // Pour le développement, on retourne null.
+  // IMPORTANT : Assurez-vous que votre projet Agora est en mode "App ID only" (sans certificat) dans la console Agora.
+  console.warn("Generation de token simulée (Client Side). Assurez-vous d'être en mode Test sur Agora.");
+  return { success: true, token: null };
 }
 
 export async function initiateCall(callerId: string, receiverId: string, isVideo: boolean) {
@@ -72,7 +49,7 @@ async function uploadProfilePicture(userId: string, photoDataUri: string): Promi
     }
     try {
         const photoId = uuidv4();
-        const storageRef = ref(storage, `profilePictures/${'${userId}'}/${'${photoId}'}.jpg`);
+        const storageRef = ref(storage, `profilePictures/${userId}/${photoId}.jpg`);
         const uploadResult = await uploadString(storageRef, photoDataUri, 'data_url');
         const downloadURL = await getDownloadURL(uploadResult.ref);
         return downloadURL;
@@ -360,7 +337,7 @@ export async function submitVerificationRequest(userId: string, selfieDataUrl: s
     }
 
     try {
-        const storageRef = ref(storage, `verification_selfies/${'${userId}'}.jpg`);
+        const storageRef = ref(storage, `verification_selfies/${userId}.jpg`);
         const uploadResult = await uploadString(storageRef, selfieDataUrl, 'data_url');
         const selfieUrl = await getDownloadURL(uploadResult.ref);
 
