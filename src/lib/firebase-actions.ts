@@ -5,6 +5,65 @@ import { db, storage } from "@/lib/firebase";
 import { collection, doc, getDoc, DocumentData, setDoc, updateDoc, getDocs, arrayUnion, arrayRemove, addDoc, serverTimestamp, limit, query as firestoreQuery } from "firebase/firestore";
 import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 import { v4 as uuidv4 } from 'uuid';
+import { RtcTokenBuilder, RtcRole } from 'agora-token';
+
+const AGORA_APP_ID = 'c4847da35aea485784de6794409a2806';
+const AGORA_APP_CERTIFICATE = '98e4c531d2a14a0d9e999baa71f6b71f';
+
+export async function generateAgoraToken(channelName: string, uid: number | string) {
+  if (!AGORA_APP_ID || !AGORA_APP_CERTIFICATE) {
+    console.error("Agora credentials are not set.");
+    return { success: false, error: "Agora credentials are not set." };
+  }
+
+  const role = RtcRole.PUBLISHER;
+  const expirationTimeInSeconds = 3600; // 1 hour
+  const currentTimestamp = Math.floor(Date.now() / 1000);
+  const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
+  
+  const numericUid = typeof uid === 'string' ? 0 : uid; // Use 0 for string UIDs as per Agora recommendation for temp tokens
+
+  try {
+    const token = RtcTokenBuilder.buildTokenWithUid(
+      AGORA_APP_ID,
+      AGORA_APP_CERTIFICATE,
+      channelName,
+      numericUid,
+      role,
+      privilegeExpiredTs
+    );
+    return { success: true, token: token };
+  } catch (e: any) {
+    console.error("Error generating Agora token:", e);
+    return { success: false, error: e.message || "Unknown error generating token." };
+  }
+}
+
+export async function initiateCall(callerId: string, receiverId: string, isVideo: boolean) {
+  if (!callerId || !receiverId) {
+    return { success: false, error: "Caller and receiver IDs are required." };
+  }
+
+  try {
+    const channelId = [callerId, receiverId].sort().join('_');
+    const callDocRef = doc(db, 'calls', channelId);
+
+    await setDoc(callDocRef, {
+      channelId,
+      callerId,
+      receiverId,
+      isVideo,
+      status: 'ringing',
+      createdAt: serverTimestamp(),
+    });
+
+    return { success: true, channelId };
+  } catch (error) {
+    console.error("Error initiating call:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+    return { success: false, error: errorMessage };
+  }
+}
 
 async function uploadProfilePicture(userId: string, photoDataUri: string): Promise<string | null> {
     if (!userId || !photoDataUri || !photoDataUri.startsWith('data:')) {
@@ -13,7 +72,7 @@ async function uploadProfilePicture(userId: string, photoDataUri: string): Promi
     }
     try {
         const photoId = uuidv4();
-        const storageRef = ref(storage, `profilePictures/${userId}/${photoId}.jpg`);
+        const storageRef = ref(storage, `profilePictures/${'${userId}'}/${'${photoId}'}.jpg`);
         const uploadResult = await uploadString(storageRef, photoDataUri, 'data_url');
         const downloadURL = await getDownloadURL(uploadResult.ref);
         return downloadURL;
@@ -32,11 +91,9 @@ export async function createOrUpdateGoogleUserProfile(userId: string, profileDat
         const userDoc = await getDoc(userRef);
 
         if (userDoc.exists()) {
-            // User exists, check if profile is complete
             const data = userDoc.data();
-            const isComplete = !!data.intention && !!data.age; // A simple check for profile completion
+            const isComplete = !!data.intention && !!data.age; 
             
-            // Update profile picture if it's different
             if (profileData.photoURL && (!data.profilePictures || !data.profilePictures.includes(profileData.photoURL))) {
                  await updateDoc(userRef, {
                     profilePictures: arrayUnion(profileData.photoURL)
@@ -45,7 +102,6 @@ export async function createOrUpdateGoogleUserProfile(userId: string, profileDat
             
             return { success: true, id: userId, isNewUser: !isComplete };
         } else {
-            // User does not exist, create a basic profile
             const [firstName] = profileData.displayName?.split(' ') || [''];
             
             const newProfileData = {
@@ -58,7 +114,6 @@ export async function createOrUpdateGoogleUserProfile(userId: string, profileDat
                 isPremium: false,
                 subscriptionEndDate: null,
                 isVerified: false,
-                // These will be filled in the create-profile steps
                 age: undefined,
                 gender: undefined,
                 intention: undefined,
@@ -82,7 +137,6 @@ export async function createUserProfile(userId: string, profileData: any) {
     try {
         const { profilePictures: photoDataUris, ...restOfProfileData } = profileData;
 
-        // Fetch existing photos to avoid re-uploading
         const userDoc = await getDoc(doc(db, "users", userId));
         const existingPhotos = userDoc.exists() ? userDoc.data().profilePictures || [] : [];
         
@@ -111,7 +165,6 @@ export async function createUserProfile(userId: string, profileData: any) {
           finalProfileData.dates.to = new Date(finalProfileData.dates.to);
         }
 
-        // Use set with merge true to create or update the document
         await setDoc(doc(db, "users", userId), finalProfileData, { merge: true });
         
         return { success: true, id: userId };
@@ -132,7 +185,7 @@ export async function updateUserProfile(userId: string, profileData: any) {
 
         const finalProfileData = {
             ...restOfProfileData,
-            profilePictures: profilePictures, // Assume pictures are already URLs or handled client-side
+            profilePictures: profilePictures, 
             updatedAt: new Date().toISOString(),
         };
         
@@ -179,7 +232,7 @@ export async function addProfilePicture(userId: string, photoDataUri: string) {
     } catch (e) {
         console.error("Error adding profile picture:", e);
         const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
-        return { success: false, error: `Failed to add profile picture: ${errorMessage}` };
+        return { success: false, error: `Failed to add profile picture: '${errorMessage}'` };
     }
 }
 
@@ -192,14 +245,12 @@ export async function removeProfilePicture(userId: string, photoUrl: string) {
     }
 
     try {
-        // Delete from Firestore
         const profileRef = doc(db, "users", userId);
         await updateDoc(profileRef, {
             profilePictures: arrayRemove(photoUrl),
             updatedAt: new Date().toISOString(),
         });
 
-        // Delete from Storage
         const photoRef = ref(storage, photoUrl);
         await deleteObject(photoRef);
         
@@ -208,7 +259,7 @@ export async function removeProfilePicture(userId: string, photoUrl: string) {
     } catch (e) {
         console.error("Error removing profile picture:", e);
         const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
-        return { success: false, error: `Failed to remove profile picture: ${errorMessage}` };
+        return { success: false, error: `Failed to remove profile picture: '${errorMessage}'` };
     }
 }
 
@@ -220,7 +271,6 @@ export async function getUserProfile(id: string): Promise<DocumentData | null> {
 
     if (docSnap.exists()) {
       const data = docSnap.data();
-      // Convert Firestore Timestamps to serializable format (ISO strings)
       if (data.dates) {
         if (data.dates.from && typeof data.dates.from.toDate === 'function') {
           data.dates.from = data.dates.from.toDate().toISOString();
@@ -256,7 +306,6 @@ export async function getAllUsers(count?: number) {
     const userSnapshot = await getDocs(q);
     const userList = userSnapshot.docs.map(doc => {
       const data = doc.data();
-      // Convert Firestore Timestamps to serializable format (ISO strings)
       if (data.dates) {
         if (data.dates.from && typeof data.dates.from.toDate === 'function') {
           data.dates.from = data.dates.from.toDate().toISOString();
@@ -294,7 +343,7 @@ export async function submitAbuseReport(
       reportedId,
       reason,
       details,
-      status: 'pending', // pending, reviewed, resolved
+      status: 'pending', 
       createdAt: serverTimestamp(),
     });
     return { success: true };
@@ -311,17 +360,15 @@ export async function submitVerificationRequest(userId: string, selfieDataUrl: s
     }
 
     try {
-        // 1. Upload selfie to Firebase Storage
-        const storageRef = ref(storage, `verification_selfies/${userId}.jpg`);
+        const storageRef = ref(storage, `verification_selfies/${'${userId}'}.jpg`);
         const uploadResult = await uploadString(storageRef, selfieDataUrl, 'data_url');
         const selfieUrl = await getDownloadURL(uploadResult.ref);
 
-        // 2. Create a verification request document in Firestore
         const verificationRef = doc(db, 'verificationRequests', userId);
         await setDoc(verificationRef, {
             userId: userId,
             selfieUrl: selfieUrl,
-            status: 'pending', // pending, approved, rejected
+            status: 'pending', 
             requestedAt: serverTimestamp(),
         });
 
@@ -404,5 +451,3 @@ export async function getFriends(userId: string) {
     throw new Error("Failed to retrieve friends list.");
   }
 }
-
-    
