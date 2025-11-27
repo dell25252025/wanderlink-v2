@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Phone, Video, Loader2, CheckCircle, PlusCircle, Trash2, Download, Camera as CameraIcon, Mic, Image as ImageIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { getUserProfile } from '@/lib/firebase-actions';
+import { getUserProfile, initiateCall } from '@/lib/firebase-actions';
 import { auth, db, storage } from '@/lib/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { Drawer, DrawerContent, DrawerTrigger, DrawerClose, DrawerHeader, DrawerTitle, DrawerDescription } from '@/components/ui/drawer';
@@ -369,6 +369,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, [currentUser, otherUser, handleSendMessage, toast, requestCameraPermission, requestStoragePermission]);
 
   const handleStartCall = useCallback(async (isVideo: boolean) => {
+    if (!currentUser) return;
     const audioOk = await requestMicrophonePermission();
     if (!audioOk) return;
 
@@ -377,10 +378,19 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         if (!videoOk) return;
     }
 
-    toast({ title: 'Fonctionnalité d\'appel', description: `Lancement d\'un appel ${isVideo ? 'vidéo' : 'audio'}...` });
-    // Here you would integrate with your call provider SDK
+    // Appel Firebase server action
+    const result = await initiateCall(currentUser.uid, otherUserId, isVideo);
 
-  }, [requestMicrophonePermission, requestCameraPermission, toast]);
+    if (result.success) {
+        router.push(`/call/${result.channelId}`);
+    } else {
+        toast({
+            title: "Erreur lors du lancement de l'appel",
+            description: result.error ?? "Une erreur inconnue est survenue.",
+            variant: "destructive"
+        });
+    }
+  }, [requestMicrophonePermission, requestCameraPermission, currentUser, otherUserId, router, toast]);
 
   const handleStartRecording = useCallback(async () => {
     const hasPermission = await requestMicrophonePermission(); 
