@@ -1,9 +1,12 @@
 'use client';
 
-// This page now lives at /call and reads the channelId from the query string.
-// This makes it compatible with Next.js static export.
+import dynamic from 'next/dynamic';
 
-import CallClient from './call-client';
+// Dynamically import the CallClient component with SSR turned off.
+// This prevents the component from being rendered on the server, where browser APIs like 'window' are not available.
+const CallClient = dynamic(() => import('./call-client'), {
+  ssr: false,
+});
 
 export default function CallPage() {
   return <CallClient />;
