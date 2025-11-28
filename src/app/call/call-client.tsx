@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Camera } from '@capacitor/camera'; // <-- 1. Import Capacitor Camera
 import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
@@ -14,18 +15,16 @@ import { generateAgoraToken } from '@/lib/firebase-actions';
 import { PhoneOff, Mic, MicOff, Video, VideoOff, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-// Create client outside component
 const client: IAgoraRTCClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
 
 export default function CallClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const channelName = searchParams.get('channelId'); // Read from query param
+  const channelName = searchParams.get('channelId');
   const { toast } = useToast();
 
   const [currentUser] = useAuthState(auth);
   const [remoteUsers, setRemoteUsers] = useState<IAgoraRTCRemoteUser[]>([]);
-  // Use "any" for tracks temporarily to avoid complex typing issues during fallback handling if needed
   const [localTracks, setLocalTracks] = useState<[IMicrophoneAudioTrack, ICameraVideoTrack] | [IMicrophoneAudioTrack] | []>([]);
   
   const [isAudioMuted, setIsAudioMuted] = useState(false);
@@ -41,18 +40,34 @@ export default function CallClient() {
 
     const joinChannel = async () => {
       try {
+        // --- 2. NATIVE PERMISSIONS REQUEST ---
+        const permissions = await Camera.requestPermissions({ permissions: ['camera', 'microphone'] });
+        if (permissions.camera !== 'granted' || permissions.microphone !== 'granted') {
+            toast({
+                title: 'Permissions Refusées',
+                description: 'L\'accès à la caméra et au microphone est obligatoire.',
+                variant: 'destructive',
+            });
+            router.back();
+            return;
+        }
+
+        // --- 3. DIAGNOSTIC LOGS ---
+        console.log('[DIAGNOSTIC] window.isSecureContext:', window.isSecureContext);
+        console.log('[DIAGNOSTIC] navigator.mediaDevices:', !!navigator.mediaDevices);
+        if (navigator.mediaDevices) {
+          console.log('[DIAGNOSTIC] getUserMedia:', typeof navigator.mediaDevices.getUserMedia);
+        }
+
         isJoinedRef.current = true;
 
-        // Event listeners
         client.on('user-published', async (user, mediaType) => {
           await client.subscribe(user, mediaType);
           setRemoteUsers(prev => {
             if (prev.find(u => u.uid === user.uid)) return prev;
             return [...prev, user];
           });
-
           if (mediaType === 'video' && user.videoTrack) {
-             // Delay to ensure DOM is ready
             setTimeout(() => {
                 if(remoteVideoRef.current) {
                     user.videoTrack?.play(remoteVideoRef.current);
@@ -69,27 +84,21 @@ export default function CallClient() {
             leaveCall(); 
         });
 
-        // Token generation
         const tokenResult = await generateAgoraToken(channelName, 0);
         let token: string | null = null;
         if (tokenResult.success && tokenResult.token) {
             token = tokenResult.token;
         }
 
-        // Join channel
         if (client.connectionState !== 'CONNECTED' && client.connectionState !== 'CONNECTING') {
              await client.join(agoraConfig.appId, channelName, token, null);
         }
 
-        // --- TRACKS CREATION WITH FALLBACK ---
         let tracks: [IMicrophoneAudioTrack, ICameraVideoTrack] | [IMicrophoneAudioTrack];
         try {
-            // Try video + audio first
             tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
         } catch (error: any) {
             console.error("Failed to create camera/mic tracks:", error);
-            
-            // If video fails (e.g. permission denied or not supported), try audio only
             try {
                 const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
                 tracks = [audioTrack];
@@ -98,21 +107,19 @@ export default function CallClient() {
                     description: "Passage en mode audio uniquement.",
                     variant: "default" 
                 });
-                setIsVideoMuted(true); // UI state indicates video is off
+                setIsVideoMuted(true);
             } catch (audioError: any) {
                  console.error("Failed to create audio track:", audioError);
-                 throw audioError; // If even audio fails, we can't continue
+                 throw audioError;
             }
         }
 
         setLocalTracks(tracks);
         
-        // Play video if available
         if (tracks.length > 1 && localVideoRef.current) {
             (tracks[1] as ICameraVideoTrack).play(localVideoRef.current);
         }
         
-        // Publish tracks
         await client.publish(tracks);
         setIsJoining(false);
 
@@ -122,8 +129,8 @@ export default function CallClient() {
         
         let errorMsg = "Impossible de rejoindre l\'appel.";
         if (error.code === 'WEB_SECURITY_RESTRICT') {
-            errorMsg = "L'accès aux médias nécessite HTTPS.";
-        } else if (error.message && (error.message.includes('getUserMedia') || error.message.includes('not find getUserMedia'))) {
+            errorMsg = "Contexte non sécurisé. Le HTTPS est requis.";
+        } else if (error.message && (error.message.includes('permission') || error.message.includes('denied'))) {
              errorMsg = "Accès refusé au micro/caméra. Vérifiez les permissions de l'application.";
         }
 
@@ -146,7 +153,6 @@ export default function CallClient() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelName, currentUser, router, toast]);
 
-    // Listener for call ending remotely
     useEffect(() => {
         if (!channelName) return;
         const callDocRef = doc(db, 'calls', channelName);
@@ -190,7 +196,6 @@ export default function CallClient() {
   };
 
   const toggleVideo = async () => {
-    // If we only have audio track (length 1), we can't toggle video
     if (localTracks.length > 1) {
       const isNowMuted = !isVideoMuted;
       await (localTracks[1] as ICameraVideoTrack).setMuted(isNowMuted);
@@ -211,7 +216,6 @@ export default function CallClient() {
 
   return (
     <div className="relative h-screen w-full bg-black">
-        {/* Remote Video */}
         <div ref={remoteVideoRef} className="h-full w-full absolute top-0 left-0"></div>
         {remoteUsers.length === 0 && (
              <div className="flex h-full w-full items-center justify-center">
@@ -222,14 +226,12 @@ export default function CallClient() {
             </div>
         )}
 
-        {/* Local Video - Only show if we have video track */}
         {localTracks.length > 1 && (
             <div className={`absolute top-4 right-4 h-48 w-36 bg-gray-800 border-2 border-gray-600 rounded-lg overflow-hidden transition-all duration-300 ${isVideoMuted ? 'opacity-0' : 'opacity-100'}`}>
                 <div ref={localVideoRef} className="h-full w-full"></div>
             </div>
         )}
 
-        {/* Call Controls */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 rounded-full bg-black/50 p-3">
             <Button onClick={toggleAudio} variant="secondary" size="icon" className={`rounded-full h-14 w-14 ${isAudioMuted ? 'bg-destructive' : ''}`}>
                 {isAudioMuted ? <MicOff /> : <Mic />}
