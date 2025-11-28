@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Camera } from '@capacitor/camera'; // <-- 1. Import Capacitor Camera
+import { Camera } from '@capacitor/camera';
 import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
@@ -40,23 +40,16 @@ export default function CallClient() {
 
     const joinChannel = async () => {
       try {
-        // --- 2. NATIVE PERMISSIONS REQUEST ---
+        // --- NATIVE PERMISSIONS REQUEST ---
         const permissions = await Camera.requestPermissions({ permissions: ['camera', 'microphone'] });
         if (permissions.camera !== 'granted' || permissions.microphone !== 'granted') {
             toast({
                 title: 'Permissions Refusées',
-                description: 'L\'accès à la caméra et au microphone est obligatoire.',
+                description: 'L\'accès à la caméra et au microphone est obligatoire pour passer un appel.',
                 variant: 'destructive',
             });
             router.back();
             return;
-        }
-
-        // --- 3. DIAGNOSTIC LOGS ---
-        console.log('[DIAGNOSTIC] window.isSecureContext:', window.isSecureContext);
-        console.log('[DIAGNOSTIC] navigator.mediaDevices:', !!navigator.mediaDevices);
-        if (navigator.mediaDevices) {
-          console.log('[DIAGNOSTIC] getUserMedia:', typeof navigator.mediaDevices.getUserMedia);
         }
 
         isJoinedRef.current = true;
@@ -126,15 +119,7 @@ export default function CallClient() {
       } catch (error: any) {
         console.error('Failed to join Agora channel', error);
         isJoinedRef.current = false;
-        
-        let errorMsg = "Impossible de rejoindre l\'appel.";
-        if (error.code === 'WEB_SECURITY_RESTRICT') {
-            errorMsg = "Contexte non sécurisé. Le HTTPS est requis.";
-        } else if (error.message && (error.message.includes('permission') || error.message.includes('denied'))) {
-             errorMsg = "Accès refusé au micro/caméra. Vérifiez les permissions de l'application.";
-        }
-
-        toast({ title: "Erreur critique", description: errorMsg, variant: 'destructive' });
+        toast({ title: "Erreur d\'appel", description: "Impossible de démarrer l\'appel. Veuillez réessayer.", variant: 'destructive' });
         router.back();
       }
     };
