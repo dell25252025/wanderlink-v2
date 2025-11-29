@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react'; // Ajout de useCallback
 import { useRouter, useParams } from 'next/navigation';
-import { Camera } from '@capacitor/camera'; // Ajout pour les permissions
+import { Camera } from '@capacitor/camera';
 import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
@@ -34,137 +34,8 @@ export default function CallPage() {
   const localVideoRef = useRef<HTMLDivElement>(null);
   const isJoinedRef = useRef(false);
 
-  useEffect(() => {
-    if (!channelName || !currentUser || isJoinedRef.current) return;
-
-    const joinChannel = async () => {
-      try {
-        console.log("Début de la tentative de jonction de canal.");
-
-        // --- NOUVEAU: Demande explicite des permissions ---
-        console.log("Demande des permissions pour caméra et microphone.");
-        const permissions = await Camera.requestPermissions({ permissions: ['camera', 'microphone'] });
-
-        if (permissions.camera !== 'granted' || permissions.microphone !== 'granted') {
-            console.error('Permissions non accordées:', permissions);
-            toast({
-                title: 'Permissions requises',
-                description: "L'accès à la caméra et au microphone est nécessaire pour passer des appels.",
-                variant: 'destructive',
-            });
-            router.back();
-            return; // Arrêter l'exécution ici
-        }
-
-        console.log("Permissions accordées. Continuation...");
-        isJoinedRef.current = true;
-
-        client.on('user-published', async (user, mediaType) => {
-          await client.subscribe(user, mediaType);
-          setRemoteUsers(prev => {
-            if (prev.find(u => u.uid === user.uid)) return prev;
-            return [...prev, user];
-          });
-          if (mediaType === 'video' && user.videoTrack) {
-            setTimeout(() => {
-                if(remoteVideoRef.current) {
-                    user.videoTrack?.play(remoteVideoRef.current);
-                }
-            }, 100);
-          }
-          if (mediaType === 'audio' && user.audioTrack) {
-            user.audioTrack.play();
-          }
-        });
-
-        client.on('user-left', user => {
-            setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
-            leaveCall(); 
-        });
-
-        console.log("Génération du token Agora.");
-        const tokenResult = await generateAgoraToken(channelName, 0);
-        let token: string | null = null;
-        if (tokenResult.success && tokenResult.token) {
-            token = tokenResult.token;
-        }
-
-        console.log("Connexion au canal Agora.");
-        if (client.connectionState !== 'CONNECTED' && client.connectionState !== 'CONNECTING') {
-             await client.join(agoraConfig.appId, channelName, token, null);
-        }
-
-        console.log("Création des pistes média.");
-        let tracks: [IMicrophoneAudioTrack, ICameraVideoTrack] | [IMicrophoneAudioTrack];
-        try {
-            tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
-        } catch (error: any) {
-            console.warn("Impossible de créer les pistes vidéo et audio, tentative audio seulement...");
-            try {
-                const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-                tracks = [audioTrack];
-                toast({ 
-                    title: "Caméra non disponible", 
-                    description: "L'appel continuera en audio uniquement.",
-                });
-                setIsVideoMuted(true);
-            } catch (audioError: any) {
-                 console.error("Échec critique : Impossible de créer même la piste audio.", audioError);
-                 throw audioError;
-            }
-        }
-
-        setLocalTracks(tracks);
-        
-        if (tracks.length > 1 && localVideoRef.current) {
-            (tracks[1] as ICameraVideoTrack).play(localVideoRef.current);
-        }
-        
-        console.log("Publication des pistes locales.");
-        await client.publish(tracks);
-        setIsJoining(false);
-        console.log("Jonction et publication réussies.");
-
-      } catch (error: any) {
-        console.error('ERREUR FATALE DANS joinChannel:', error);
-        isJoinedRef.current = false;
-        
-        toast({ title: "Erreur d'appel", description: "Une erreur inattendue est survenue. Impossible de démarrer l'appel.", variant: 'destructive' });
-        // NOTE: router.back() est commenté pour permettre le débogage dans la console.
-        // router.back();
-      }
-    };
-
-    joinChannel();
-
-    return () => {
-         localTracks.forEach(track => {
-             track.stop();
-             track.close();
-         });
-         if (isJoinedRef.current) {
-             client.leave().then(() => { isJoinedRef.current = false; });
-         }
-    };
-  }, [channelName, currentUser, router, toast]);
-
-    useEffect(() => {
-        if (!channelName) return;
-        const callDocRef = doc(db, 'calls', channelName);
-        const unsubscribe = onSnapshot(callDocRef, (doc) => {
-            if (doc.exists()) {
-                const callData = doc.data();
-                if (callData.status === 'ended' || callData.status === 'rejected') {
-                     if(!isJoining) {
-                         leaveCall();
-                     }
-                }
-            }
-        });
-        return () => unsubscribe();
-    }, [channelName, isJoining, leaveCall]);
-
-  const leaveCall = async () => {
+  // Correction: La fonction leaveCall est maintenant enveloppée dans useCallback et déplacée ici
+  const leaveCall = useCallback(async () => {
     for (const track of localTracks) {
       track.stop();
       track.close();
@@ -179,7 +50,107 @@ export default function CallPage() {
         await updateDoc(callDocRef, { status: 'ended' }).catch(e => console.error('Error ending call in db', e));
     }
     router.back();
-  };
+  }, [localTracks, channelName, router]);
+
+  useEffect(() => {
+    if (!channelName || !currentUser || isJoinedRef.current) return;
+
+    const joinChannel = async () => {
+      try {
+        console.log("Début de la tentative de jonction de canal.");
+
+        const permissions = await Camera.requestPermissions({ permissions: ['camera', 'microphone'] });
+
+        if (permissions.camera !== 'granted' || permissions.microphone !== 'granted') {
+            console.error('Permissions non accordées:', permissions);
+            toast({ title: 'Permissions requises', description: "L'accès à la caméra et au microphone est nécessaire.", variant: 'destructive' });
+            router.back();
+            return;
+        }
+
+        console.log("Permissions accordées.");
+        isJoinedRef.current = true;
+
+        client.on('user-published', async (user, mediaType) => {
+          await client.subscribe(user, mediaType);
+          setRemoteUsers(prev => prev.find(u => u.uid === user.uid) ? prev : [...prev, user]);
+          if (mediaType === 'video' && user.videoTrack && remoteVideoRef.current) {
+            user.videoTrack.play(remoteVideoRef.current);
+          }
+          if (mediaType === 'audio' && user.audioTrack) {
+            user.audioTrack.play();
+          }
+        });
+
+        client.on('user-left', user => {
+            setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
+            leaveCall(); 
+        });
+
+        const tokenResult = await generateAgoraToken(channelName, 0);
+        const token = (tokenResult.success && tokenResult.token) ? tokenResult.token : null;
+
+        if (client.connectionState !== 'CONNECTED' && client.connectionState !== 'CONNECTING') {
+             await client.join(agoraConfig.appId, channelName, token, null);
+        }
+
+        let tracks: [IMicrophoneAudioTrack, ICameraVideoTrack] | [IMicrophoneAudioTrack];
+        try {
+            tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+        } catch (error) {
+            console.warn("Tentative audio seulement...");
+            try {
+                const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                tracks = [audioTrack];
+                setIsVideoMuted(true);
+            } catch (audioError) {
+                 console.error("Échec de la création de la piste audio.", audioError);
+                 throw audioError;
+            }
+        }
+
+        setLocalTracks(tracks);
+        
+        if (tracks.length > 1 && localVideoRef.current) {
+            (tracks[1] as ICameraVideoTrack).play(localVideoRef.current);
+        }
+        
+        await client.publish(tracks);
+        setIsJoining(false);
+
+      } catch (error) {
+        console.error('ERREUR FATALE DANS joinChannel:', error);
+        isJoinedRef.current = false;
+        toast({ title: "Erreur d'appel", description: "Impossible de démarrer l'appel.", variant: 'destructive' });
+      }
+    };
+
+    joinChannel();
+
+    return () => {
+         localTracks.forEach(track => {
+             track.stop();
+             track.close();
+         });
+         if (isJoinedRef.current) {
+             client.leave().then(() => { isJoinedRef.current = false; });
+         }
+    };
+  }, [channelName, currentUser, router, toast, leaveCall]);
+
+    useEffect(() => {
+        if (!channelName) return;
+        const callDocRef = doc(db, 'calls', channelName);
+        const unsubscribe = onSnapshot(callDocRef, (doc) => {
+            if (doc.exists() && !isJoining) {
+                const callData = doc.data();
+                if (callData.status === 'ended' || callData.status === 'rejected') {
+                     leaveCall();
+                }
+            }
+        });
+        return () => unsubscribe();
+    }, [channelName, isJoining, leaveCall]);
 
   const toggleAudio = async () => {
     if (localTracks[0]) {
@@ -195,7 +166,7 @@ export default function CallPage() {
       await (localTracks[1] as ICameraVideoTrack).setMuted(isNowMuted);
       setIsVideoMuted(isNowMuted);
     } else {
-        toast({ description: "Vidéo indisponible pour cet appel." });
+        toast({ description: "Vidéo indisponible." });
     }
   };
 
