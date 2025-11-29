@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Camera } from '@capacitor/camera';
 import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
 import { useAuthState } from 'react-firebase-hooks/auth';
@@ -17,10 +17,12 @@ import { Button } from '@/components/ui/button';
 
 const client: IAgoraRTCClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
 
-export default function CallClient() {
+interface CallClientProps {
+  channelId: string;
+}
+
+export default function CallClient({ channelId }: CallClientProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const channelName = searchParams.get('channelId');
   const { toast } = useToast();
 
   const [currentUser] = useAuthState(auth);
@@ -36,7 +38,7 @@ export default function CallClient() {
   const isJoinedRef = useRef(false);
 
   useEffect(() => {
-    if (!channelName || !currentUser || isJoinedRef.current) return;
+    if (!channelId || !currentUser || isJoinedRef.current) return;
 
     const joinChannel = async () => {
       try {
@@ -77,14 +79,14 @@ export default function CallClient() {
             leaveCall(); 
         });
 
-        const tokenResult = await generateAgoraToken(channelName, 0);
+        const tokenResult = await generateAgoraToken(channelId, 0);
         let token: string | null = null;
         if (tokenResult.success && tokenResult.token) {
             token = tokenResult.token;
         }
 
         if (client.connectionState !== 'CONNECTED' && client.connectionState !== 'CONNECTING') {
-             await client.join(agoraConfig.appId, channelName, token, null);
+             await client.join(agoraConfig.appId, channelId, token, null);
         }
 
         let tracks: [IMicrophoneAudioTrack, ICameraVideoTrack] | [IMicrophoneAudioTrack];
@@ -136,11 +138,11 @@ export default function CallClient() {
          }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelName, currentUser, router, toast]);
+  }, [channelId, currentUser, router, toast]);
 
     useEffect(() => {
-        if (!channelName) return;
-        const callDocRef = doc(db, 'calls', channelName);
+        if (!channelId) return;
+        const callDocRef = doc(db, 'calls', channelId);
         const unsubscribe = onSnapshot(callDocRef, (doc) => {
             if (doc.exists()) {
                 const callData = doc.data();
@@ -153,7 +155,7 @@ export default function CallClient() {
         });
         return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [channelName, isJoining]);
+    }, [channelId, isJoining]);
 
   const leaveCall = async () => {
     for (const track of localTracks) {
@@ -165,8 +167,8 @@ export default function CallClient() {
     
     setLocalTracks([]);
     setRemoteUsers([]);
-    if(channelName) {
-        const callDocRef = doc(db, 'calls', channelName);
+    if(channelId) {
+        const callDocRef = doc(db, 'calls', channelId);
         await updateDoc(callDocRef, { status: 'ended' }).catch(e => console.error('Error ending call in db', e));
     }
     router.back();
