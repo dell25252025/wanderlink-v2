@@ -7,7 +7,8 @@ const config: CapacitorConfig = {
   webDir: 'src',
   server: {
     url: 'http://192.168.100.26:3000',
-    cleartext: true
+    cleartext: true,
+    androidScheme: 'https' // Ajout de cette ligne pour forcer le schéma HTTPS
   }
 };
 
