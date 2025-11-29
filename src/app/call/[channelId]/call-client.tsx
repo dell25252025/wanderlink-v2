@@ -42,8 +42,11 @@ export default function CallClient({ channelId }: CallClientProps) {
 
     const joinChannel = async () => {
       try {
-        // --- NATIVE PERMISSIONS REQUEST ---
+        console.log('1. Début de joinChannel');
+
         const permissions = await Camera.requestPermissions({ permissions: ['camera', 'microphone'] });
+        console.log('2. Permissions demandées', permissions);
+
         if (permissions.camera !== 'granted' || permissions.microphone !== 'granted') {
             toast({
                 title: 'Permissions Refusées',
@@ -54,6 +57,7 @@ export default function CallClient({ channelId }: CallClientProps) {
             return;
         }
 
+        console.log('3. Permissions accordées');
         isJoinedRef.current = true;
 
         client.on('user-published', async (user, mediaType) => {
@@ -79,21 +83,26 @@ export default function CallClient({ channelId }: CallClientProps) {
             leaveCall(); 
         });
 
+        console.log('4. Génération du token Agora');
         const tokenResult = await generateAgoraToken(channelId, 0);
         let token: string | null = null;
         if (tokenResult.success && tokenResult.token) {
             token = tokenResult.token;
         }
+        console.log('5. Token obtenu', token ? 'Oui' : 'Non');
 
         if (client.connectionState !== 'CONNECTED' && client.connectionState !== 'CONNECTING') {
+             console.log('6. Connexion au canal Agora');
              await client.join(agoraConfig.appId, channelId, token, null);
+             console.log('7. Connexion réussie');
         }
 
+        console.log('8. Création des pistes audio/vidéo');
         let tracks: [IMicrophoneAudioTrack, ICameraVideoTrack] | [IMicrophoneAudioTrack];
         try {
             tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
         } catch (error: any) {
-            console.error("Failed to create camera/mic tracks:", error);
+            console.error("Échec de la création des pistes cam/mic:", error);
             try {
                 const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
                 tracks = [audioTrack];
@@ -104,10 +113,11 @@ export default function CallClient({ channelId }: CallClientProps) {
                 });
                 setIsVideoMuted(true);
             } catch (audioError: any) {
-                 console.error("Failed to create audio track:", audioError);
+                 console.error("Échec de la création de la piste audio:", audioError);
                  throw audioError;
             }
         }
+        console.log('9. Pistes créées');
 
         setLocalTracks(tracks);
         
@@ -115,11 +125,13 @@ export default function CallClient({ channelId }: CallClientProps) {
             (tracks[1] as ICameraVideoTrack).play(localVideoRef.current);
         }
         
+        console.log('10. Publication des pistes locales');
         await client.publish(tracks);
+        console.log('11. Pistes publiées, fin de la jonction');
         setIsJoining(false);
 
       } catch (error: any) {
-        console.error('Failed to join Agora channel', error);
+        console.error('ERREUR FATALE dans joinChannel', error);
         isJoinedRef.current = false;
         toast({ title: "Erreur d\'appel", description: "Impossible de démarrer l\'appel. Veuillez réessayer.", variant: 'destructive' });
         router.back();
