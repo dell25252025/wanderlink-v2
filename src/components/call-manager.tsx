@@ -37,7 +37,6 @@ export function CallManager() {
         const callDoc = snapshot.docs[0];
         const callData = { id: callDoc.id, ...callDoc.data() } as CallData;
         
-        // To get up-to-date caller info
         const callerProfile = await getUserProfile(callData.callerId);
         callData.callerName = callerProfile?.firstName || 'Quelqu\'un';
         callData.callerImage = callerProfile?.profilePictures?.[0] || `https://picsum.photos/seed/${callData.callerId}/200`;
@@ -55,7 +54,8 @@ export function CallManager() {
     if (!incomingCall) return;
     const callDocRef = doc(db, 'calls', incomingCall.id);
     await updateDoc(callDocRef, { status: 'active' });
-    router.push(`/call/${incomingCall.id}`);
+    const callUrl = `/call/${incomingCall.id}?type=${incomingCall.isVideo ? 'video' : 'audio'}`;
+    router.push(callUrl);
     setIncomingCall(null);
   };
 

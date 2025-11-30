@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react'; // Ajout de useCallback
-import { useRouter, useParams } from 'next/navigation';
-import { Camera } from '@capacitor/camera';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { useRouter, useParams, useSearchParams } from 'next/navigation'; // Ajout de useSearchParams
+import { Camera, type PermissionState } from '@capacitor/camera';
 import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
@@ -19,22 +19,25 @@ const client: IAgoraRTCClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8
 
 export default function CallPage() {
   const router = useRouter();
-  const { channel: channelName } = useParams<{ channel: string }>();
+  const params = useParams<{ channel: string }>();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+
+  const channelName = params.channel;
+  const callType = searchParams.get('type') || 'audio'; // 'video' ou 'audio', par défaut 'audio'
 
   const [currentUser] = useAuthState(auth);
   const [remoteUsers, setRemoteUsers] = useState<IAgoraRTCRemoteUser[]>([]);
-  const [localTracks, setLocalTracks] = useState<[IMicrophoneAudioTrack, ICameraVideoTrack] | [IMicrophoneAudioTrack] | []>([]);
+  const [localTracks, setLocalTracks] = useState<[IMicrophoneAudioTrack] | [IMicrophoneAudioTrack, ICameraVideoTrack]>([]);
   
   const [isAudioMuted, setIsAudioMuted] = useState(false);
-  const [isVideoMuted, setIsVideoMuted] = useState(false);
+  const [isVideoMuted, setIsVideoMuted] = useState(callType === 'audio');
   const [isJoining, setIsJoining] = useState(true);
 
   const remoteVideoRef = useRef<HTMLDivElement>(null);
   const localVideoRef = useRef<HTMLDivElement>(null);
   const isJoinedRef = useRef(false);
 
-  // Correction: La fonction leaveCall est maintenant enveloppée dans useCallback et déplacée ici
   const leaveCall = useCallback(async () => {
     for (const track of localTracks) {
       track.stop();
@@ -57,13 +60,18 @@ export default function CallPage() {
 
     const joinChannel = async () => {
       try {
-        console.log("Début de la tentative de jonction de canal.");
+        console.log(`Début de la tentative de jonction de canal pour un appel ${callType}.`);
 
-        const permissions = await Camera.requestPermissions({ permissions: ['camera', 'microphone'] });
+        const permissionsToRequest: PermissionState[] = callType === 'video' ? ['camera', 'microphone'] : ['microphone'];
+        const permissions = await Camera.requestPermissions({ permissions: permissionsToRequest });
 
-        if (permissions.camera !== 'granted' || permissions.microphone !== 'granted') {
+        const microPermissionGranted = permissions.microphone === 'granted';
+        const videoPermissionGranted = callType === 'video' ? permissions.camera === 'granted' : true;
+
+        if (!microPermissionGranted || !videoPermissionGranted) {
+            const required = callType === 'video' ? "L'accès à la caméra et au microphone est nécessaire." : "L'accès au microphone est nécessaire.";
             console.error('Permissions non accordées:', permissions);
-            toast({ title: 'Permissions requises', description: "L'accès à la caméra et au microphone est nécessaire.", variant: 'destructive' });
+            toast({ title: 'Permissions requises', description: required, variant: 'destructive' });
             router.back();
             return;
         }
@@ -94,19 +102,12 @@ export default function CallPage() {
              await client.join(agoraConfig.appId, channelName, token, null);
         }
 
-        let tracks: [IMicrophoneAudioTrack, ICameraVideoTrack] | [IMicrophoneAudioTrack];
-        try {
+        let tracks: [IMicrophoneAudioTrack] | [IMicrophoneAudioTrack, ICameraVideoTrack];
+        if (callType === 'video') {
             tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
-        } catch (error) {
-            console.warn("Tentative audio seulement...");
-            try {
-                const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-                tracks = [audioTrack];
-                setIsVideoMuted(true);
-            } catch (audioError) {
-                 console.error("Échec de la création de la piste audio.", audioError);
-                 throw audioError;
-            }
+        } else {
+            const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+            tracks = [audioTrack];
         }
 
         setLocalTracks(tracks);
@@ -136,7 +137,7 @@ export default function CallPage() {
              client.leave().then(() => { isJoinedRef.current = false; });
          }
     };
-  }, [channelName, currentUser, router, toast, leaveCall]);
+  }, [channelName, currentUser, router, toast, leaveCall, callType]);
 
     useEffect(() => {
         if (!channelName) return;
@@ -161,12 +162,11 @@ export default function CallPage() {
   };
 
   const toggleVideo = async () => {
-    if (localTracks.length > 1) {
+    const videoTrack = localTracks.find(track => track.trackMediaType === 'video') as ICameraVideoTrack | undefined;
+    if (videoTrack) {
       const isNowMuted = !isVideoMuted;
-      await (localTracks[1] as ICameraVideoTrack).setMuted(isNowMuted);
+      await videoTrack.setMuted(isNowMuted);
       setIsVideoMuted(isNowMuted);
-    } else {
-        toast({ description: "Vidéo indisponible." });
     }
   };
 
@@ -191,7 +191,7 @@ export default function CallPage() {
             </div>
         )}
 
-        {localTracks.length > 1 && (
+        {localTracks.find(track => track.trackMediaType === 'video') && (
             <div className={`absolute top-4 right-4 h-48 w-36 bg-gray-800 border-2 border-gray-600 rounded-lg overflow-hidden transition-all duration-300 ${isVideoMuted ? 'opacity-0' : 'opacity-100'}`}>
                 <div ref={localVideoRef} className="h-full w-full"></div>
             </div>
@@ -204,7 +204,7 @@ export default function CallPage() {
             <Button onClick={leaveCall} variant="destructive" size="icon" className="rounded-full h-16 w-16">
                 <PhoneOff />
             </Button>
-            <Button onClick={toggleVideo} variant="secondary" size="icon" className={`rounded-full h-14 w-14 ${isVideoMuted ? 'bg-destructive' : ''}`} disabled={localTracks.length <= 1}>
+            <Button onClick={toggleVideo} variant="secondary" size="icon" className={`rounded-full h-14 w-14 ${isVideoMuted ? 'bg-destructive' : ''}`} disabled={callType === 'audio'}>
                 {isVideoMuted ? <VideoOff /> : <Video />}
             </Button>
         </div>
