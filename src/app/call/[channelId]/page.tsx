@@ -1,17 +1,8 @@
 'use client';
 
-import dynamic from 'next/dynamic';
+// This page is obsolete and was causing a build error.
+// The new call logic is in src/app/call/[channel]/page.tsx
 
-const CallClient = dynamic(() => import('./call-client'), {
-  ssr: false,
-});
-
-interface CallPageProps {
-  params: {
-    channelId: string;
-  };
-}
-
-export default function CallPage({ params }: CallPageProps) {
-  return <CallClient channelId={params.channelId} />;
+export default function DeprecatedCallPage() {
+  return null;
 }
