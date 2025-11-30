@@ -6,7 +6,8 @@ const config: CapacitorConfig = {
   appName: 'WanderLink',
   webDir: 'src',
   server: {
-    url: 'http://192.168.100.26:3000',
+    hostname: 'localhost',
+    url: 'http://localhost:3000',
     cleartext: true,
     androidScheme: 'https'
   }
