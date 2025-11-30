@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useRouter, useParams, useSearchParams } from 'next/navigation'; // Ajout de useSearchParams
-import { Camera, type PermissionState } from '@capacitor/camera';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
@@ -16,6 +16,12 @@ import { PhoneOff, Mic, MicOff, Video, VideoOff, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const client: IAgoraRTCClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+
+// Helper function to request permissions
+async function requestPermission(permission: 'camera' | 'microphone') {
+  const result = await Camera.requestPermissions({ permissions: [permission] });
+  return result[permission] === 'granted';
+}
 
 export default function CallPage() {
   const router = useRouter();
@@ -62,15 +68,15 @@ export default function CallPage() {
       try {
         console.log(`Début de la tentative de jonction de canal pour un appel ${callType}.`);
 
-        const permissionsToRequest: PermissionState[] = callType === 'video' ? ['camera', 'microphone'] : ['microphone'];
-        const permissions = await Camera.requestPermissions({ permissions: permissionsToRequest });
-
-        const microPermissionGranted = permissions.microphone === 'granted';
-        const videoPermissionGranted = callType === 'video' ? permissions.camera === 'granted' : true;
+        const microPermissionGranted = await requestPermission('microphone');
+        let videoPermissionGranted = true;
+        if (callType === 'video') {
+          videoPermissionGranted = await requestPermission('camera');
+        }
 
         if (!microPermissionGranted || !videoPermissionGranted) {
             const required = callType === 'video' ? "L'accès à la caméra et au microphone est nécessaire." : "L'accès au microphone est nécessaire.";
-            console.error('Permissions non accordées:', permissions);
+            console.error('Permissions non accordées:', { micro: microPermissionGranted, video: videoPermissionGranted });
             toast({ title: 'Permissions requises', description: required, variant: 'destructive' });
             router.back();
             return;
