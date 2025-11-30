@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
-import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
@@ -17,12 +16,6 @@ import { Button } from '@/components/ui/button';
 
 const client: IAgoraRTCClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
 
-// Helper function to request permissions
-async function requestPermission(permission: 'camera' | 'microphone') {
-  const result = await Camera.requestPermissions({ permissions: [permission] });
-  return result[permission] === 'granted';
-}
-
 export default function CallPage() {
   const router = useRouter();
   const params = useParams<{ channel: string }>();
@@ -30,7 +23,7 @@ export default function CallPage() {
   const { toast } = useToast();
 
   const channelName = params.channel;
-  const callType = searchParams.get('type') || 'audio'; // 'video' ou 'audio', par défaut 'audio'
+  const callType = searchParams.get('type') || 'audio';
 
   const [currentUser] = useAuthState(auth);
   const [remoteUsers, setRemoteUsers] = useState<IAgoraRTCRemoteUser[]>([]);
@@ -66,25 +59,10 @@ export default function CallPage() {
 
     const joinChannel = async () => {
       try {
-        console.log(`Début de la tentative de jonction de canal pour un appel ${callType}.`);
-
-        const microPermissionGranted = await requestPermission('microphone');
-        let videoPermissionGranted = true;
-        if (callType === 'video') {
-          videoPermissionGranted = await requestPermission('camera');
-        }
-
-        if (!microPermissionGranted || !videoPermissionGranted) {
-            const required = callType === 'video' ? "L'accès à la caméra et au microphone est nécessaire." : "L'accès au microphone est nécessaire.";
-            console.error('Permissions non accordées:', { micro: microPermissionGranted, video: videoPermissionGranted });
-            toast({ title: 'Permissions requises', description: required, variant: 'destructive' });
-            router.back();
-            return;
-        }
-
-        console.log("Permissions accordées.");
+        console.log(`Starting call setup for a ${callType} call.`);
         isJoinedRef.current = true;
 
+        // Set up listeners
         client.on('user-published', async (user, mediaType) => {
           await client.subscribe(user, mediaType);
           setRemoteUsers(prev => prev.find(u => u.uid === user.uid) ? prev : [...prev, user]);
@@ -101,13 +79,20 @@ export default function CallPage() {
             leaveCall(); 
         });
 
+        // Get Agora Token
         const tokenResult = await generateAgoraToken(channelName, 0);
         const token = (tokenResult.success && tokenResult.token) ? tokenResult.token : null;
+        if (!token) {
+          throw new Error("Failed to generate Agora token.");
+        }
 
+        // Join Agora Channel
         if (client.connectionState !== 'CONNECTED' && client.connectionState !== 'CONNECTING') {
              await client.join(agoraConfig.appId, channelName, token, null);
         }
 
+        // Create tracks - THIS WILL PROMPT FOR PERMISSIONS
+        console.log("Requesting media tracks...");
         let tracks: [IMicrophoneAudioTrack] | [IMicrophoneAudioTrack, ICameraVideoTrack];
         if (callType === 'video') {
             tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
@@ -115,6 +100,7 @@ export default function CallPage() {
             const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
             tracks = [audioTrack];
         }
+        console.log("Media tracks created successfully.");
 
         setLocalTracks(tracks);
         
@@ -125,10 +111,15 @@ export default function CallPage() {
         await client.publish(tracks);
         setIsJoining(false);
 
-      } catch (error) {
-        console.error('ERREUR FATALE DANS joinChannel:', error);
+      } catch (error: any) {
+        console.error('FATAL ERROR in joinChannel:', error);
+        toast({ 
+            title: "Erreur d'appel", 
+            description: error.code ? `Code: ${error.code} - ${error.message}` : "Impossible de démarrer l'appel. Vérifiez les permissions et la connexion.", 
+            variant: 'destructive' 
+        });
         isJoinedRef.current = false;
-        toast({ title: "Erreur d'appel", description: "Impossible de démarrer l'appel.", variant: 'destructive' });
+        // We don't router.back() immediately to let the user see the error
       }
     };
 
