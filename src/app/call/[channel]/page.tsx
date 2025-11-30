@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 const client: IAgoraRTCClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
 
 export default function CallPage() {
+  console.log("CallPage: Component rendering.");
   const router = useRouter();
   const params = useParams<{ channel: string }>();
   const searchParams = useSearchParams();
@@ -38,32 +39,41 @@ export default function CallPage() {
   const isJoinedRef = useRef(false);
 
   const leaveCall = useCallback(async () => {
+    console.log("CallPage: leaveCall triggered.");
     for (const track of localTracks) {
       track.stop();
       track.close();
     }
     await client.leave();
     isJoinedRef.current = false;
+    console.log("CallPage: Client left Agora channel.");
     
     setLocalTracks([]);
     setRemoteUsers([]);
     if(channelName) {
         const callDocRef = doc(db, 'calls', channelName);
-        await updateDoc(callDocRef, { status: 'ended' }).catch(e => console.error('Error ending call in db', e));
+        await updateDoc(callDocRef, { status: 'ended' }).catch(e => console.error('CallPage: Error ending call in db', e));
     }
     router.back();
   }, [localTracks, channelName, router]);
 
   useEffect(() => {
+    console.log("CallPage: useEffect started.");
+
+    if (!channelName) console.log("CallPage: useEffect aborting - no channelName.");
+    if (!currentUser) console.log("CallPage: useEffect aborting - no currentUser.");
+    if (isJoinedRef.current) console.log("CallPage: useEffect aborting - already joined (isJoinedRef.current is true).");
+
     if (!channelName || !currentUser || isJoinedRef.current) return;
 
     const joinChannel = async () => {
+      console.log("CallPage: joinChannel function started.");
       try {
-        console.log(`Starting call setup for a ${callType} call.`);
+        console.log(`CallPage: Starting call setup for a ${callType} call.`);
         isJoinedRef.current = true;
 
-        // Set up listeners
         client.on('user-published', async (user, mediaType) => {
+          console.log(`CallPage: Event 'user-published', user: ${user.uid}, media: ${mediaType}`);
           await client.subscribe(user, mediaType);
           setRemoteUsers(prev => prev.find(u => u.uid === user.uid) ? prev : [...prev, user]);
           if (mediaType === 'video' && user.videoTrack && remoteVideoRef.current) {
@@ -75,24 +85,29 @@ export default function CallPage() {
         });
 
         client.on('user-left', user => {
+            console.log(`CallPage: Event 'user-left', user: ${user.uid}`);
             setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
             leaveCall(); 
         });
 
-        // Get Agora Token
+        console.log("CallPage: Requesting Agora token...");
         const tokenResult = await generateAgoraToken(channelName, 0);
         const token = (tokenResult.success && tokenResult.token) ? tokenResult.token : null;
         if (!token) {
+          console.error("CallPage: Failed to generate Agora token.");
           throw new Error("Failed to generate Agora token.");
         }
+        console.log("CallPage: Agora token received.");
 
-        // Join Agora Channel
         if (client.connectionState !== 'CONNECTED' && client.connectionState !== 'CONNECTING') {
+             console.log(`CallPage: Joining Agora channel '${channelName}'`);
              await client.join(agoraConfig.appId, channelName, token, null);
+             console.log("CallPage: Successfully joined Agora channel.");
+        } else {
+             console.log("CallPage: Already connected or connecting to Agora channel.");
         }
 
-        // Create tracks - THIS WILL PROMPT FOR PERMISSIONS
-        console.log("Requesting media tracks...");
+        console.log("CallPage: Requesting media tracks (mic/camera)... THIS WILL PROMPT FOR PERMISSIONS.");
         let tracks: [IMicrophoneAudioTrack] | [IMicrophoneAudioTrack, ICameraVideoTrack];
         if (callType === 'video') {
             tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
@@ -100,32 +115,35 @@ export default function CallPage() {
             const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
             tracks = [audioTrack];
         }
-        console.log("Media tracks created successfully.");
+        console.log("CallPage: Media tracks created successfully.");
 
         setLocalTracks(tracks);
         
         if (tracks.length > 1 && localVideoRef.current) {
+            console.log("CallPage: Playing local video track.");
             (tracks[1] as ICameraVideoTrack).play(localVideoRef.current);
         }
         
+        console.log("CallPage: Publishing local tracks.");
         await client.publish(tracks);
+        console.log("CallPage: Local tracks published. Setting isJoining to false.");
         setIsJoining(false);
 
       } catch (error: any) {
-        console.error('FATAL ERROR in joinChannel:', error);
+        console.error('CallPage: FATAL ERROR in joinChannel:', error);
         toast({ 
             title: "Erreur d'appel", 
             description: error.code ? `Code: ${error.code} - ${error.message}` : "Impossible de démarrer l'appel. Vérifiez les permissions et la connexion.", 
             variant: 'destructive' 
         });
         isJoinedRef.current = false;
-        // We don't router.back() immediately to let the user see the error
       }
     };
 
     joinChannel();
 
     return () => {
+         console.log("CallPage: useEffect cleanup function running.");
          localTracks.forEach(track => {
              track.stop();
              track.close();
@@ -136,19 +154,21 @@ export default function CallPage() {
     };
   }, [channelName, currentUser, router, toast, leaveCall, callType]);
 
-    useEffect(() => {
-        if (!channelName) return;
-        const callDocRef = doc(db, 'calls', channelName);
-        const unsubscribe = onSnapshot(callDocRef, (doc) => {
-            if (doc.exists() && !isJoining) {
-                const callData = doc.data();
-                if (callData.status === 'ended' || callData.status === 'rejected') {
-                     leaveCall();
-                }
+  useEffect(() => {
+    console.log("CallPage: Status listener useEffect started.");
+    if (!channelName) return;
+    const callDocRef = doc(db, 'calls', channelName);
+    const unsubscribe = onSnapshot(callDocRef, (doc) => {
+        if (doc.exists() && !isJoining) {
+            const callData = doc.data();
+            console.log(`CallPage: Call status changed to '${callData.status}'`);
+            if (callData.status === 'ended' || callData.status === 'rejected') {
+                 leaveCall();
             }
-        });
-        return () => unsubscribe();
-    }, [channelName, isJoining, leaveCall]);
+        }
+    });
+    return () => unsubscribe();
+  }, [channelName, isJoining, leaveCall]);
 
   const toggleAudio = async () => {
     if (localTracks[0]) {
