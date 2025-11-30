@@ -9,6 +9,7 @@ const config: CapacitorConfig = {
     webContentsDebuggingEnabled: true,
   },
   server: {
+<<<<<<< HEAD
     // CRITICAL FIX: Force HTTPS scheme for local files to enable WebRTC/getUserMedia
     // By default, Capacitor uses 'http' which WebView may treat as insecure.
     androidScheme: 'https',
@@ -16,6 +17,12 @@ const config: CapacitorConfig = {
     // Ensure we are NOT using a live reload URL for production build
     // url: 'http://192.168.100.26:3000', 
     cleartext: true
+=======
+    hostname: 'localhost',
+    url: 'http://localhost:3000',
+    cleartext: true,
+    androidScheme: 'https'
+>>>>>>> fix/call-logic
   }
 };
 
