@@ -6,6 +6,7 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import com.getcapacitor.BridgeActivity;
+import androidx.annotation.NonNull; // Ajout de l'import manquant
 
 public class MainActivity extends BridgeActivity {
     @Override
@@ -17,46 +18,40 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
 
-        // Récupérer la WebView utilisée par Capacitor
         WebView webView = this.bridge.getWebView();
 
         if (webView != null) {
             WebSettings settings = webView.getSettings();
-
-            // --- Configuration critique pour WebRTC / Agora ---
             
-            // Obligatoire pour exécuter le JS d'Agora
             settings.setJavaScriptEnabled(true);
-            
-            // Permet l'accès au LocalStorage/SessionStorage
             settings.setDomStorageEnabled(true);
             settings.setDatabaseEnabled(true);
-            
-            // CRUCIAL : Permet la lecture vidéo/audio sans geste utilisateur explicite (autoplay)
             settings.setMediaPlaybackRequiresUserGesture(false);
-
-            // Active l'accès aux fichiers et contenus
             settings.setAllowFileAccess(true);
             settings.setAllowContentAccess(true);
-            
-            // Permet de charger du contenu HTTP dans une page HTTPS (ou inversement), utile en dev
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
 
-            // Active le débogage distant (chrome://inspect)
             WebView.setWebContentsDebuggingEnabled(true);
 
-            // --- Gestion des Permissions WebRTC (Caméra/Micro) ---
-            // Sans cela, la WebView rejette silencieusement les demandes de getUserMedia
-            // même si l'application a les permissions Android OS.
             webView.setWebChromeClient(new WebChromeClient() {
                 @Override
                 public void onPermissionRequest(final PermissionRequest request) {
-                    // Accorde toutes les permissions demandées (caméra, micro)
                     runOnUiThread(() -> {
                         request.grant(request.getResources());
                     });
                 }
             });
         }
+    }
+
+    // --- CORRECTION AJOUTÉE ---
+    // Cette méthode est appelée par Android lorsque l'utilisateur répond à une demande de permission.
+    // Elle transmet le résultat à Capacitor.
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        
+        // Fait le pont entre la réponse de l'OS et Capacitor
+        this.bridge.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 }
