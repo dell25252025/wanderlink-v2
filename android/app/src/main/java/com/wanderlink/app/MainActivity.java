@@ -6,7 +6,7 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import com.getcapacitor.BridgeActivity;
-import androidx.annotation.NonNull; // Ajout de l'import manquant
+import androidx.annotation.NonNull;
 
 public class MainActivity extends BridgeActivity {
     @Override
@@ -44,14 +44,13 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    // --- CORRECTION AJOUTÉE ---
-    // Cette méthode est appelée par Android lorsque l'utilisateur répond à une demande de permission.
-    // Elle transmet le résultat à Capacitor.
+    // --- CORRECTION ---
+    // Gère la réponse de la demande de permission et la transmet à Capacitor.
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        
-        // Fait le pont entre la réponse de l'OS et Capacitor
-        this.bridge.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        // L'appel à 'super' est suffisant, car BridgeActivity se charge déjà de transmettre
+        // le résultat au pont Capacitor. L'appel direct que j'avais ajouté était redondant
+        // et causait une erreur de compilation.
     }
 }
