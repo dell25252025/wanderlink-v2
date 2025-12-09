@@ -26,14 +26,15 @@ export const generateAgoraToken = functions.https.onCall(async (data, context) =
     const currentTimestamp = Math.floor(Date.now() / 1000);
     const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
 
-    // Build the token using the new package's functions (syntax is the same here)
+    // CORRECTED: Added the 7th argument for privilege expiration
     const token = RtcTokenBuilder.buildTokenWithUid(
         AGORA_APP_ID,
         AGORA_APP_CERTIFICATE,
         channelName,
         uid,
         role === 'publisher' ? RtcRole.PUBLISHER : RtcRole.SUBSCRIBER,
-        privilegeExpiredTs
+        privilegeExpiredTs, // Token expiration time
+        privilegeExpiredTs  // Privilege expiration time
     );
 
     return { token };
