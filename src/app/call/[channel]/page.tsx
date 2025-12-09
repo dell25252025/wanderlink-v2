@@ -4,17 +4,19 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth, db } from '@/lib/firebase';
+import { auth, db, functions } from '@/lib/firebase'; // Import functions
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions'; // Import httpsCallable
 
 import { agoraConfig } from '@/lib/agora-config';
 import { useToast } from '@/hooks/use-toast';
-import { generateAgoraToken } from '@/lib/firebase-actions';
 
 import { PhoneOff, Mic, MicOff, Video, VideoOff, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const client: IAgoraRTCClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+
+const generateAgoraToken = httpsCallable(functions, 'generateAgoraToken');
 
 export default function CallPage() {
   const router = useRouter();
@@ -79,12 +81,15 @@ export default function CallPage() {
             leaveCall(); 
         });
 
-        // Get Agora Token
-        const tokenResult = await generateAgoraToken(channelName, 0);
-        const token = (tokenResult.success && tokenResult.token) ? tokenResult.token : null;
+        // Get Agora Token from Firebase Function
+        console.log("Requesting Agora token from server...");
+        const tokenResponse = await generateAgoraToken({ channelName, role: 'publisher', uid: 0 });
+        const token = (tokenResponse.data as { token: string }).token;
+
         if (!token) {
           throw new Error("Failed to generate Agora token.");
         }
+        console.log("Agora token received.");
 
         // Join Agora Channel
         if (client.connectionState !== 'CONNECTED' && client.connectionState !== 'CONNECTING') {
@@ -119,7 +124,6 @@ export default function CallPage() {
             variant: 'destructive' 
         });
         isJoinedRef.current = false;
-        // We don't router.back() immediately to let the user see the error
       }
     };
 
