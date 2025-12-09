@@ -1,6 +1,6 @@
 
 import * as functions from "firebase-functions";
-import { RtcTokenBuilder, RtcRole } from "agora-access-token";
+import { RtcTokenBuilder, RtcRole } from "agora-token"; // Corrected package
 
 const AGORA_APP_ID = "c4847da35aea485784de6794409a2806";
 const AGORA_APP_CERTIFICATE = "98e4c531d2a14a0d9e999baa71f6b71f";
@@ -26,6 +26,7 @@ export const generateAgoraToken = functions.https.onCall(async (data, context) =
     const currentTimestamp = Math.floor(Date.now() / 1000);
     const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
 
+    // Build the token using the new package's functions (syntax is the same here)
     const token = RtcTokenBuilder.buildTokenWithUid(
         AGORA_APP_ID,
         AGORA_APP_CERTIFICATE,
