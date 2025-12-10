@@ -11,6 +11,10 @@ import { onObjectFinalized } from "firebase-functions/v2/storage";
 
 // Define parameters for environment variables
 import { defineString } from "firebase-functions/params";
+
+// Import your custom function
+import { generateAgoraToken as agoraTokenGenerator } from "./agora";
+
 const ALGOLIA_APP_ID = defineString("ALGOLIA_APP_ID");
 const ALGOLIA_ADMIN_KEY = defineString("ALGOLIA_ADMIN_KEY");
 const ALGOLIA_SEARCH_KEY = defineString("ALGOLIA_SEARCH_KEY");
@@ -131,3 +135,6 @@ export const moderateProfilePicture = onObjectFinalized(async (event) => {
       return null;
     }
 });
+
+// Export the Agora token generation function
+export const generateAgoraToken = agoraTokenGenerator;
