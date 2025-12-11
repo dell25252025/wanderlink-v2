@@ -5,19 +5,43 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth, db, functions } from '@/lib/firebase';
+import { auth, db, functions } from '@/lib/firebase'; // functions is kept for now
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
 
 import { agoraConfig } from '@/lib/agora-config';
 import { useToast } from '@/hooks/use-toast';
 
 import { Loader2 } from 'lucide-react';
-import CallControls from '@/components/CallControls'; // Import the new component
+import CallControls from '@/components/CallControls';
 
 const client: IAgoraRTCClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
 
-const generateAgoraToken = httpsCallable(functions, 'generateAgoraToken');
+// This function now uses fetch to call the HTTP onRequest Firebase Function
+const getAgoraToken = async (channelName: string, role: string, uid: number) => {
+  const user = auth.currentUser;
+  if (!user) throw new Error('User not authenticated for token generation.');
+
+  const idToken = await user.getIdToken();
+
+  const response = await fetch('https://us-central1-wanderlink-c1a35.cloudfunctions.net/generateAgoraToken', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      data: { channelName, role, uid },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to get token: ${errorText}`);
+  }
+
+  const result = await response.json();
+  return result.data.token;
+};
 
 export default function CallPage() {
   const router = useRouter();
@@ -62,6 +86,7 @@ export default function CallPage() {
 
     const joinChannel = async () => {
       try {
+        setIsJoining(true);
         isJoinedRef.current = true;
 
         client.on('user-published', async (user, mediaType) => {
@@ -80,8 +105,7 @@ export default function CallPage() {
             leaveCall(); 
         });
 
-        const tokenResponse = await generateAgoraToken({ channelName, role: 'publisher', uid: 0 });
-        const token = (tokenResponse.data as { token: string }).token;
+        const token = await getAgoraToken(channelName, 'publisher', 0);
 
         if (!token) throw new Error("Failed to generate Agora token.");
 
@@ -110,10 +134,11 @@ export default function CallPage() {
         console.error('FATAL ERROR in joinChannel:', error);
         toast({ 
             title: "Erreur d'appel", 
-            description: error.code ? `Code: ${error.code} - ${error.message}` : "Impossible de démarrer l'appel. Vérifiez les permissions et la connexion.", 
+            description: error.message || "Impossible de démarrer l'appel. Vérifiez les permissions et la connexion.", 
             variant: 'destructive' 
         });
         isJoinedRef.current = false;
+        leaveCall(); // Attempt to leave call cleanly on error
       }
     };
 
