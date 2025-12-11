@@ -1,18 +1,19 @@
+
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth, db, functions } from '@/lib/firebase'; // Import functions
+import { auth, db, functions } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions'; // Import httpsCallable
+import { httpsCallable } from 'firebase/functions';
 
 import { agoraConfig } from '@/lib/agora-config';
 import { useToast } from '@/hooks/use-toast';
 
-import { PhoneOff, Mic, MicOff, Video, VideoOff, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Loader2 } from 'lucide-react';
+import CallControls from '@/components/CallControls'; // Import the new component
 
 const client: IAgoraRTCClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
 
@@ -61,10 +62,8 @@ export default function CallPage() {
 
     const joinChannel = async () => {
       try {
-        console.log(`Starting call setup for a ${callType} call.`);
         isJoinedRef.current = true;
 
-        // Set up listeners
         client.on('user-published', async (user, mediaType) => {
           await client.subscribe(user, mediaType);
           setRemoteUsers(prev => prev.find(u => u.uid === user.uid) ? prev : [...prev, user]);
@@ -81,23 +80,15 @@ export default function CallPage() {
             leaveCall(); 
         });
 
-        // Get Agora Token from Firebase Function
-        console.log("Requesting Agora token from server...");
         const tokenResponse = await generateAgoraToken({ channelName, role: 'publisher', uid: 0 });
         const token = (tokenResponse.data as { token: string }).token;
 
-        if (!token) {
-          throw new Error("Failed to generate Agora token.");
-        }
-        console.log("Agora token received.");
+        if (!token) throw new Error("Failed to generate Agora token.");
 
-        // Join Agora Channel
         if (client.connectionState !== 'CONNECTED' && client.connectionState !== 'CONNECTING') {
              await client.join(agoraConfig.appId, channelName, token, null);
         }
 
-        // Create tracks - THIS WILL PROMPT FOR PERMISSIONS
-        console.log("Requesting media tracks...");
         let tracks: [IMicrophoneAudioTrack] | [IMicrophoneAudioTrack, ICameraVideoTrack];
         if (callType === 'video') {
             tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
@@ -105,7 +96,6 @@ export default function CallPage() {
             const audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
             tracks = [audioTrack];
         }
-        console.log("Media tracks created successfully.");
 
         setLocalTracks(tracks);
         
@@ -163,6 +153,7 @@ export default function CallPage() {
   };
 
   const toggleVideo = async () => {
+    if (callType === 'audio') return;
     const videoTrack = localTracks.find(track => track.trackMediaType === 'video') as ICameraVideoTrack | undefined;
     if (videoTrack) {
       const isNowMuted = !isVideoMuted;
@@ -198,17 +189,14 @@ export default function CallPage() {
             </div>
         )}
 
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 rounded-full bg-black/50 p-3">
-            <Button onClick={toggleAudio} variant="secondary" size="icon" className={`rounded-full h-14 w-14 ${isAudioMuted ? 'bg-destructive' : ''}`}>
-                {isAudioMuted ? <MicOff /> : <Mic />}
-            </Button>
-            <Button onClick={leaveCall} variant="destructive" size="icon" className="rounded-full h-16 w-16">
-                <PhoneOff />
-            </Button>
-            <Button onClick={toggleVideo} variant="secondary" size="icon" className={`rounded-full h-14 w-14 ${isVideoMuted ? 'bg-destructive' : ''}`} disabled={callType === 'audio'}>
-                {isVideoMuted ? <VideoOff /> : <Video />}
-            </Button>
-        </div>
+        {/* Use the new CallControls component */}
+        <CallControls
+          onHangUp={leaveCall}
+          onToggleMic={toggleAudio}
+          onToggleCamera={toggleVideo}
+          isMicMuted={isAudioMuted}
+          isCameraOff={isVideoMuted}
+        />
     </div>
   );
 }
