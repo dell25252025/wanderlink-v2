@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth, db, functions } from '@/lib/firebase'; // functions is kept for now
+import { auth, db, functions } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 
 import { agoraConfig } from '@/lib/agora-config';
@@ -16,7 +16,6 @@ import CallControls from '@/components/CallControls';
 
 const client: IAgoraRTCClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
 
-// This function now uses fetch to call the HTTP onRequest Firebase Function
 const getAgoraToken = async (channelName: string, role: string, uid: number) => {
   const user = auth.currentUser;
   if (!user) throw new Error('User not authenticated for token generation.');
@@ -87,32 +86,32 @@ export default function CallPage() {
     const joinChannel = async () => {
       try {
         setIsJoining(true);
-        isJoinedRef.current = true;
 
         client.on('user-published', async (user, mediaType) => {
-          await client.subscribe(user, mediaType);
-          setRemoteUsers(prev => prev.find(u => u.uid === user.uid) ? prev : [...prev, user]);
-          if (mediaType === 'video' && user.videoTrack && remoteVideoRef.current) {
-            user.videoTrack.play(remoteVideoRef.current);
-          }
-          if (mediaType === 'audio' && user.audioTrack) {
-            user.audioTrack.play();
-          }
+            await client.subscribe(user, mediaType);
+            setRemoteUsers(prev => prev.find(u => u.uid === user.uid) ? prev : [...prev, user]);
+
+            if (mediaType === 'video' && user.videoTrack && remoteVideoRef.current) {
+                user.videoTrack.play(remoteVideoRef.current);
+            }
+            if (mediaType === 'audio' && user.audioTrack) {
+                user.audioTrack.play();
+            }
         });
 
         client.on('user-left', user => {
             setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
-            leaveCall(); 
+            leaveCall();
         });
-
+        
+        // Join the channel and THEN create/publish tracks
         const token = await getAgoraToken(channelName, 'publisher', 0);
+        if (!token) throw new Error('Failed to generate Agora token.');
 
-        if (!token) throw new Error("Failed to generate Agora token.");
+        await client.join(agoraConfig.appId, channelName, token, null);
+        isJoinedRef.current = true; // Mark as joined only after successful join
 
-        if (client.connectionState !== 'CONNECTED' && client.connectionState !== 'CONNECTING') {
-             await client.join(agoraConfig.appId, channelName, token, null);
-        }
-
+        // Create tracks AFTER joining
         let tracks: [IMicrophoneAudioTrack] | [IMicrophoneAudioTrack, ICameraVideoTrack];
         if (callType === 'video') {
             tracks = await AgoraRTC.createMicrophoneAndCameraTracks();
@@ -122,11 +121,13 @@ export default function CallPage() {
         }
 
         setLocalTracks(tracks);
-        
+
+        // Play local video if applicable
         if (tracks.length > 1 && localVideoRef.current) {
             (tracks[1] as ICameraVideoTrack).play(localVideoRef.current);
         }
         
+        // NOW publish the tracks
         await client.publish(tracks);
         setIsJoining(false);
 
@@ -138,7 +139,7 @@ export default function CallPage() {
             variant: 'destructive' 
         });
         isJoinedRef.current = false;
-        leaveCall(); // Attempt to leave call cleanly on error
+        leaveCall();
       }
     };
 
@@ -191,7 +192,7 @@ export default function CallPage() {
     return (
         <div className="flex h-screen w-full flex-col items-center justify-center bg-black text-white">
             <Loader2 className="h-16 w-16 animate-spin" />
-            <p className="mt-4 text-lg">Connexion à l\'appel...</p>
+            <p className="mt-4 text-lg">Connexion à l'appel...</p>
         </div>
     );
   }
@@ -203,7 +204,7 @@ export default function CallPage() {
              <div className="flex h-full w-full items-center justify-center">
                 <div className="text-center text-white">
                     <Loader2 className="h-12 w-12 animate-spin mx-auto" />
-                    <p className="mt-4">En attente de l\'autre participant...</p>
+                    <p className="mt-4">En attente de l'autre participant...</p>
                 </div>
             </div>
         )}
@@ -214,7 +215,6 @@ export default function CallPage() {
             </div>
         )}
 
-        {/* Use the new CallControls component */}
         <CallControls
           onHangUp={leaveCall}
           onToggleMic={toggleAudio}
