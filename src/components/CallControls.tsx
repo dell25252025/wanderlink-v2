@@ -90,4 +90,3 @@ export const CallControls: React.FC<CallControlsProps> = ({
 };
 
 export default CallControls;
-

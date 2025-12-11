@@ -17,7 +17,6 @@ import { Crosshair, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { countries } from '@/lib/countries';
-import { Capacitor } from '@capacitor/core';
 
 const allLanguages = [
     { id: 'fr', label: 'Français' },
@@ -58,6 +57,9 @@ const Step2 = () => {
   const { toast } = useToast();
 
   const handleLocate = async (isAutomatic = false) => {
+    // Dynamically import Capacitor to ensure it's only loaded on the client-side
+    const { Capacitor } = await import('@capacitor/core');
+
     if (!Capacitor.isNativePlatform()) {
         console.log("Capacitor features are not available in the browser.");
         if (!isAutomatic) {
@@ -68,16 +70,9 @@ const Step2 = () => {
 
     setIsLocating(true);
     try {
+      // Dynamically import Geolocation and Http since they depend on Capacitor
       const { Geolocation } = await import('@capacitor/geolocation');
-      
-      let httpModule;
-      if (Capacitor.isNativePlatform()) {
-        const moduleName = '@capacitor/http';
-        httpModule = await import(moduleName);
-      } else {
-        httpModule = { Http: { get: () => Promise.reject('Not a native platform') } };
-      }
-      const { Http } = httpModule;
+      const { Http } = await import('@capacitor/http');
 
       let permissionStatus = await Geolocation.checkPermissions();
 
