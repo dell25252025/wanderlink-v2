@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
@@ -15,10 +15,10 @@ import { getUserProfile } from '@/lib/firebase-actions';
 import { Loader2 } from 'lucide-react';
 import CallControls from '@/components/CallControls';
 
-// Création du client Agora une seule fois
 const client: IAgoraRTCClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
 
-const getAgoraToken = async (channelName: string) => {
+// Correction: Ajout du paramètre uid
+const getAgoraToken = async (channelName: string, uid: string) => {
   const user = auth.currentUser;
   if (!user) throw new Error('User not authenticated for token generation.');
 
@@ -29,7 +29,8 @@ const getAgoraToken = async (channelName: string) => {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${idToken}`,
     },
-    body: JSON.stringify({ data: { channelName } }),
+    // Correction: Inclure l'uid et le rôle dans la requête
+    body: JSON.stringify({ data: { channelName, uid, role: 'publisher' } }),
   });
 
   if (!response.ok) {
@@ -65,7 +66,6 @@ export default function CallPage() {
  
   const isJoinedRef = useRef(false);
 
-  // --- Gestion de l'état de l'appel via Firestore ---
   useEffect(() => {
     if (!channelName || !currentUser) return;
 
@@ -76,14 +76,12 @@ export default function CallPage() {
         const data = doc.data() as CallData;
         setCallData(data);
 
-        // Charger le profil de l'autre utilisateur
         if (!otherUserData) {
             const otherId = data.callerId === currentUser.uid ? data.receiverId : data.callerId;
             const profile = await getUserProfile(otherId);
             setOtherUserData(profile);
         }
 
-        // Gérer les changements de statut
         switch(data.status) {
             case 'active':
                 if (!isJoinedRef.current) {
@@ -92,30 +90,28 @@ export default function CallPage() {
                 break;
             case 'rejected':
                 toast({ title: "Appel refusé", description: "L\'utilisateur a refusé l\'appel.", variant: 'destructive' });
-                leaveCall(false); // Ne pas update le doc sur firestore
+                leaveCall(false); 
                 break;
             case 'ended':
                 toast({ title: "Appel terminé" });
-                leaveCall(false); // Ne pas update le doc sur firestore
+                leaveCall(false); 
                 break;
         }
       } else {
-        // Le document d'appel a été supprimé ou n'existe pas
         toast({ title: "Appel introuvable", variant: 'destructive' });
         router.back();
       }
     });
 
     return () => unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelName, currentUser, router, toast]); // Dépendances initiales
+  }, [channelName, currentUser, router, toast, joinChannel, leaveCall]);
 
 
   const joinChannel = useCallback(async (isVideoCall: boolean) => {
     if (!channelName || !currentUser || isJoinedRef.current) return;
 
     try {
-      isJoinedRef.current = true; // Empêche de rejoindre plusieurs fois
+      isJoinedRef.current = true; 
 
       client.on('user-published', async (user, mediaType) => {
         await client.subscribe(user, mediaType);
@@ -134,7 +130,8 @@ export default function CallPage() {
         leaveCall(true);
       });
 
-      const token = await getAgoraToken(channelName);
+      // Correction: Passer l'UID de l'utilisateur actuel pour la génération du token
+      const token = await getAgoraToken(channelName, currentUser.uid);
       await client.join(agoraConfig.appId, channelName, token, currentUser.uid);
       
       const tracks = isVideoCall
@@ -156,7 +153,7 @@ export default function CallPage() {
       toast({ title: "Erreur d'appel", description: error.message, variant: 'destructive' });
       leaveCall(true);
     }
-  }, [channelName, currentUser, toast]); // Pas besoin de leaveCall ici
+  }, [channelName, currentUser, toast, leaveCall]);
 
   const leaveCall = useCallback(async (updateStatus: boolean) => {
     for (const track of localTracks) {
@@ -193,7 +190,6 @@ export default function CallPage() {
     }
   };
 
-  // --- RENDER LOGIC ---
   if (!callData || !otherUserData) {
     return (
         <div className="flex h-screen w-full flex-col items-center justify-center bg-gray-900 text-white">
@@ -228,7 +224,6 @@ export default function CallPage() {
             ))}
         </div>
         
-        {/* Message si pas d'utilisateurs distants ou si leur vidéo est coupée */}
         {(remoteUsers.length === 0 || (callData.isVideo && remoteUsers.every(u => !u.hasVideo))) && (
              <div className="flex h-full w-full items-center justify-center">
                 <div className="text-center text-white space-y-4">
@@ -242,7 +237,6 @@ export default function CallPage() {
             </div>
         )}
 
-        {/* Vidéo locale */}
         {callData.isVideo && (
             <div className={`absolute top-4 right-4 h-48 w-36 bg-gray-800 border-2 border-gray-600 rounded-lg overflow-hidden transition-all duration-300 ${isVideoMuted ? 'opacity-0' : 'opacity-100'}`}>
                 <div id="local-video" className="h-full w-full"></div>
