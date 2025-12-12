@@ -1,87 +1,109 @@
 
 import React from 'react';
 
-// Props interface to define the functions and states passed to the component
+// Ajout des nouvelles props pour le haut-parleur
 interface CallControlsProps {
   onHangUp: () => void;
   onToggleMic: () => void;
   onToggleCamera: () => void;
+  onToggleSpeaker: () => void; // Nouvelle prop
   isMicMuted: boolean;
   isCameraOff: boolean;
+  isSpeakerOn: boolean; // Nouvelle prop
+  isRinging?: boolean; // Prop optionnelle pour la sonnerie
+  isVideoCall?: boolean; // Savoir si c'est un appel vidéo
 }
 
-// SVG Icon Components for clarity
+// --- Icônes SVG ---
 const MicOnIcon = () => (
-  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
-  </svg>
+  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
 );
 
 const MicOffIcon = () => (
-  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5.084A2.96 2.96 0 008 8v1a1 1 0 002 0V8a1 1 0 112 0v1a1 1 0 102 0V8a3 3 0 00-3-2.916z"></path>
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 8a1 1 0 01-2 0V5a1 1 0 112 0v3zM19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3zM5 5l14 14"></path>
-  </svg>
+    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm-1 4a4 4 0 108 0V4a4 4 0 10-8 0v4zm10.96 1.15a.75.75 0 00-1.06-1.06l-1.02 1.02a4.98 4.98 0 00-1.41-.03l-1.63 1.63a.75.75 0 101.06 1.06L16.94 9.15zM2.53 7.85a.75.75 0 00-1.06 1.06l4.24 4.24a.75.75 0 001.06 0l1.27-1.27a.75.75 0 10-1.06-1.06l-1.27 1.27-3.18-3.18z" clipRule="evenodd" /></svg>
 );
 
 const CameraOnIcon = () => (
-    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-    </svg>
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
 );
 
 const CameraOffIcon = () => (
-    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.5 10l2.553-1.276A1 1 0 0117 9.618v4.764a1 1 0 01-1.447.894L13.5 14M5 18h4.5a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2zm16-13l-14 14"></path>
-    </svg>
+    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zm-8-2.5a.75.75 0 01.75-.75h.586l.28-.28A.75.75 0 014.28 9h1.44a.75.75 0 010 1.5H4.28a.75.75 0 01-.53-.22L3.47 10H2.75A.75.75 0 012 9.25zM6.9 7.22a.75.75 0 011.06 0l.72.72a.75.75 0 11-1.06 1.06l-.72-.72a.75.75 0 010-1.06zM8.72 5.85a.75.75 0 10-1.06-1.06l-.72.72a.75.75 0 101.06 1.06l.72-.72zM11 5.05a.75.75 0 01.75.75v.586l.28.28a.75.75 0 01-1.06 1.06l-1-1A.75.75 0 0111 5.05z" clipRule="evenodd" /><path d="M2.97 2.97a.75.75 0 011.06 0l12 12a.75.75 0 01-1.06 1.06l-12-12a.75.75 0 010-1.06z" /></svg>
 );
 
 const HangUpIcon = () => (
-  <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .38-.21.71-.53.88-1.55.82-2.84 2.11-3.66 3.66-.17.32-.5.54-.88.54H.72C.25 17.9-.03 17.4 0 16.8c.34-5.22 4.53-9.4 9.75-9.75.6-.03 1.05.24 1.05.72V9zM22.95 21.84c-.32.17-.65.24-.98.24-.32 0-.64-.07-.95-.21l-3.23-1.53c-.39-.18-.63-.56-.63-.98V15.5c0-1.01-.82-1.83-1.83-1.83H14.5c-.38 0-.71-.21-.88-.53-.82-1.55-2.11-2.84-3.66-3.66-.32-.17-.54-.5-.54-.88V8.72c0-.47-.39-.82-.82-.82H3.1c-.38 0-.71.21-.88.53-1.55.82-2.84 2.11-3.66 3.66-.17.32-.5.53-.88.53H-.75c-.47 0-.82-.39-.82-.82v-.75c.03-6.44 5.28-11.69 11.72-11.72h.75c.47 0 .82.39.82.82v4.59c0 .38.21.71.53.88 1.55.82 2.84 2.11 3.66 3.66.32.17.54.5.88.54h.82c.47 0 .82.39.82.82v.82c0 .38.21.71.53.88 1.55.82 2.84 2.11 3.66 3.66.17.32.5.53.88.53h.75c.47 0 .82.39.82.82l-.01.99z"></path>
-  </svg>
+  <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M3.66 6.54a2.5 2.5 0 01-.18-3.08 1 1 0 011.6-.64c1.86 2.31 3.01 5.05 3.33 8.01.07.55-.37 1.04-.92 1.04-.5 0-.91-.4-.98-.9-.28-2.52-1.26-4.9-2.85-6.93zM21.52 3.48a1 1 0 01-.64 1.6 15.5 15.5 0 01-6.93 2.85c-.5.07-1.02-.33-1.02-.85s.42-.92.92-.98a17.5 17.5 0 008.01-3.33 1 1 0 011.6.65z"/><path fillRule="evenodd" d="M2.93 17.58a13.5 13.5 0 007.03 4.2 1.5 1.5 0 001.55-.91 3.5 3.5 0 000-2.73 1.5 1.5 0 00-1.25-1.12c-2.3-.65-4.44-1.92-6.2-3.69A1.5 1.5 0 002.5 14.5v-1.06a13.5 13.5 0 014.2 7.03 1.5 1.5 0 00-.91 1.55c-.21 1.15.54 2.24 1.63 2.52zm11.5-11.23a13.5 13.5 0 014.2 7.03v1.06a1.5 1.5 0 01-1.28 1.45c-2.3.65-4.44 1.92-6.2 3.69a1.5 1.5 0 01-1.45 0 3.5 3.5 0 01-2.73 0 1.5 1.5 0 01-1.45 0c-.8-.8-1.5-1.7-2.1-2.67l14.4-14.4c.97.6 1.87 1.3 2.67 2.1z" clipRule="evenodd"/></svg>
+);
+
+// Nouvelle icône pour le haut-parleur
+const SpeakerOnIcon = () => (
+    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M9.25 4.25a.75.75 0 01.75.75v10a.75.75 0 01-1.5 0V5a.75.75 0 01.75-.75zm-3.5 3.5a.75.75 0 000 1.5h1.5a.75.75 0 000-1.5H5.75zM4.25 12a.75.75 0 01.75-.75h1.5a.75.75 0 010 1.5H5a.75.75 0 01-.75-.75zm5-5a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5H9.25zM9.25 12a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5H9.25z"/></svg>
+);
+
+const SpeakerOffIcon = () => (
+    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.22 5.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L11.94 11 8.22 7.28a.75.75 0 010-1.06z" clipRule="evenodd" transform="matrix(-1 0 0 1 20 0)" /></svg>
+
 );
 
 export const CallControls: React.FC<CallControlsProps> = ({
   onHangUp,
   onToggleMic,
   onToggleCamera,
+  onToggleSpeaker, // Nouveau
   isMicMuted,
   isCameraOff,
+  isSpeakerOn, // Nouveau
+  isRinging,
+  isVideoCall,
 }) => {
+  const ControlButton = ({ onClick, children, active, ariaLabel, danger }: any) => (
+    <button
+        onClick={onClick}
+        className={`w-14 h-14 flex items-center justify-center rounded-full transition-all duration-300 text-white 
+                    ${
+                      danger 
+                        ? 'bg-red-500 hover:bg-red-600' 
+                        : active 
+                          ? 'bg-white/20 hover:bg-white/30' 
+                          : 'bg-white/40 hover:bg-white/50'
+                    }`}
+        aria-label={ariaLabel}
+    >
+        {children}
+    </button>
+  );
+
+  if (isRinging) {
+    return (
+        <div className="fixed bottom-16 left-0 right-0 p-4 z-50 flex justify-center">
+            <ControlButton onClick={onHangUp} danger ariaLabel="Hang Up"><HangUpIcon /></ControlButton>
+        </div>
+    )
+  }
+
   return (
-    <div className="fixed bottom-0 left-0 right-0 p-4 z-50">
-      <div className="max-w-xs mx-auto bg-black/40 backdrop-blur-md rounded-full shadow-lg">
-        <div className="flex justify-evenly items-center p-2 space-x-2">
+    <div className="fixed bottom-16 left-0 right-0 p-4 z-50">
+      <div className="max-w-md mx-auto bg-black/30 backdrop-blur-sm rounded-full shadow-lg">
+        <div className="flex justify-evenly items-center p-2">
           
-          {/* Microphone Toggle Button */}
-          <button
-            onClick={onToggleMic}
-            className={`w-14 h-14 flex items-center justify-center rounded-full transition-all duration-300
-                        ${isMicMuted ? 'bg-white/80' : 'bg-white/30 hover:bg-white/40'}`}
-            aria-label={isMicMuted ? 'Unmute Microphone' : 'Mute Microphone'}
-          >
+          <ControlButton onClick={onToggleMic} active={!isMicMuted} ariaLabel={isMicMuted ? 'Unmute' : 'Mute'}>
             {isMicMuted ? <MicOffIcon /> : <MicOnIcon />}
-          </button>
+          </ControlButton>
 
-          {/* Camera Toggle Button */}
-          <button
-            onClick={onToggleCamera}
-            className={`w-14 h-14 flex items-center justify-center rounded-full transition-all duration-300
-                        ${isCameraOff ? 'bg-white/80' : 'bg-white/30 hover:bg-white/40'}`}
-            aria-label={isCameraOff ? 'Turn Camera On' : 'Turn Camera Off'}
-          >
-            {isCameraOff ? <CameraOffIcon /> : <CameraOnIcon />}
-          </button>
+          {isVideoCall && (
+            <ControlButton onClick={onToggleCamera} active={!isCameraOff} ariaLabel={isCameraOff ? 'Camera On' : 'Camera Off'}>
+              {isCameraOff ? <CameraOffIcon /> : <CameraOnIcon />}
+            </ControlButton>
+          )}
+          
+          {/* Bouton Haut-parleur */}
+          <ControlButton onClick={onToggleSpeaker} active={isSpeakerOn} ariaLabel={isSpeakerOn ? 'Speaker Off' : 'Speaker On'}>
+            {isSpeakerOn ? <SpeakerOnIcon /> : <SpeakerOffIcon />}
+          </ControlButton>
 
-          {/* Hang Up Button */}
-          <button
-            onClick={onHangUp}
-            className="w-16 h-16 flex items-center justify-center bg-red-500 hover:bg-red-600 rounded-full transition-all duration-300"
-            aria-label="Hang Up"
-          >
+          <ControlButton onClick={onHangUp} danger ariaLabel="Hang Up">
             <HangUpIcon />
-          </button>
+          </ControlButton>
 
         </div>
       </div>

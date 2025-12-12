@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
+import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser, type MediaDeviceInfo } from 'agora-rtc-sdk-ng';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
@@ -61,10 +61,25 @@ export default function CallPage() {
 
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoMuted, setIsVideoMuted] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true); // Nouvel état pour le haut-parleur
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [currentAudioDevice, setCurrentAudioDevice] = useState<string | undefined>();
  
   const isJoinedRef = useRef(false);
 
-  // Correction: Déclaration de leaveCall AVANT joinChannel et useEffect
+  // Récupérer les périphériques audio
+  useEffect(() => {
+    const getDevices = async () => {
+      const devices = await AgoraRTC.getPlaybackDevices();
+      setAudioDevices(devices);
+      // Par défaut, le SDK peut choisir le haut-parleur (speaker)
+      const defaultDevice = devices.find(d => d.kind === 'audiooutput' && d.deviceId.includes('speaker'));
+      setCurrentAudioDevice(defaultDevice?.deviceId || client.getPlaybackDevice());
+      setIsSpeakerOn(!!defaultDevice);
+    };
+    getDevices();
+  }, []);
+
   const leaveCall = useCallback(async (updateStatus: boolean) => {
     for (const track of localTracks) {
       track.stop();
@@ -186,6 +201,32 @@ export default function CallPage() {
       setIsVideoMuted(!isVideoMuted);
     }
   };
+  
+  // Nouvelle fonction pour basculer le haut-parleur
+  const toggleSpeaker = async () => {
+    try {
+        if (isSpeakerOn) {
+            // Passer à l'écouteur (earpiece)
+            const earpiece = audioDevices.find(d => d.kind === 'audiooutput' && !d.label.toLowerCase().includes('speaker'));
+            if (earpiece) {
+                await client.setPlaybackDevice(earpiece.deviceId);
+                setCurrentAudioDevice(earpiece.deviceId);
+                setIsSpeakerOn(false);
+            }
+        } else {
+            // Passer au haut-parleur (speaker)
+            const speaker = audioDevices.find(d => d.kind === 'audiooutput' && d.label.toLowerCase().includes('speaker'));
+            if (speaker) {
+                await client.setPlaybackDevice(speaker.deviceId);
+                setCurrentAudioDevice(speaker.deviceId);
+                setIsSpeakerOn(true);
+            }
+        }
+    } catch (error) {
+        console.error("Failed to switch audio output device", error);
+        toast({title: "Erreur", description: "Impossible de changer de périphérique audio.", variant: "destructive"});
+    }
+  };
 
   if (!callData || !otherUserData) {
     return (
@@ -207,7 +248,7 @@ export default function CallPage() {
                     <h1 className="text-3xl font-bold">{otherUserData?.firstName}</h1>
                     <p className="text-lg text-white/70">Sonnerie en cours...</p>
                 </div>
-                <CallControls onHangUp={() => leaveCall(true)} isRinging={true} />
+                <CallControls onHangUp={() => leaveCall(true)} isRinging={true} onToggleMic={()=>{}} onToggleCamera={()=>{}} onToggleSpeaker={()=>{}} isMicMuted={false} isCameraOff={false} isSpeakerOn={false} />
           </div>
       )
   }
@@ -244,8 +285,10 @@ export default function CallPage() {
           onHangUp={() => leaveCall(true)}
           onToggleMic={toggleAudio}
           onToggleCamera={toggleVideo}
+          onToggleSpeaker={toggleSpeaker} // Nouveau
           isMicMuted={isAudioMuted}
           isCameraOff={isVideoMuted}
+          isSpeakerOn={isSpeakerOn} // Nouveau
           isVideoCall={callData.isVideo}
         />
     </div>
