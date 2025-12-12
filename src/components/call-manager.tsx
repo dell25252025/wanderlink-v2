@@ -1,99 +1,106 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { getUserProfile } from '@/lib/firebase-actions';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Phone, Video, X } from 'lucide-react';
-import { getUserProfile } from '@/lib/firebase-actions';
 
 interface CallData {
   id: string;
   callerId: string;
-  calleeId: string;
-  callerName: string;
-  callerImage: string;
+  receiverId: string; 
   status: 'ringing' | 'active' | 'ended' | 'rejected';
   isVideo: boolean;
+  [key: string]: any;
 }
 
-export function CallManager() {
-  const router = useRouter();
+export function CallManager() { // Changement ici: export nommé
   const [currentUser] = useAuthState(auth);
   const [incomingCall, setIncomingCall] = useState<CallData | null>(null);
+  const [callerProfile, setCallerProfile] = useState<any>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (!currentUser) return;
 
     const callsRef = collection(db, 'calls');
-    const q = query(callsRef, where('calleeId', '==', currentUser.uid), where('status', '==', 'ringing'));
+    const q = query(callsRef, where('receiverId', '==', currentUser.uid), where('status', '==', 'ringing'));
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       if (!snapshot.empty) {
         const callDoc = snapshot.docs[0];
         const callData = { id: callDoc.id, ...callDoc.data() } as CallData;
         
-        const callerProfile = await getUserProfile(callData.callerId);
-        callData.callerName = callerProfile?.firstName || 'Quelqu\'un';
-        callData.callerImage = callerProfile?.profilePictures?.[0] || `https://picsum.photos/seed/${callData.callerId}/200`;
+        if(window.location.pathname.startsWith('/call/')) return;
 
         setIncomingCall(callData);
+        const profile = await getUserProfile(callData.callerId);
+        setCallerProfile(profile);
       } else {
         setIncomingCall(null);
+        setCallerProfile(null);
       }
     });
 
     return () => unsubscribe();
   }, [currentUser]);
 
-  const handleAcceptCall = async () => {
+  const handleAcceptCall = useCallback(async () => {
     if (!incomingCall) return;
     const callDocRef = doc(db, 'calls', incomingCall.id);
     await updateDoc(callDocRef, { status: 'active' });
-    const callUrl = `/call/${incomingCall.id}?type=${incomingCall.isVideo ? 'video' : 'audio'}`;
-    router.push(callUrl);
     setIncomingCall(null);
-  };
+    router.push(`/call/${incomingCall.id}?type=${incomingCall.isVideo ? 'video' : 'audio'}`);
+  }, [incomingCall, router]);
 
-  const handleRejectCall = async () => {
+  const handleRejectCall = useCallback(async () => {
     if (!incomingCall) return;
     const callDocRef = doc(db, 'calls', incomingCall.id);
     await updateDoc(callDocRef, { status: 'rejected' });
     setIncomingCall(null);
-  };
+  }, [incomingCall]);
 
-  if (!incomingCall) return null;
+  if (!incomingCall || !callerProfile) {
+    return null;
+  }
 
   return (
     <Dialog open={!!incomingCall} onOpenChange={(isOpen) => !isOpen && handleRejectCall()}>
-      <DialogContent className="sm:max-w-[425px]" onInteractOutside={(e) => e.preventDefault()}>
-        <DialogHeader>
-          <DialogTitle className="text-center text-xl">Appel entrant</DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col items-center justify-center gap-4 py-4">
-            <Avatar className="h-24 w-24 border-4 border-primary">
-                <AvatarImage src={incomingCall.callerImage} alt={incomingCall.callerName} />
-                <AvatarFallback>{incomingCall.callerName.charAt(0)}</AvatarFallback>
-            </Avatar>
-            <p className="text-lg font-semibold">{incomingCall.callerName} vous appelle</p>
-            <div className="flex items-center gap-2 text-muted-foreground">
-                {incomingCall.isVideo ? <Video className="h-5 w-5" /> : <Phone className="h-5 w-5" />}
-                <span>Appel {incomingCall.isVideo ? 'vidéo' : 'audio'}</span>
+        <DialogContent className="p-0 m-0 w-full h-full max-w-full max-h-screen bg-gray-900 text-white border-0 flex flex-col items-center justify-center">
+            <div className="flex flex-col items-center justify-center text-center space-y-4 pt-12">
+                <Avatar className="w-24 h-24 border-4 border-white/20">
+                    <AvatarImage src={callerProfile?.profilePictures?.[0]} />
+                    <AvatarFallback className="text-4xl bg-gray-600">{callerProfile?.firstName?.charAt(0)}</AvatarFallback>
+                </Avatar>
+                <DialogHeader>
+                    <DialogTitle className="text-3xl font-bold">{callerProfile?.firstName || 'Quelqu\'un'}</DialogTitle>
+                    <DialogDescription className="text-lg text-white/80">
+                        Appel {incomingCall.isVideo ? 'vidéo' : 'audio'} entrant...
+                    </DialogDescription>
+                </DialogHeader>
             </div>
-        </div>
-        <DialogFooter className="flex justify-around gap-4">
-          <Button onClick={handleRejectCall} variant="destructive" size="lg" className="rounded-full flex-1">
-            <X className="mr-2 h-5 w-5" /> Refuser
-          </Button>
-          <Button onClick={handleAcceptCall} variant="success" size="lg" className="rounded-full flex-1">
-            <Phone className="mr-2 h-5 w-5" /> Accepter
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+
+            <DialogFooter className="absolute bottom-16 left-0 right-0 flex items-center justify-center gap-x-8">
+                <div className="flex flex-col items-center space-y-2">
+                    <Button variant="destructive" size="icon" className="rounded-full w-16 h-16" onClick={handleRejectCall}>
+                        <X className="h-8 w-8" />
+                    </Button>
+                    <span className="text-sm">Refuser</span>
+                </div>
+                <div className="flex flex-col items-center space-y-2">
+                    <Button variant="success" size="icon" className="rounded-full w-16 h-16 bg-green-500 hover:bg-green-600" onClick={handleAcceptCall}>
+                        {incomingCall.isVideo ? <Video className="h-8 w-8" /> : <Phone className="h-8 w-8" />}
+                    </Button>
+                    <span className="text-sm">Accepter</span>
+                </div>
+            </DialogFooter>
+        </DialogContent>
     </Dialog>
   );
 }
