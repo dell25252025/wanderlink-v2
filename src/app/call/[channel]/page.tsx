@@ -61,24 +61,33 @@ export default function CallPage() {
 
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoMuted, setIsVideoMuted] = useState(false);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(true); // Nouvel état pour le haut-parleur
-  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
-  const [currentAudioDevice, setCurrentAudioDevice] = useState<string | undefined>();
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false); // Initial à false (écouteur)
  
   const isJoinedRef = useRef(false);
+  const earpieceDeviceId = useRef<string | null>(null);
+  const speakerDeviceId = useRef<string | null>(null);
 
-  // Récupérer les périphériques audio
-  useEffect(() => {
-    const getDevices = async () => {
-      const devices = await AgoraRTC.getPlaybackDevices();
-      setAudioDevices(devices);
-      // Par défaut, le SDK peut choisir le haut-parleur (speaker)
-      const defaultDevice = devices.find(d => d.kind === 'audiooutput' && d.deviceId.includes('speaker'));
-      setCurrentAudioDevice(defaultDevice?.deviceId || client.getPlaybackDevice());
-      setIsSpeakerOn(!!defaultDevice);
-    };
-    getDevices();
-  }, []);
+  const setEarpieceAsDefault = async () => {
+      try {
+          const devices = await AgoraRTC.getPlaybackDevices();
+          const earpiece = devices.find(d => d.kind === 'audiooutput' && (d.label.toLowerCase().includes('earpiece') || d.label.toLowerCase().includes('écouteur')));
+          const speaker = devices.find(d => d.kind === 'audiooutput' && d.label.toLowerCase().includes('speaker'));
+          
+          earpieceDeviceId.current = earpiece ? earpiece.deviceId : null;
+          speakerDeviceId.current = speaker ? speaker.deviceId : 'default'; // 'default' est souvent le haut-parleur
+
+          if (earpieceDeviceId.current) {
+              await client.setPlaybackDevice(earpieceDeviceId.current);
+              setIsSpeakerOn(false);
+          } else {
+               // Si pas d'écouteur trouvé, on reste sur le défaut (souvent le HP)
+              await client.setPlaybackDevice(speakerDeviceId.current!);
+              setIsSpeakerOn(true);
+          }
+      } catch (e) {
+          console.error("Failed to set initial audio device", e);
+      }
+  }
 
   const leaveCall = useCallback(async (updateStatus: boolean) => {
     for (const track of localTracks) {
@@ -126,6 +135,9 @@ export default function CallPage() {
       const token = await getAgoraToken(channelName, currentUser.uid);
       await client.join(agoraConfig.appId, channelName, token, currentUser.uid);
       
+      // Activer l'écouteur par défaut
+      await setEarpieceAsDefault();
+
       const tracks = isVideoCall
         ? await AgoraRTC.createMicrophoneAndCameraTracks()
         : [await AgoraRTC.createMicrophoneAudioTrack()];
@@ -202,24 +214,21 @@ export default function CallPage() {
     }
   };
   
-  // Nouvelle fonction pour basculer le haut-parleur
   const toggleSpeaker = async () => {
     try {
         if (isSpeakerOn) {
-            // Passer à l'écouteur (earpiece)
-            const earpiece = audioDevices.find(d => d.kind === 'audiooutput' && !d.label.toLowerCase().includes('speaker'));
-            if (earpiece) {
-                await client.setPlaybackDevice(earpiece.deviceId);
-                setCurrentAudioDevice(earpiece.deviceId);
+            if (earpieceDeviceId.current) {
+                await client.setPlaybackDevice(earpieceDeviceId.current);
                 setIsSpeakerOn(false);
+            } else {
+                toast({title: "Info", description: "Aucun écouteur détecté.", variant: "default"});
             }
         } else {
-            // Passer au haut-parleur (speaker)
-            const speaker = audioDevices.find(d => d.kind === 'audiooutput' && d.label.toLowerCase().includes('speaker'));
-            if (speaker) {
-                await client.setPlaybackDevice(speaker.deviceId);
-                setCurrentAudioDevice(speaker.deviceId);
+            if (speakerDeviceId.current) {
+                await client.setPlaybackDevice(speakerDeviceId.current);
                 setIsSpeakerOn(true);
+            } else {
+                 toast({title: "Erreur", description: "Aucun haut-parleur détecté.", variant: "destructive"});
             }
         }
     } catch (error) {
@@ -285,10 +294,10 @@ export default function CallPage() {
           onHangUp={() => leaveCall(true)}
           onToggleMic={toggleAudio}
           onToggleCamera={toggleVideo}
-          onToggleSpeaker={toggleSpeaker} // Nouveau
+          onToggleSpeaker={toggleSpeaker}
           isMicMuted={isAudioMuted}
           isCameraOff={isVideoMuted}
-          isSpeakerOn={isSpeakerOn} // Nouveau
+          isSpeakerOn={isSpeakerOn}
           isVideoCall={callData.isVideo}
         />
     </div>
