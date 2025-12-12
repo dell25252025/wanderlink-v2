@@ -17,7 +17,6 @@ import CallControls from '@/components/CallControls';
 
 const client: IAgoraRTCClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
 
-// Correction: Ajout du paramètre uid
 const getAgoraToken = async (channelName: string, uid: string) => {
   const user = auth.currentUser;
   if (!user) throw new Error('User not authenticated for token generation.');
@@ -29,7 +28,6 @@ const getAgoraToken = async (channelName: string, uid: string) => {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${idToken}`,
     },
-    // Correction: Inclure l'uid et le rôle dans la requête
     body: JSON.stringify({ data: { channelName, uid, role: 'publisher' } }),
   });
 
@@ -65,6 +63,74 @@ export default function CallPage() {
   const [isVideoMuted, setIsVideoMuted] = useState(false);
  
   const isJoinedRef = useRef(false);
+
+  // Correction: Déclaration de leaveCall AVANT joinChannel et useEffect
+  const leaveCall = useCallback(async (updateStatus: boolean) => {
+    for (const track of localTracks) {
+      track.stop();
+      track.close();
+    }
+    if (isJoinedRef.current) {
+        await client.leave();
+        isJoinedRef.current = false;
+    }
+    
+    if (updateStatus && channelName) {
+        const callDocRef = doc(db, 'calls', channelName);
+        await updateDoc(callDocRef, { status: 'ended' }).catch(e => console.error('Error ending call in db', e));
+    }
+    
+    setLocalTracks([]);
+    setRemoteUsers([]);
+    router.back();
+  }, [localTracks, channelName, router]);
+
+  const joinChannel = useCallback(async (isVideoCall: boolean) => {
+    if (!channelName || !currentUser || isJoinedRef.current) return;
+
+    try {
+      isJoinedRef.current = true; 
+
+      client.on('user-published', async (user, mediaType) => {
+        await client.subscribe(user, mediaType);
+        setRemoteUsers(prev => prev.find(u => u.uid === user.uid) ? prev : [...prev, user]);
+
+        if (mediaType === 'video' && user.videoTrack) {
+           user.videoTrack.play(`remote-video-${user.uid}`);
+        }
+        if (mediaType === 'audio' && user.audioTrack) {
+          user.audioTrack.play();
+        }
+      });
+
+      client.on('user-left', user => {
+        setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
+        leaveCall(true);
+      });
+
+      const token = await getAgoraToken(channelName, currentUser.uid);
+      await client.join(agoraConfig.appId, channelName, token, currentUser.uid);
+      
+      const tracks = isVideoCall
+        ? await AgoraRTC.createMicrophoneAndCameraTracks()
+        : [await AgoraRTC.createMicrophoneAudioTrack()];
+
+      // @ts-ignore
+      setLocalTracks(tracks);
+      setIsVideoMuted(!isVideoCall);
+
+      if (tracks.length > 1) {
+        (tracks[1] as ICameraVideoTrack).play('local-video');
+      }
+
+      await client.publish(tracks);
+
+    } catch (error: any) {
+      console.error('FATAL ERROR in joinChannel:', error);
+      toast({ title: "Erreur d'appel", description: error.message, variant: 'destructive' });
+      leaveCall(true);
+    }
+  }, [channelName, currentUser, toast, leaveCall]);
 
   useEffect(() => {
     if (!channelName || !currentUser) return;
@@ -104,76 +170,7 @@ export default function CallPage() {
     });
 
     return () => unsubscribe();
-  }, [channelName, currentUser, router, toast, joinChannel, leaveCall]);
-
-
-  const joinChannel = useCallback(async (isVideoCall: boolean) => {
-    if (!channelName || !currentUser || isJoinedRef.current) return;
-
-    try {
-      isJoinedRef.current = true; 
-
-      client.on('user-published', async (user, mediaType) => {
-        await client.subscribe(user, mediaType);
-        setRemoteUsers(prev => prev.find(u => u.uid === user.uid) ? prev : [...prev, user]);
-
-        if (mediaType === 'video' && user.videoTrack) {
-           user.videoTrack.play(`remote-video-${user.uid}`);
-        }
-        if (mediaType === 'audio' && user.audioTrack) {
-          user.audioTrack.play();
-        }
-      });
-
-      client.on('user-left', user => {
-        setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
-        leaveCall(true);
-      });
-
-      // Correction: Passer l'UID de l'utilisateur actuel pour la génération du token
-      const token = await getAgoraToken(channelName, currentUser.uid);
-      await client.join(agoraConfig.appId, channelName, token, currentUser.uid);
-      
-      const tracks = isVideoCall
-        ? await AgoraRTC.createMicrophoneAndCameraTracks()
-        : [await AgoraRTC.createMicrophoneAudioTrack()];
-
-      // @ts-ignore
-      setLocalTracks(tracks);
-      setIsVideoMuted(!isVideoCall);
-
-      if (tracks.length > 1) {
-        (tracks[1] as ICameraVideoTrack).play('local-video');
-      }
-
-      await client.publish(tracks);
-
-    } catch (error: any) {
-      console.error('FATAL ERROR in joinChannel:', error);
-      toast({ title: "Erreur d'appel", description: error.message, variant: 'destructive' });
-      leaveCall(true);
-    }
-  }, [channelName, currentUser, toast, leaveCall]);
-
-  const leaveCall = useCallback(async (updateStatus: boolean) => {
-    for (const track of localTracks) {
-      track.stop();
-      track.close();
-    }
-    if (isJoinedRef.current) {
-        await client.leave();
-        isJoinedRef.current = false;
-    }
-    
-    if (updateStatus && channelName) {
-        const callDocRef = doc(db, 'calls', channelName);
-        await updateDoc(callDocRef, { status: 'ended' }).catch(e => console.error('Error ending call in db', e));
-    }
-    
-    setLocalTracks([]);
-    setRemoteUsers([]);
-    router.back();
-  }, [localTracks, channelName, router]);
+  }, [channelName, currentUser, router, toast, joinChannel, leaveCall, otherUserData]);
 
   const toggleAudio = async () => {
     if (localTracks[0]) {
