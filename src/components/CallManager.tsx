@@ -4,12 +4,12 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { getUserProfile } from '@/lib/firebase-actions';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Phone, Video, X } from 'lucide-react';
+import { Phone, PhoneOff, Video } from 'lucide-react';
 
 interface CallData {
   id: string;
@@ -29,7 +29,7 @@ export default function CallManager() {
   useEffect(() => {
     if (!currentUser) return;
 
-    const callsRef = collection(db, 'calls');
+    const callsRef = collection(db, 'calls';
     const q = query(callsRef, where('receiverId', '==', currentUser.uid), where('status', '==', 'ringing'));
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
@@ -86,22 +86,21 @@ export default function CallManager() {
                 </DialogHeader>
             </div>
 
-            <DialogFooter className="absolute bottom-24 left-0 right-0 px-8 w-full">
-                <div className="flex justify-between items-center w-full">
-                    <div className="flex flex-col items-center space-y-2">
-                        <Button variant="destructive" size="icon" className="rounded-full w-16 h-16" onClick={handleRejectCall}>
-                            <X className="h-8 w-8" />
-                        </Button>
-                        <span className="text-sm">Refuser</span>
-                    </div>
-                    <div className="flex flex-col items-center space-y-2">
-                        <Button variant="success" size="icon" className="rounded-full w-16 h-16 bg-green-500 hover:bg-green-600" onClick={handleAcceptCall}>
-                            {incomingCall.isVideo ? <Video className="h-8 w-8" /> : <Phone className="h-8 w-8" />}
-                        </Button>
-                        <span className="text-sm">Accepter</span>
-                    </div>
+            {/* Conteneur de boutons redessiné */}
+            <div className="absolute bottom-24 left-0 right-0 px-8 w-full">
+                <div className="flex justify-around items-center w-full">
+                    {/* Bouton Refuser (Rouge) */}
+                    <Button variant="destructive" size="icon" className="rounded-full w-20 h-20" onClick={handleRejectCall}>
+                        <PhoneOff className="h-10 w-10" />
+                    </Button>
+                    
+                    {/* Bouton Accepter (Vert) */}
+                    <Button variant="success" size="icon" className="rounded-full w-20 h-20 bg-green-500 hover:bg-green-600" onClick={handleAcceptCall}>
+                        {/* Affiche une icône vidéo ou téléphone selon le type d'appel */}
+                        {incomingCall.isVideo ? <Video className="h-10 w-10" /> : <Phone className="h-10 w-10" />}
+                    </Button>
                 </div>
-            </DialogFooter>
+            </div>
         </DialogContent>
     </Dialog>
   );
