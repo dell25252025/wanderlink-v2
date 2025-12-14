@@ -110,14 +110,28 @@ export default function CallPage() {
       const token = await getAgoraToken(channelName, currentUser.uid);
       await client.join(agoraConfig.appId, channelName, token, currentUser.uid);
       
+      // NOUVELLE STRATÉGIE : Sélection manuelle du haut-parleur
+      try {
+        console.log("Attempting to set speakerphone...");
+        const devices = await AgoraRTC.getPlaybackDevices();
+        console.log("Available playback devices:", devices);
+        const speakerDevice = devices.find(device => device.label.toLowerCase().includes('speaker'));
+        
+        if (speakerDevice) {
+          await AgoraRTC.setPlaybackDevice(speakerDevice.deviceId);
+          console.log("Successfully set playback device to speaker:", speakerDevice);
+        } else {
+          await AgoraRTC.setPlaybackDevice('default');
+          console.log("Could not find specific speaker device, set to 'default'.");
+        }
+      } catch (e) {
+        console.error("Failed to set playback device.", e);
+        toast({ title: "Avertissement", description: "Impossible de forcer le haut-parleur." });
+      }
+
       const tracks = isVideoCall
         ? await AgoraRTC.createMicrophoneAndCameraTracks()
         : [await AgoraRTC.createMicrophoneAudioTrack()];
-
-      // **CORRECTION : Appeler setEnableSpeakerphone sur la piste audio**
-      if (tracks[0]) {
-        await tracks[0].setEnableSpeakerphone(true);
-      }
 
       // @ts-ignore
       setLocalTracks(tracks);
