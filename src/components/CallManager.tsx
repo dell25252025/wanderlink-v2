@@ -86,6 +86,7 @@ export default function CallManager() {
                 </DialogHeader>
             </div>
 
+<<<<<<< HEAD
             <div className="absolute bottom-16 left-0 right-0 flex flex-row items-center justify-center gap-x-12">
               {/* Refuser */}
               <div className="flex flex-col items-center space-y-2">
@@ -115,6 +116,26 @@ export default function CallManager() {
                 </Button>
                 <span className="text-sm">Accepter</span>
               </div>
+=======
+            <div style={{
+                position: 'absolute',
+                bottom: '6rem',
+                left: 0,
+                right: 0,
+                width: '100%',
+                paddingLeft: '2rem',
+                paddingRight: '2rem',
+                display: 'flex',
+                justifyContent: 'space-around',
+                alignItems: 'center'
+            }}>
+                <Button variant="destructive" size="icon" className="rounded-full w-20 h-20" onClick={handleRejectCall}>
+                    <PhoneOff className="h-10 w-10" />
+                </Button>
+                <Button variant="success" size="icon" className="rounded-full w-20 h-20 bg-green-500 hover:bg-green-600" onClick={handleAcceptCall}>
+                    {incomingCall.isVideo ? <Video className="h-10 w-10" /> : <Phone className="h-10 w-10" />}
+                </Button>
+>>>>>>> 5b44efc8c962b3fd0cf1f9214b283f6f541b0a4e
             </div>
         </DialogContent>
     </Dialog>
