@@ -29,7 +29,7 @@ export default function CallManager() {
   useEffect(() => {
     if (!currentUser) return;
 
-    const callsRef = collection(db, 'calls';
+    const callsRef = collection(db, 'calls');
     const q = query(callsRef, where('receiverId', '==', currentUser.uid), where('status', '==', 'ringing'));
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
@@ -86,20 +86,24 @@ export default function CallManager() {
                 </DialogHeader>
             </div>
 
-            {/* Conteneur de boutons redessiné */}
-            <div className="absolute bottom-24 left-0 right-0 px-8 w-full">
-                <div className="flex justify-around items-center w-full">
-                    {/* Bouton Refuser (Rouge) */}
-                    <Button variant="destructive" size="icon" className="rounded-full w-20 h-20" onClick={handleRejectCall}>
-                        <PhoneOff className="h-10 w-10" />
-                    </Button>
-                    
-                    {/* Bouton Accepter (Vert) */}
-                    <Button variant="success" size="icon" className="rounded-full w-20 h-20 bg-green-500 hover:bg-green-600" onClick={handleAcceptCall}>
-                        {/* Affiche une icône vidéo ou téléphone selon le type d'appel */}
-                        {incomingCall.isVideo ? <Video className="h-10 w-10" /> : <Phone className="h-10 w-10" />}
-                    </Button>
-                </div>
+            <div style={{
+                position: 'absolute',
+                bottom: '6rem',
+                left: 0,
+                right: 0,
+                width: '100%',
+                paddingLeft: '2rem',
+                paddingRight: '2rem',
+                display: 'flex',
+                justifyContent: 'space-around',
+                alignItems: 'center'
+            }}>
+                <Button variant="destructive" size="icon" className="rounded-full w-20 h-20" onClick={handleRejectCall}>
+                    <PhoneOff className="h-10 w-10" />
+                </Button>
+                <Button variant="success" size="icon" className="rounded-full w-20 h-20 bg-green-500 hover:bg-green-600" onClick={handleAcceptCall}>
+                    {incomingCall.isVideo ? <Video className="h-10 w-10" /> : <Phone className="h-10 w-10" />}
+                </Button>
             </div>
         </DialogContent>
     </Dialog>
