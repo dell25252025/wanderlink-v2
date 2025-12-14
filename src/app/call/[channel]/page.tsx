@@ -61,8 +61,40 @@ export default function CallPage() {
 
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoMuted, setIsVideoMuted] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
  
   const isJoinedRef = useRef(false);
+  const earpieceDeviceId = useRef<string | null>(null);
+  const speakerDeviceId = useRef<string | null>(null);
+
+  // Fonction pour initialiser les périphériques et définir la sortie par défaut
+  const initializeAudioDevices = async (isVideoCall: boolean) => {
+    try {
+        const devices = await AgoraRTC.getPlaybackDevices();
+        const earpiece = devices.find(d => d.kind === 'audiooutput' && d.label.toLowerCase().includes('earpiece'));
+        const speaker = devices.find(d => d.kind === 'audiooutput' && d.label.toLowerCase().includes('speaker'));
+
+        earpieceDeviceId.current = earpiece?.deviceId || null;
+        // Utilise 'default' comme fallback solide pour le haut-parleur
+        speakerDeviceId.current = speaker?.deviceId || 'default'; 
+
+        if (isVideoCall) {
+            await client.setPlaybackDevice(speakerDeviceId.current!);
+            setIsSpeakerOn(true);
+        } else {
+            if (earpieceDeviceId.current) {
+                await client.setPlaybackDevice(earpieceDeviceId.current);
+                setIsSpeakerOn(false);
+            } else {
+                await client.setPlaybackDevice(speakerDeviceId.current!);
+                setIsSpeakerOn(true);
+            }
+        }
+    } catch (e) {
+        console.error("Failed to initialize or set audio device", e);
+        toast({ title: "Erreur Audio", description: "Impossible de définir le périphérique audio." })
+    }
+  };
 
   const leaveCall = useCallback(async (updateStatus: boolean) => {
     for (const track of localTracks) {
@@ -110,24 +142,8 @@ export default function CallPage() {
       const token = await getAgoraToken(channelName, currentUser.uid);
       await client.join(agoraConfig.appId, channelName, token, currentUser.uid);
       
-      // NOUVELLE STRATÉGIE : Sélection manuelle du haut-parleur
-      try {
-        console.log("Attempting to set speakerphone...");
-        const devices = await AgoraRTC.getPlaybackDevices();
-        console.log("Available playback devices:", devices);
-        const speakerDevice = devices.find(device => device.label.toLowerCase().includes('speaker'));
-        
-        if (speakerDevice) {
-          await AgoraRTC.setPlaybackDevice(speakerDevice.deviceId);
-          console.log("Successfully set playback device to speaker:", speakerDevice);
-        } else {
-          await AgoraRTC.setPlaybackDevice('default');
-          console.log("Could not find specific speaker device, set to 'default'.");
-        }
-      } catch (e) {
-        console.error("Failed to set playback device.", e);
-        toast({ title: "Avertissement", description: "Impossible de forcer le haut-parleur." });
-      }
+      // Initialise les périphériques audio ici
+      await initializeAudioDevices(isVideoCall);
 
       const tracks = isVideoCall
         ? await AgoraRTC.createMicrophoneAndCameraTracks()
@@ -204,6 +220,32 @@ export default function CallPage() {
       setIsVideoMuted(!isVideoMuted);
     }
   };
+
+  // Fonction de bascule remise en place
+  const toggleSpeaker = async () => {
+    try {
+      if (isSpeakerOn) {
+        // Passer à l'écouteur s'il existe
+        if (earpieceDeviceId.current) {
+          await client.setPlaybackDevice(earpieceDeviceId.current);
+          setIsSpeakerOn(false);
+        } else {
+          toast({ title: "Info", description: "Aucun écouteur détecté." });
+        }
+      } else {
+        // Passer au haut-parleur
+        if (speakerDeviceId.current) {
+          await client.setPlaybackDevice(speakerDeviceId.current);
+          setIsSpeakerOn(true);
+        } else {
+          toast({ title: "Erreur", description: "Aucun haut-parleur détecté.", variant: "destructive" });
+        }
+      }
+    } catch (error) {
+      console.error("Failed to switch audio output device", error);
+      toast({ title: "Erreur", description: "Impossible de changer de périphérique audio.", variant: "destructive" });
+    }
+  };
   
   if (!callData || !otherUserData) {
     return (
@@ -225,7 +267,7 @@ export default function CallPage() {
                     <h1 className="text-3xl font-bold">{otherUserData?.firstName}</h1>
                     <p className="text-lg text-white/70">Sonnerie en cours...</p>
                 </div>
-                <CallControls onHangUp={() => leaveCall(true)} isRinging={true} onToggleMic={()=>{}} onToggleCamera={()=>{}} isMicMuted={false} isCameraOff={false} />
+                <CallControls onHangUp={() => leaveCall(true)} isRinging={true} onToggleMic={()=>{}} onToggleCamera={()=>{}} onToggleSpeaker={()=>{}} isMicMuted={false} isCameraOff={false} isSpeakerOn={false} />
           </div>
       )
   }
@@ -262,8 +304,10 @@ export default function CallPage() {
           onHangUp={() => leaveCall(true)}
           onToggleMic={toggleAudio}
           onToggleCamera={toggleVideo}
+          onToggleSpeaker={toggleSpeaker}
           isMicMuted={isAudioMuted}
           isCameraOff={isVideoMuted}
+          isSpeakerOn={isSpeakerOn}
           isVideoCall={callData.isVideo}
         />
     </div>
