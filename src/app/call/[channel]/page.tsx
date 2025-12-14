@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser, type MediaDeviceInfo } from 'agora-rtc-sdk-ng';
+import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
@@ -15,8 +15,10 @@ import { getUserProfile } from '@/lib/firebase-actions';
 import { Loader2 } from 'lucide-react';
 import CallControls from '@/components/CallControls';
 
+// On garde une seule instance du client Agora
 const client: IAgoraRTCClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
 
+// La fonction pour obtenir le token reste inchangée
 const getAgoraToken = async (channelName: string, uid: string) => {
   const user = auth.currentUser;
   if (!user) throw new Error('User not authenticated for token generation.');
@@ -59,36 +61,13 @@ export default function CallPage() {
   const [callData, setCallData] = useState<CallData | null>(null);
   const [otherUserData, setOtherUserData] = useState<any>(null);
 
+  // Simplification des états : on enlève la gestion du haut-parleur
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoMuted, setIsVideoMuted] = useState(false);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(false); // Initial à false (écouteur)
  
   const isJoinedRef = useRef(false);
-  const earpieceDeviceId = useRef<string | null>(null);
-  const speakerDeviceId = useRef<string | null>(null);
 
-  const setEarpieceAsDefault = async () => {
-      try {
-          const devices = await AgoraRTC.getPlaybackDevices();
-          const earpiece = devices.find(d => d.kind === 'audiooutput' && (d.label.toLowerCase().includes('earpiece') || d.label.toLowerCase().includes('écouteur')));
-          const speaker = devices.find(d => d.kind === 'audiooutput' && d.label.toLowerCase().includes('speaker'));
-          
-          earpieceDeviceId.current = earpiece ? earpiece.deviceId : null;
-          speakerDeviceId.current = speaker ? speaker.deviceId : 'default'; // 'default' est souvent le haut-parleur
-
-          if (earpieceDeviceId.current) {
-              await client.setPlaybackDevice(earpieceDeviceId.current);
-              setIsSpeakerOn(false);
-          } else {
-               // Si pas d'écouteur trouvé, on reste sur le défaut (souvent le HP)
-              await client.setPlaybackDevice(speakerDeviceId.current!);
-              setIsSpeakerOn(true);
-          }
-      } catch (e) {
-          console.error("Failed to set initial audio device", e);
-      }
-  }
-
+  // La fonction pour quitter l'appel est simplifiée
   const leaveCall = useCallback(async (updateStatus: boolean) => {
     for (const track of localTracks) {
       track.stop();
@@ -109,6 +88,7 @@ export default function CallPage() {
     router.back();
   }, [localTracks, channelName, router]);
 
+  // La fonction pour rejoindre le canal est simplifiée
   const joinChannel = useCallback(async (isVideoCall: boolean) => {
     if (!channelName || !currentUser || isJoinedRef.current) return;
 
@@ -135,8 +115,9 @@ export default function CallPage() {
       const token = await getAgoraToken(channelName, currentUser.uid);
       await client.join(agoraConfig.appId, channelName, token, currentUser.uid);
       
-      // Activer l'écouteur par défaut
-      await setEarpieceAsDefault();
+      // **LA CORRECTION PRINCIPALE : On force le haut-parleur**
+      // Cette méthode est plus fiable que setPlaybackDevice
+      await client.setEnableSpeakerphone(true);
 
       const tracks = isVideoCall
         ? await AgoraRTC.createMicrophoneAndCameraTracks()
@@ -159,6 +140,7 @@ export default function CallPage() {
     }
   }, [channelName, currentUser, toast, leaveCall]);
 
+  // Le useEffect pour gérer l'état de l'appel reste globalement le même
   useEffect(() => {
     if (!channelName || !currentUser) return;
 
@@ -199,6 +181,7 @@ export default function CallPage() {
     return () => unsubscribe();
   }, [channelName, currentUser, router, toast, joinChannel, leaveCall, otherUserData]);
 
+  // Les fonctions de toggle sont conservées
   const toggleAudio = async () => {
     if (localTracks[0]) {
       await localTracks[0].setMuted(!isAudioMuted);
@@ -214,29 +197,7 @@ export default function CallPage() {
     }
   };
   
-  const toggleSpeaker = async () => {
-    try {
-        if (isSpeakerOn) {
-            if (earpieceDeviceId.current) {
-                await client.setPlaybackDevice(earpieceDeviceId.current);
-                setIsSpeakerOn(false);
-            } else {
-                toast({title: "Info", description: "Aucun écouteur détecté.", variant: "default"});
-            }
-        } else {
-            if (speakerDeviceId.current) {
-                await client.setPlaybackDevice(speakerDeviceId.current);
-                setIsSpeakerOn(true);
-            } else {
-                 toast({title: "Erreur", description: "Aucun haut-parleur détecté.", variant: "destructive"});
-            }
-        }
-    } catch (error) {
-        console.error("Failed to switch audio output device", error);
-        toast({title: "Erreur", description: "Impossible de changer de périphérique audio.", variant: "destructive"});
-    }
-  };
-
+  // Le reste du rendu JSX est simplifié pour correspondre aux changements
   if (!callData || !otherUserData) {
     return (
         <div className="flex h-screen w-full flex-col items-center justify-center bg-gray-900 text-white">
@@ -257,7 +218,8 @@ export default function CallPage() {
                     <h1 className="text-3xl font-bold">{otherUserData?.firstName}</h1>
                     <p className="text-lg text-white/70">Sonnerie en cours...</p>
                 </div>
-                <CallControls onHangUp={() => leaveCall(true)} isRinging={true} onToggleMic={()=>{}} onToggleCamera={()=>{}} onToggleSpeaker={()=>{}} isMicMuted={false} isCameraOff={false} isSpeakerOn={false} />
+                {/* Les props pour le haut-parleur sont enlevées ici */}
+                <CallControls onHangUp={() => leaveCall(true)} isRinging={true} onToggleMic={()=>{}} onToggleCamera={()=>{}} isMicMuted={false} isCameraOff={false} />
           </div>
       )
   }
@@ -290,14 +252,13 @@ export default function CallPage() {
             </div>
         )}
 
+        {/* Les props pour le haut-parleur sont enlevées ici aussi */}
         <CallControls
           onHangUp={() => leaveCall(true)}
           onToggleMic={toggleAudio}
           onToggleCamera={toggleVideo}
-          onToggleSpeaker={toggleSpeaker}
           isMicMuted={isAudioMuted}
           isCameraOff={isVideoMuted}
-          isSpeakerOn={isSpeakerOn}
           isVideoCall={callData.isVideo}
         />
     </div>
