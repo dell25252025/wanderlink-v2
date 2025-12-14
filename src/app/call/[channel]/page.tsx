@@ -15,10 +15,8 @@ import { getUserProfile } from '@/lib/firebase-actions';
 import { Loader2 } from 'lucide-react';
 import CallControls from '@/components/CallControls';
 
-// On garde une seule instance du client Agora
 const client: IAgoraRTCClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
 
-// La fonction pour obtenir le token reste inchangée
 const getAgoraToken = async (channelName: string, uid: string) => {
   const user = auth.currentUser;
   if (!user) throw new Error('User not authenticated for token generation.');
@@ -61,13 +59,11 @@ export default function CallPage() {
   const [callData, setCallData] = useState<CallData | null>(null);
   const [otherUserData, setOtherUserData] = useState<any>(null);
 
-  // Simplification des états : on enlève la gestion du haut-parleur
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoMuted, setIsVideoMuted] = useState(false);
  
   const isJoinedRef = useRef(false);
 
-  // La fonction pour quitter l'appel est simplifiée
   const leaveCall = useCallback(async (updateStatus: boolean) => {
     for (const track of localTracks) {
       track.stop();
@@ -88,7 +84,6 @@ export default function CallPage() {
     router.back();
   }, [localTracks, channelName, router]);
 
-  // La fonction pour rejoindre le canal est simplifiée
   const joinChannel = useCallback(async (isVideoCall: boolean) => {
     if (!channelName || !currentUser || isJoinedRef.current) return;
 
@@ -115,13 +110,14 @@ export default function CallPage() {
       const token = await getAgoraToken(channelName, currentUser.uid);
       await client.join(agoraConfig.appId, channelName, token, currentUser.uid);
       
-      // **LA CORRECTION PRINCIPALE : On force le haut-parleur**
-      // Cette méthode est plus fiable que setPlaybackDevice
-      await client.setEnableSpeakerphone(true);
-
       const tracks = isVideoCall
         ? await AgoraRTC.createMicrophoneAndCameraTracks()
         : [await AgoraRTC.createMicrophoneAudioTrack()];
+
+      // **CORRECTION : Appeler setEnableSpeakerphone sur la piste audio**
+      if (tracks[0]) {
+        await tracks[0].setEnableSpeakerphone(true);
+      }
 
       // @ts-ignore
       setLocalTracks(tracks);
@@ -135,12 +131,11 @@ export default function CallPage() {
 
     } catch (error: any) {
       console.error('FATAL ERROR in joinChannel:', error);
-      toast({ title: "Erreur d'appel", description: error.message, variant: 'destructive' });
+      toast({ title: "Erreur d\'appel", description: error.message, variant: 'destructive' });
       leaveCall(true);
     }
   }, [channelName, currentUser, toast, leaveCall]);
 
-  // Le useEffect pour gérer l'état de l'appel reste globalement le même
   useEffect(() => {
     if (!channelName || !currentUser) return;
 
@@ -181,7 +176,6 @@ export default function CallPage() {
     return () => unsubscribe();
   }, [channelName, currentUser, router, toast, joinChannel, leaveCall, otherUserData]);
 
-  // Les fonctions de toggle sont conservées
   const toggleAudio = async () => {
     if (localTracks[0]) {
       await localTracks[0].setMuted(!isAudioMuted);
@@ -197,7 +191,6 @@ export default function CallPage() {
     }
   };
   
-  // Le reste du rendu JSX est simplifié pour correspondre aux changements
   if (!callData || !otherUserData) {
     return (
         <div className="flex h-screen w-full flex-col items-center justify-center bg-gray-900 text-white">
@@ -218,7 +211,6 @@ export default function CallPage() {
                     <h1 className="text-3xl font-bold">{otherUserData?.firstName}</h1>
                     <p className="text-lg text-white/70">Sonnerie en cours...</p>
                 </div>
-                {/* Les props pour le haut-parleur sont enlevées ici */}
                 <CallControls onHangUp={() => leaveCall(true)} isRinging={true} onToggleMic={()=>{}} onToggleCamera={()=>{}} isMicMuted={false} isCameraOff={false} />
           </div>
       )
@@ -252,7 +244,6 @@ export default function CallPage() {
             </div>
         )}
 
-        {/* Les props pour le haut-parleur sont enlevées ici aussi */}
         <CallControls
           onHangUp={() => leaveCall(true)}
           onToggleMic={toggleAudio}
