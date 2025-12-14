@@ -75,24 +75,23 @@ export default function CallPage() {
         const speaker = devices.find(d => d.kind === 'audiooutput' && d.label.toLowerCase().includes('speaker'));
 
         earpieceDeviceId.current = earpiece?.deviceId || null;
-        // Utilise 'default' comme fallback solide pour le haut-parleur
         speakerDeviceId.current = speaker?.deviceId || 'default'; 
 
         if (isVideoCall) {
-            await client.setPlaybackDevice(speakerDeviceId.current!);
+            await AgoraRTC.setPlaybackDevice(speakerDeviceId.current!);
             setIsSpeakerOn(true);
         } else {
             if (earpieceDeviceId.current) {
-                await client.setPlaybackDevice(earpieceDeviceId.current);
+                await AgoraRTC.setPlaybackDevice(earpieceDeviceId.current);
                 setIsSpeakerOn(false);
             } else {
-                await client.setPlaybackDevice(speakerDeviceId.current!);
+                await AgoraRTC.setPlaybackDevice(speakerDeviceId.current!);
                 setIsSpeakerOn(true);
             }
         }
     } catch (e) {
         console.error("Failed to initialize or set audio device", e);
-        toast({ title: "Erreur Audio", description: "Impossible de définir le périphérique audio." })
+        toast({ title: "Erreur Audio", description: "Impossible de définir le périphérique audio.", variant: 'destructive' })
     }
   };
 
@@ -142,7 +141,6 @@ export default function CallPage() {
       const token = await getAgoraToken(channelName, currentUser.uid);
       await client.join(agoraConfig.appId, channelName, token, currentUser.uid);
       
-      // Initialise les périphériques audio ici
       await initializeAudioDevices(isVideoCall);
 
       const tracks = isVideoCall
@@ -221,21 +219,18 @@ export default function CallPage() {
     }
   };
 
-  // Fonction de bascule remise en place
   const toggleSpeaker = async () => {
     try {
       if (isSpeakerOn) {
-        // Passer à l'écouteur s'il existe
         if (earpieceDeviceId.current) {
-          await client.setPlaybackDevice(earpieceDeviceId.current);
+          await AgoraRTC.setPlaybackDevice(earpieceDeviceId.current);
           setIsSpeakerOn(false);
         } else {
           toast({ title: "Info", description: "Aucun écouteur détecté." });
         }
       } else {
-        // Passer au haut-parleur
         if (speakerDeviceId.current) {
-          await client.setPlaybackDevice(speakerDeviceId.current);
+          await AgoraRTC.setPlaybackDevice(speakerDeviceId.current);
           setIsSpeakerOn(true);
         } else {
           toast({ title: "Erreur", description: "Aucun haut-parleur détecté.", variant: "destructive" });
