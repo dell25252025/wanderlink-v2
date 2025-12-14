@@ -61,39 +61,8 @@ export default function CallPage() {
 
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoMuted, setIsVideoMuted] = useState(false);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
  
   const isJoinedRef = useRef(false);
-  const earpieceDeviceId = useRef<string | null>(null);
-  const speakerDeviceId = useRef<string | null>(null);
-
-  // Fonction pour initialiser les périphériques et définir la sortie par défaut
-  const initializeAudioDevices = async (isVideoCall: boolean) => {
-    try {
-        const devices = await AgoraRTC.getPlaybackDevices();
-        const earpiece = devices.find(d => d.kind === 'audiooutput' && d.label.toLowerCase().includes('earpiece'));
-        const speaker = devices.find(d => d.kind === 'audiooutput' && d.label.toLowerCase().includes('speaker'));
-
-        earpieceDeviceId.current = earpiece?.deviceId || null;
-        speakerDeviceId.current = speaker?.deviceId || 'default'; 
-
-        if (isVideoCall) {
-            await AgoraRTC.setPlaybackDevice(speakerDeviceId.current!);
-            setIsSpeakerOn(true);
-        } else {
-            if (earpieceDeviceId.current) {
-                await AgoraRTC.setPlaybackDevice(earpieceDeviceId.current);
-                setIsSpeakerOn(false);
-            } else {
-                await AgoraRTC.setPlaybackDevice(speakerDeviceId.current!);
-                setIsSpeakerOn(true);
-            }
-        }
-    } catch (e) {
-        console.error("Failed to initialize or set audio device", e);
-        toast({ title: "Erreur Audio", description: "Impossible de définir le périphérique audio.", variant: 'destructive' })
-    }
-  };
 
   const leaveCall = useCallback(async (updateStatus: boolean) => {
     for (const track of localTracks) {
@@ -140,8 +109,6 @@ export default function CallPage() {
 
       const token = await getAgoraToken(channelName, currentUser.uid);
       await client.join(agoraConfig.appId, channelName, token, currentUser.uid);
-      
-      await initializeAudioDevices(isVideoCall);
 
       const tracks = isVideoCall
         ? await AgoraRTC.createMicrophoneAndCameraTracks()
@@ -218,29 +185,6 @@ export default function CallPage() {
       setIsVideoMuted(!isVideoMuted);
     }
   };
-
-  const toggleSpeaker = async () => {
-    try {
-      if (isSpeakerOn) {
-        if (earpieceDeviceId.current) {
-          await AgoraRTC.setPlaybackDevice(earpieceDeviceId.current);
-          setIsSpeakerOn(false);
-        } else {
-          toast({ title: "Info", description: "Aucun écouteur détecté." });
-        }
-      } else {
-        if (speakerDeviceId.current) {
-          await AgoraRTC.setPlaybackDevice(speakerDeviceId.current);
-          setIsSpeakerOn(true);
-        } else {
-          toast({ title: "Erreur", description: "Aucun haut-parleur détecté.", variant: "destructive" });
-        }
-      }
-    } catch (error) {
-      console.error("Failed to switch audio output device", error);
-      toast({ title: "Erreur", description: "Impossible de changer de périphérique audio.", variant: "destructive" });
-    }
-  };
   
   if (!callData || !otherUserData) {
     return (
@@ -262,7 +206,7 @@ export default function CallPage() {
                     <h1 className="text-3xl font-bold">{otherUserData?.firstName}</h1>
                     <p className="text-lg text-white/70">Sonnerie en cours...</p>
                 </div>
-                <CallControls onHangUp={() => leaveCall(true)} isRinging={true} onToggleMic={()=>{}} onToggleCamera={()=>{}} onToggleSpeaker={()=>{}} isMicMuted={false} isCameraOff={false} isSpeakerOn={false} />
+                <CallControls onHangUp={() => leaveCall(true)} isRinging={true} onToggleMic={()=>{}} onToggleCamera={()=>{}} isMicMuted={false} isCameraOff={false} />
           </div>
       )
   }
@@ -299,10 +243,8 @@ export default function CallPage() {
           onHangUp={() => leaveCall(true)}
           onToggleMic={toggleAudio}
           onToggleCamera={toggleVideo}
-          onToggleSpeaker={toggleSpeaker}
           isMicMuted={isAudioMuted}
           isCameraOff={isVideoMuted}
-          isSpeakerOn={isSpeakerOn}
           isVideoCall={callData.isVideo}
         />
     </div>
