@@ -37,7 +37,6 @@ export default function CallManager() {
         const callDoc = snapshot.docs[0];
         const callData = { id: callDoc.id, ...callDoc.data() } as CallData;
         
-        // Eviter de montrer la notif si on est deja en appel
         if(window.location.pathname.startsWith('/call/')) return;
 
         setIncomingCall(callData);
@@ -87,18 +86,20 @@ export default function CallManager() {
                 </DialogHeader>
             </div>
 
-            <DialogFooter className="absolute bottom-16 left-0 right-0 flex items-center justify-center gap-x-8">
-                <div className="flex flex-col items-center space-y-2">
-                    <Button variant="destructive" size="icon" className="rounded-full w-16 h-16" onClick={handleRejectCall}>
-                        <X className="h-8 w-8" />
-                    </Button>
-                    <span className="text-sm">Refuser</span>
-                </div>
-                <div className="flex flex-col items-center space-y-2">
-                    <Button variant="success" size="icon" className="rounded-full w-16 h-16 bg-green-500 hover:bg-green-600" onClick={handleAcceptCall}>
-                        {incomingCall.isVideo ? <Video className="h-8 w-8" /> : <Phone className="h-8 w-8" />}
-                    </Button>
-                    <span className="text-sm">Accepter</span>
+            <DialogFooter className="absolute bottom-24 left-0 right-0 px-8 w-full">
+                <div className="flex justify-between items-center w-full">
+                    <div className="flex flex-col items-center space-y-2">
+                        <Button variant="destructive" size="icon" className="rounded-full w-16 h-16" onClick={handleRejectCall}>
+                            <X className="h-8 w-8" />
+                        </Button>
+                        <span className="text-sm">Refuser</span>
+                    </div>
+                    <div className="flex flex-col items-center space-y-2">
+                        <Button variant="success" size="icon" className="rounded-full w-16 h-16 bg-green-500 hover:bg-green-600" onClick={handleAcceptCall}>
+                            {incomingCall.isVideo ? <Video className="h-8 w-8" /> : <Phone className="h-8 w-8" />}
+                        </Button>
+                        <span className="text-sm">Accepter</span>
+                    </div>
                 </div>
             </DialogFooter>
         </DialogContent>
