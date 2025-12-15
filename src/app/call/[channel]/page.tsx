@@ -16,6 +16,8 @@ import { Loader2 } from 'lucide-react';
 import CallControls from '@/components/CallControls';
 
 const client: IAgoraRTCClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+const ringingSound = new Audio('https://ik.imagekit.io/fip3ktm2p/telephone-tonalite-Europe-retour-appel-425Hz.mp3');
+ringingSound.loop = true;
 
 const getAgoraToken = async (channelName: string, uid: string) => {
   const user = auth.currentUser;
@@ -69,6 +71,9 @@ export default function CallPage() {
     if (isLeavingRef.current) return;
     isLeavingRef.current = true;
 
+    ringingSound.pause();
+    ringingSound.currentTime = 0;
+
     try {
         for (const track of localTracks) {
             track.stop();
@@ -98,6 +103,8 @@ export default function CallPage() {
 
     try {
       isJoinedRef.current = true; 
+      ringingSound.pause();
+      ringingSound.currentTime = 0;
 
       client.on('user-published', async (user, mediaType) => {
         await client.subscribe(user, mediaType);
@@ -149,6 +156,13 @@ export default function CallPage() {
       if (doc.exists()) {
         const data = doc.data() as CallData;
         setCallData(data);
+        
+        if (data.status === 'ringing' && data.callerId === currentUser.uid) {
+            ringingSound.play().catch(e => console.error("Ringing sound play failed", e));
+        } else {
+            ringingSound.pause();
+            ringingSound.currentTime = 0;
+        }
 
         if (!otherUserData) {
             const otherId = data.callerId === currentUser.uid ? data.receiverId : data.callerId;
@@ -177,7 +191,11 @@ export default function CallPage() {
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+        unsubscribe();
+        ringingSound.pause();
+        ringingSound.currentTime = 0;
+    }
   }, [channelName, currentUser, router, toast, joinChannel, leaveCall, otherUserData]);
 
   const toggleAudio = async () => {
