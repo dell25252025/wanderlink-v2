@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
@@ -10,10 +10,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Phone, Video, X } from 'lucide-react';
-
-// Sonnerie pour les appels entrants
-const incomingCallSound = new Audio('https://ik.imagekit.io/fip3ktm2p/ringtone-023-376906.mp3');
-incomingCallSound.loop = true;
 
 interface CallData {
   id: string;
@@ -29,19 +25,20 @@ export default function CallManager() {
   const [incomingCall, setIncomingCall] = useState<CallData | null>(null);
   const [callerProfile, setCallerProfile] = useState<any>(null);
   const router = useRouter();
+  const audioRef = useRef<HTMLAudioElement>(null);
 
-  // Gérer la lecture de la sonnerie
   useEffect(() => {
-    if (incomingCall) {
-      incomingCallSound.play().catch(e => console.error("Erreur de lecture de la sonnerie:", e));
-    } else {
-      incomingCallSound.pause();
-      incomingCallSound.currentTime = 0;
+    if (incomingCall && audioRef.current) {
+      audioRef.current.play().catch(e => console.error("Erreur de lecture de la sonnerie:", e));
+    } else if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
     }
-    // Nettoyage au démontage
     return () => {
-      incomingCallSound.pause();
-      incomingCallSound.currentTime = 0;
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
     };
   }, [incomingCall]);
 
@@ -76,7 +73,7 @@ export default function CallManager() {
     if (!incomingCall) return;
     const callDocRef = doc(db, 'calls', incomingCall.id);
     await updateDoc(callDocRef, { status: 'active' });
-    setIncomingCall(null); // Esto detendrá la sonería via useEffect
+    setIncomingCall(null);
     router.push(`/call/${incomingCall.id}?type=${incomingCall.isVideo ? 'video' : 'audio'}`);
   }, [incomingCall, router]);
 
@@ -84,7 +81,7 @@ export default function CallManager() {
     if (!incomingCall) return;
     const callDocRef = doc(db, 'calls', incomingCall.id);
     await updateDoc(callDocRef, { status: 'rejected' });
-    setIncomingCall(null); // Esto detendrá la sonería via useEffect
+    setIncomingCall(null);
   }, [incomingCall]);
 
   if (!incomingCall || !callerProfile) {
@@ -94,6 +91,7 @@ export default function CallManager() {
   return (
     <Dialog open={!!incomingCall} onOpenChange={(isOpen) => !isOpen && handleRejectCall()}>
         <DialogContent className="p-0 m-0 w-full h-full max-w-full max-h-screen bg-gray-900 text-white border-0 flex flex-col items-center justify-center">
+            <audio ref={audioRef} src="https://ik.imagekit.io/fip3ktm2p/ringtone-023-376906.mp3" loop />
             <div className="flex flex-col items-center justify-center text-center space-y-4 pt-12">
                 <Avatar className="w-24 h-24 border-4 border-white/20">
                     <AvatarImage src={callerProfile?.profilePictures?.[0]} />
