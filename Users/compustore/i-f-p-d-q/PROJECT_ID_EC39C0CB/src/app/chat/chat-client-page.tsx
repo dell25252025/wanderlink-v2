@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -431,9 +432,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
             {otherUserIsVerified && <CheckCircle className="h-3.5 w-3.5 text-blue-500 shrink-0" />}
           </div>
         </Link>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleStartCall(false)}>
-          <Phone className="h-4 w-4" />
-        </Button>
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleStartCall(true)}>
           <Video className="h-4 w-4" />
         </Button>
