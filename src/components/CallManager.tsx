@@ -91,7 +91,7 @@ export default function CallManager() {
   return (
     <Dialog open={!!incomingCall} onOpenChange={(isOpen) => !isOpen && handleRejectCall()}>
         <DialogContent className="p-0 m-0 w-full h-full max-w-full max-h-screen bg-gray-900 text-white border-0 flex flex-col items-center justify-center">
-            <audio ref={audioRef} src="https://ik.imagekit.io/fip3ktm2p/ringtone-023-376906.mp3" loop />
+            <audio ref={audioRef} src="https://ik.imagekit.io/fip3ktm2p/ringtone-023-376906.mp3" loop playsInline />
             <div className="flex flex-col items-center justify-center text-center space-y-4 pt-12">
                 <Avatar className="w-24 h-24 border-4 border-white/20">
                     <AvatarImage src={callerProfile?.profilePictures?.[0]} />
