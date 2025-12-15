@@ -86,7 +86,7 @@ export function CallManager() { // Changement ici: export nommé
                 </DialogHeader>
             </div>
 
-            <DialogFooter className="absolute bottom-16 left-0 right-0 flex items-center justify-center gap-x-8">
+            <DialogFooter className="absolute bottom-16 left-0 right-0 flex flex-row items-center justify-around w-full">
                 <div className="flex flex-col items-center space-y-2">
                     <Button variant="destructive" size="icon" className="rounded-full w-16 h-16" onClick={handleRejectCall}>
                         <X className="h-8 w-8" />
