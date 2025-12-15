@@ -4,12 +4,16 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { getUserProfile } from '@/lib/firebase-actions';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Phone, Video, X } from 'lucide-react';
+
+// Sonnerie pour les appels entrants
+const incomingCallSound = new Audio('https://ik.imagekit.io/fip3ktm2p/ringtone-023-376906.mp3');
+incomingCallSound.loop = true;
 
 interface CallData {
   id: string;
@@ -26,6 +30,21 @@ export default function CallManager() {
   const [callerProfile, setCallerProfile] = useState<any>(null);
   const router = useRouter();
 
+  // Gérer la lecture de la sonnerie
+  useEffect(() => {
+    if (incomingCall) {
+      incomingCallSound.play().catch(e => console.error("Erreur de lecture de la sonnerie:", e));
+    } else {
+      incomingCallSound.pause();
+      incomingCallSound.currentTime = 0;
+    }
+    // Nettoyage au démontage
+    return () => {
+      incomingCallSound.pause();
+      incomingCallSound.currentTime = 0;
+    };
+  }, [incomingCall]);
+
   useEffect(() => {
     if (!currentUser) return;
 
@@ -37,12 +56,13 @@ export default function CallManager() {
         const callDoc = snapshot.docs[0];
         const callData = { id: callDoc.id, ...callDoc.data() } as CallData;
         
-        // Eviter de montrer la notif si on est deja en appel
         if(window.location.pathname.startsWith('/call/')) return;
 
         setIncomingCall(callData);
-        const profile = await getUserProfile(callData.callerId);
-        setCallerProfile(profile);
+        if (!callerProfile) {
+            const profile = await getUserProfile(callData.callerId);
+            setCallerProfile(profile);
+        }
       } else {
         setIncomingCall(null);
         setCallerProfile(null);
@@ -50,13 +70,13 @@ export default function CallManager() {
     });
 
     return () => unsubscribe();
-  }, [currentUser]);
+  }, [currentUser, callerProfile]);
 
   const handleAcceptCall = useCallback(async () => {
     if (!incomingCall) return;
     const callDocRef = doc(db, 'calls', incomingCall.id);
     await updateDoc(callDocRef, { status: 'active' });
-    setIncomingCall(null);
+    setIncomingCall(null); // Esto detendrá la sonería via useEffect
     router.push(`/call/${incomingCall.id}?type=${incomingCall.isVideo ? 'video' : 'audio'}`);
   }, [incomingCall, router]);
 
@@ -64,7 +84,7 @@ export default function CallManager() {
     if (!incomingCall) return;
     const callDocRef = doc(db, 'calls', incomingCall.id);
     await updateDoc(callDocRef, { status: 'rejected' });
-    setIncomingCall(null);
+    setIncomingCall(null); // Esto detendrá la sonería via useEffect
   }, [incomingCall]);
 
   if (!incomingCall || !callerProfile) {
