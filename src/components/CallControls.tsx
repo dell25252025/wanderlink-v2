@@ -1,20 +1,18 @@
 
 import React from 'react';
 
-// Ajout des nouvelles props pour le haut-parleur
+// Props updated to remove speaker controls
 interface CallControlsProps {
   onHangUp: () => void;
   onToggleMic: () => void;
   onToggleCamera: () => void;
-  onToggleSpeaker: () => void; // Nouvelle prop
   isMicMuted: boolean;
   isCameraOff: boolean;
-  isSpeakerOn: boolean; // Nouvelle prop
-  isRinging?: boolean; // Prop optionnelle pour la sonnerie
-  isVideoCall?: boolean; // Savoir si c'est un appel vidéo
+  isRinging?: boolean;
+  isVideoCall?: boolean;
 }
 
-// --- Icônes SVG ---
+// --- SVG Icons ---
 const MicOnIcon = () => (
   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
 );
@@ -37,37 +35,24 @@ const HangUpIcon = () => (
     </svg>
 );
 
-
-// Nouvelle icône pour le haut-parleur
-const SpeakerOnIcon = () => (
-    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M9.25 4.25a.75.75 0 01.75.75v10a.75.75 0 01-1.5 0V5a.75.75 0 01.75-.75zm-3.5 3.5a.75.75 0 000 1.5h1.5a.75.75 0 000-1.5H5.75zM4.25 12a.75.75 0 01.75-.75h1.5a.75.75 0 010 1.5H5a.75.75 0 01-.75-.75zm5-5a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5H9.25zM9.25 12a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5H9.25z" /></svg>
-);
-
-const SpeakerOffIcon = () => (
-    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.22 5.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L11.94 11 8.22 7.28a.75.75 0 010-1.06z" clipRule="evenodd" transform="matrix(-1 0 0 1 20 0)" /></svg>
-
-);
-
 export const CallControls: React.FC<CallControlsProps> = ({
   onHangUp,
   onToggleMic,
   onToggleCamera,
-  onToggleSpeaker,
   isMicMuted,
   isCameraOff,
-  isSpeakerOn,
   isRinging,
   isVideoCall,
 }) => {
   const ControlButton = ({ onClick, children, active, ariaLabel, danger, size = 'w-14 h-14' }: any) => (
     <button
         onClick={onClick}
-        className={`${size} flex items-center justify-center rounded-full transition-all duration-300 text-white 
+        className={`${size} flex items-center justify-center rounded-full transition-all duration-300 text-white
                     ${
-                      danger 
-                        ? 'bg-red-500 hover:bg-red-600' 
-                        : active 
-                          ? 'bg-white/40 hover:bg-white/50' 
+                      danger
+                        ? 'bg-red-500 hover:bg-red-600'
+                        : active
+                          ? 'bg-white/40 hover:bg-white/50'
                           : 'bg-white/20 hover:bg-white/30'
                     }`}
         aria-label={ariaLabel}
@@ -88,22 +73,16 @@ export const CallControls: React.FC<CallControlsProps> = ({
     <div className="fixed bottom-16 left-0 right-0 p-4 z-50">
       <div className="max-w-md mx-auto bg-black/30 backdrop-blur-sm rounded-full shadow-lg">
         <div className="flex justify-evenly items-center p-2">
-          
-          {/* Ordre corrigé : Micro, Caméra, Haut-parleur, Raccrocher */}
-          
+
           <ControlButton onClick={onToggleMic} active={!isMicMuted} ariaLabel={isMicMuted ? 'Unmute' : 'Mute'}>
             {isMicMuted ? <MicOffIcon /> : <MicOnIcon />}
           </ControlButton>
 
           {isVideoCall && (
             <ControlButton onClick={onToggleCamera} active={!isCameraOff} ariaLabel={isCameraOff ? 'Camera On' : 'Camera Off'}>
-              {isCameraOff ? <CameraOffIcon /> : <CameraOnIcon />}
+              {isCameraOff ? <CameraOnIcon /> : <CameraOnIcon />}
             </ControlButton>
           )}
-          
-          <ControlButton onClick={onToggleSpeaker} active={isSpeakerOn} ariaLabel={isSpeakerOn ? 'Speaker Off' : 'Speaker On'}>
-            {isSpeakerOn ? <SpeakerOnIcon /> : <SpeakerOffIcon />}
-          </ControlButton>
 
           <ControlButton onClick={onHangUp} danger ariaLabel="Hang Up" size="w-16 h-16">
             <HangUpIcon />
