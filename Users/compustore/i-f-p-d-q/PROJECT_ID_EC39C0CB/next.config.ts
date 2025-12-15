@@ -9,11 +9,6 @@ const nextConfig = {
   devIndicators: {
     buildActivity: false,
   },
-  experimental: {
-    // This allows the Next.js dev server to accept requests from the
-    // Firebase Studio web preview and the Android emulator.
-    allowedDevOrigins: ["https://*.cloudworkstations.dev", "http://*.localhost", "http://localhost"],
-  },
   images: {
     unoptimized: true,
     remotePatterns: [
@@ -30,7 +25,7 @@ const nextConfig = {
         pathname: '/**',
       },
       {
-        protocol: 'https://',
+        protocol: 'https',
         hostname: 'firebasestorage.googleapis.com',
         port: '',
         pathname: '/**',
