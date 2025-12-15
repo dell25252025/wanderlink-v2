@@ -63,26 +63,35 @@ export default function CallPage() {
   const [isVideoMuted, setIsVideoMuted] = useState(false);
  
   const isJoinedRef = useRef(false);
+  const isLeavingRef = useRef(false);
 
   const leaveCall = useCallback(async (updateStatus: boolean) => {
-    for (const track of localTracks) {
-      track.stop();
-      track.close();
+    if (isLeavingRef.current) return;
+    isLeavingRef.current = true;
+
+    try {
+        for (const track of localTracks) {
+            track.stop();
+            track.close();
+        }
+        if (isJoinedRef.current) {
+            await client.leave();
+            isJoinedRef.current = false;
+        }
+        
+        if (updateStatus && channelName) {
+            const callDocRef = doc(db, 'calls', channelName);
+            await updateDoc(callDocRef, { status: 'ended' }).catch(e => console.error('Error ending call in db', e));
+        }
+    } catch (e) {
+        console.error("Error during leaveCall", e);
+    } finally {
+        setLocalTracks([]);
+        setRemoteUsers([]);
+        router.back();
     }
-    if (isJoinedRef.current) {
-        await client.leave();
-        isJoinedRef.current = false;
-    }
-    
-    if (updateStatus && channelName) {
-        const callDocRef = doc(db, 'calls', channelName);
-        await updateDoc(callDocRef, { status: 'ended' }).catch(e => console.error('Error ending call in db', e));
-    }
-    
-    setLocalTracks([]);
-    setRemoteUsers([]);
-    router.back();
-  }, [localTracks, channelName, router]);
+}, [localTracks, channelName, router]);
+
 
   const joinChannel = useCallback(async (isVideoCall: boolean) => {
     if (!channelName || !currentUser || isJoinedRef.current) return;
