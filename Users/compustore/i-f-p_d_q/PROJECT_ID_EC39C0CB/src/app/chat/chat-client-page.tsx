@@ -245,11 +245,10 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     const setScreenProtection = async (enabled: boolean) => {
       if (Capacitor.isNativePlatform()) {
         try {
-          const plugin = (await CapacitorApp.getPlugins()).App;
-          if (enabled && plugin && typeof (plugin as any).enableSecure === 'function') {
-            await (plugin as any).enableSecure();
-          } else if (!enabled && plugin && typeof (plugin as any).disableSecure === 'function') {
-            await (plugin as any).disableSecure();
+          if (enabled) {
+            await (CapacitorApp as any).enableSecure();
+          } else {
+            await (CapacitorApp as any).disableSecure();
           }
         } catch (e) {
           console.error('Failed to toggle screen capture protection', e);
@@ -706,4 +705,3 @@ const takePicture = useCallback(async (source: CameraSource) => {
 
 
     
-
