@@ -268,33 +268,46 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, [messages, loadingMessages]);
 
   const handleSendMessage = useCallback(async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, messageData: Partial<Message> = {}) => {
-    if(e) e.preventDefault();
+    if (e) e.preventDefault();
     const text = newMessage.trim();
-    if ((!text && !messageData.imageUrl && !messageData.audioUrl) || !currentUser || !otherUser) return;
 
+    if ((!text && !messageData.imageUrl && !messageData.audioUrl) || !currentUser || !otherUser) return;
+  
     const chatId = getChatId(currentUser.uid, otherUserId);
     const chatDocRef = doc(db, 'chats', chatId);
     const messagesColRef = collection(chatDocRef, 'messages');
-    
+  
     setNewMessage('');
-
+  
     try {
-        const finalMessageData = {
-            text: text,
-            senderId: currentUser.uid,
-            timestamp: serverTimestamp(),
-            imageUrl: messageData.imageUrl || null,
-            audioUrl: messageData.audioUrl || null,
-            audioDuration: messageData.audioDuration || null,
-        };
-
+      const finalMessageData = {
+        text: text,
+        senderId: currentUser.uid,
+        timestamp: serverTimestamp(),
+        imageUrl: messageData.imageUrl || null,
+        audioUrl: messageData.audioUrl || null,
+        audioDuration: messageData.audioDuration || null,
+      };
+  
       const newDocRef = await addDoc(messagesColRef, finalMessageData);
       
-      let lastMessageText = '📷 Photo';
-      if(finalMessageData.audioUrl) lastMessageText = '🎤 Message vocal';
-      else if(text) lastMessageText = text;
-
-      await setDoc(chatDocRef, { participants: [currentUser.uid, otherUserId], lastMessage: { id: newDocRef.id, text: lastMessageText, senderId: currentUser.uid, timestamp: serverTimestamp(), read: false } }, { merge: true });
+      let lastMessageText = text;
+      if (finalMessageData.imageUrl) {
+        lastMessageText = '📷 Photo';
+      } else if (finalMessageData.audioUrl) {
+        lastMessageText = '🎤 Message vocal';
+      }
+  
+      await setDoc(chatDocRef, { 
+        participants: [currentUser.uid, otherUserId], 
+        lastMessage: { 
+          id: newDocRef.id, 
+          text: lastMessageText, 
+          senderId: currentUser.uid, 
+          timestamp: serverTimestamp(), 
+          read: false 
+        } 
+      }, { merge: true });
     } catch (error) {
       console.error("Erreur lors de l'envoi du message:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
@@ -374,12 +387,12 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     if (!hasPermission || !currentUser || !otherUser) return;
 
     try {
-      const image = await Camera.getPhoto({ quality: 90, allowEditing: false, resultType: CameraResultType.Uri, source });
-      if (!image.webPath) return;
+      const image = await Camera.getPhoto({ quality: 90, allowEditing: false, resultType: CameraResultType.DataUrl, source });
+      if (!image.dataUrl) return;
       setIsUploading(true);
-      const response = await fetch(image.webPath);
+      const response = await fetch(image.dataUrl);
       const blob = await response.blob();
-      const fileName = `${new Date().getTime()}.${image.webPath.split('.').pop() || 'jpg'}`;
+      const fileName = `${new Date().getTime()}.jpeg`;
       const chatId = getChatId(currentUser.uid, otherUserId);
       const storageRef = ref(storage, `chat_images/${chatId}/${fileName}`);
       const uploadTask = uploadBytesResumable(storageRef, blob);
@@ -389,7 +402,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
             toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer l\'image.' });
             setIsUploading(false);
         },
-        () => { getDownloadURL(uploadTask.snapshot.ref).then((url) => { handleSendMessage(undefined, { imageUrl: url }); setIsUploading(false); }); }
+        () => { getDownloadURL(uploadTask.snapshot.ref).then((url) => { handleSendMessage(undefined, { imageUrl: url, text: '' }); setIsUploading(false); }); }
       );
     } catch (error) { console.info("Photo selection/capture cancelled."); setIsUploading(false); }
   }, [currentUser, otherUser, handleSendMessage, toast, requestCameraPermission, requestStoragePermission]);
@@ -458,7 +471,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const handleLongPressEnd = useCallback(() => { if(longPressTimer.current) clearTimeout(longPressTimer.current); }, []);
   const handleSetupDelete = useCallback((message: Message) => { setShowReactionPopoverFor(null); setMessageToDelete(message); }, []);
   const handleZoomImage = useCallback((imageUrl: string) => setZoomedImageUrl(imageUrl), []);
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && !e.shiftKey && !isDesktop) { handleSendMessage(e); } };
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && !e.shiftKey && !isDesktop) { e.preventDefault(); handleSendMessage(e); } };
   useEffect(() => { if(textareaRef.current){ textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`; } }, [newMessage]);
   const handleEmojiClick = (emoji: EmojiClickData) => { setNewMessage(p => p + emoji.emoji); if (!isDesktop) setIsEmojiPickerOpen(false); };
 
