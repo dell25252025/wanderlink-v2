@@ -19,6 +19,8 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onResume() {
         super.onResume();
+        // Secure the window as soon as the app comes to the foreground
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
 
         WebView webView = this.bridge.getWebView();
 
@@ -46,20 +48,12 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    @PluginMethod
-    public void enableSecure() {
-        runOnUiThread(() -> {
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        });
+    @Override
+    public void onPause() {
+        super.onPause();
+        // Clear the secure flag when the app goes into the background
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
     }
-
-    @PluginMethod
-    public void disableSecure() {
-        runOnUiThread(() -> {
-            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        });
-    }
-
 
     // --- CORRECTION ---
     // Gère la réponse de la demande de permission et la transmet à Capacitor.

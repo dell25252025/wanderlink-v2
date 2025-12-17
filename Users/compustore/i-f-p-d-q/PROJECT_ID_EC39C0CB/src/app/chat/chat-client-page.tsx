@@ -240,41 +240,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const longPressTimer = useRef<NodeJS.Timeout>();
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
-  // Gérer la protection d'écran
-  useEffect(() => {
-    const enableSecure = async () => {
-      if (Capacitor.isNativePlatform()) {
-        try {
-          // Note: Le nom du plugin est automatiquement déduit du nom de la classe native (MainActivity)
-          await CapacitorApp.requestPlugins().then((plugins) => {
-            (plugins.App as any).enableSecure();
-          });
-          console.log('Screen capture protection enabled.');
-        } catch (e) {
-          console.error('Failed to enable screen capture protection', e);
-        }
-      }
-    };
-
-    const disableSecure = async () => {
-      if (Capacitor.isNativePlatform()) {
-        try {
-           await CapacitorApp.requestPlugins().then((plugins) => {
-            (plugins.App as any).disableSecure();
-          });
-          console.log('Screen capture protection disabled.');
-        } catch (e) {
-          console.error('Failed to disable screen capture protection', e);
-        }
-      }
-    };
-
-    enableSecure();
-    return () => {
-      disableSecure();
-    };
-  }, []);
-
   useEffect(() => {
     if (otherUserId) {
       getUserProfile(otherUserId).then(setOtherUser);
@@ -715,6 +680,3 @@ const takePicture = useCallback(async (source: CameraSource) => {
     </div>
   );
 }
-
-
-    
