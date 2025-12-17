@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -24,56 +25,42 @@ export function VoiceRecorder({ onSend, onCancel, isSending }: VoiceRecorderProp
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorderRef.current = new MediaRecorder(stream);
       chunksRef.current = [];
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
-        }
-      };
+      mediaRecorderRef.current.addEventListener('dataavailable', (event) => {
+        chunksRef.current.push(event.data);
+      });
 
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        setAudioBlob(blob);
-        stream.getTracks().forEach(track => track.stop()); // Stop microphone access
-      };
+      mediaRecorderRef.current.addEventListener('stop', () => {
+        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        setAudioBlob(audioBlob);
+        stream.getTracks().forEach(track => track.stop()); // Stop the microphone access
+      });
 
-      mediaRecorder.start();
+      mediaRecorderRef.current.start();
       setIsRecording(true);
-      setRecordingTime(0);
+      setRecordingTime(0); // Reset timer
       timerRef.current = setInterval(() => {
-        setRecordingTime(prevTime => prevTime + 1);
+        setRecordingTime((prevTime) => prevTime + 1);
       }, 1000);
     } catch (error) {
       console.error('Error starting recording:', error);
       toast({
-        title: 'Erreur de microphone',
-        description: "Impossible d'accéder au microphone. Veuillez vérifier les permissions de votre navigateur.",
+        title: 'Error',
+        description: 'Could not start recording. Please ensure you have given microphone permissions.',
         variant: 'destructive',
       });
-      onCancel(); // Go back if permission is denied
     }
-  }, [toast, onCancel]);
+  }, [toast]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      if (timerRef.current) clearInterval(timerRef.current);
+      clearInterval(timerRef.current);
     }
   }, [isRecording]);
-
-  useEffect(() => {
-    startRecording();
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
-    };
-  }, [startRecording]);
 
   const handleSend = () => {
     if (audioBlob) {
@@ -81,115 +68,149 @@ export function VoiceRecorder({ onSend, onCancel, isSending }: VoiceRecorderProp
     }
   };
 
-  const formatTime = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  const handleCancelRecording = () => {
+      if (isRecording) {
+          stopRecording();
+      }
+      setAudioBlob(null);
+      setRecordingTime(0);
+      if (mediaRecorderRef.current) {
+          mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      }
+      onCancel();
   };
 
-  return (
-    <div className="flex items-center justify-between w-full h-full px-2">
-        <Button onClick={onCancel} variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-            <Trash2 className="h-4 w-4" />
-        </Button>
-      <div className="flex items-center gap-2">
-        {isRecording && <Mic className="h-5 w-5 text-red-500 animate-pulse" />}
-        {!audioBlob && <span className="text-sm font-mono">{formatTime(recordingTime)}</span>}
-        {audioBlob && !isRecording && <span className="text-sm text-muted-foreground">Enregistrement terminé</span>}
-      </div>
-      
-      {isRecording ? (
-        <Button onClick={stopRecording} variant="default" size="icon" className="h-8 w-8 rounded-full bg-red-500 hover:bg-red-600">
-          <div className="h-3 w-3 bg-white rounded-sm"></div>
-        </Button>
-      ) : (
-        <Button onClick={handleSend} variant="ghost" size="icon" className="h-8 w-8 shrink-0" disabled={!audioBlob || isSending}>
+
+  useEffect(() => {
+    // Cleanup on unmount
+    return () => {
+      clearInterval(timerRef.current);
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  if (audioBlob) {
+    return (
+      <div className="flex items-center space-x-2 p-2 bg-muted rounded-lg">
+        <AudioPlayer blob={audioBlob} />
+        <Button onClick={handleSend} size="icon" disabled={isSending}>
           {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>
+        <Button onClick={handleCancelRecording} size="icon" variant="ghost" disabled={isSending}>
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center space-x-2 p-2">
+      {!isRecording ? (
+        <Button onClick={startRecording} size="icon" className="rounded-full">
+          <Mic className="h-5 w-5" />
+        </Button>
+      ) : (
+        <div className="flex items-center space-x-2 flex-grow bg-muted p-2 rounded-lg">
+           <Button onClick={stopRecording} size="icon" variant="destructive" className="rounded-full">
+                <Mic className="h-5 w-5" />
+           </Button>
+          <div className="text-sm text-red-500 font-mono w-12">{formatTime(recordingTime)}</div>
+          <div className="text-sm text-muted-foreground">Recording...</div>
+           <Button onClick={handleCancelRecording} size="icon" variant="ghost">
+             <Trash2 className="h-4 w-4" />
+           </Button>
+        </div>
       )}
     </div>
   );
 }
 
-
-// --- Voice Player Component ---
-interface VoicePlayerProps {
-  audioUrl: string;
+// --- Audio Player for preview ---
+interface AudioPlayerProps {
+    blob: Blob;
 }
 
-export function VoicePlayer({ audioUrl }: VoicePlayerProps) {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const progressRef = useRef<HTMLDivElement>(null);
+function AudioPlayer({ blob }: AudioPlayerProps) {
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const progressRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
 
-    const setAudioData = () => {
-        if (isFinite(audio.duration)) {
-            setDuration(audio.duration);
+    useEffect(() => {
+        const url = URL.createObjectURL(blob);
+        audioRef.current = new Audio(url);
+
+        const handleTimeUpdate = () => {
+            if(audioRef.current) {
+                setProgress((audioRef.current.currentTime / audioRef.current.duration) * 100);
+            }
+        };
+
+        const handleEnded = () => {
+            setIsPlaying(false);
+            setProgress(0);
+        };
+
+        audioRef.current.addEventListener('timeupdate', handleTimeUpdate);
+        audioRef.current.addEventListener('ended', handleEnded);
+
+        return () => {
+            URL.revokeObjectURL(url);
+            if (audioRef.current) {
+                audioRef.current.removeEventListener('timeupdate', handleTimeUpdate);
+                audioRef.current.removeEventListener('ended', handleEnded);
+            }
+        };
+    }, [blob]);
+
+    const togglePlay = () => {
+        if (audioRef.current) {
+            if (isPlaying) {
+                audioRef.current.pause();
+            } else {
+                audioRef.current.play();
+            }
+            setIsPlaying(!isPlaying);
         }
-        setCurrentTime(audio.currentTime);
     };
 
-    const setAudioTime = () => setCurrentTime(audio.currentTime);
-
-    audio.addEventListener('loadeddata', setAudioData);
-    audio.addEventListener('timeupdate', setAudioTime);
-    audio.addEventListener('ended', () => setIsPlaying(false));
-
-    return () => {
-      audio.removeEventListener('loadeddata', setAudioData);
-      audio.removeEventListener('timeupdate', setAudioTime);
-      audio.removeEventListener('ended', () => setIsPlaying(false));
-    };
-  }, []);
-
-  const togglePlayPause = () => {
-    if (audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.pause();
-      } else {
-        audioRef.current.play();
-      }
-      setIsPlaying(!isPlaying);
+    const handleSeek = (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+        if (audioRef.current && progressRef.current) {
+            const rect = progressRef.current.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const width = rect.width;
+            const duration = audioRef.current.duration;
+            const newTime = (x/width) * duration;
+            audioRef.current.currentTime = newTime;
+        }
     }
-  };
 
-  const formatTime = (time: number) => {
-    if (isNaN(time) || time === 0) return '00:00';
-    const minutes = Math.floor(time / 60);
-    const seconds = Math.floor(time % 60);
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  };
-  
-  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!progressRef.current || !audioRef.current || !isFinite(duration)) return;
-    const rect = progressRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const width = rect.width;
-    const newTime = (x / width) * duration;
-    audioRef.current.currentTime = newTime;
-    setCurrentTime(newTime);
-  };
+    const formatDuration = (seconds: number): string => {
+        if (isNaN(seconds) || seconds === 0) return "0:00";
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+    }
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-  return (
-    <div className="flex items-center gap-2 w-full max-w-[200px]">
-      <audio ref={audioRef} src={audioUrl} preload="metadata"></audio>
-      <Button onClick={togglePlayPause} variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-        {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-      </Button>
-      <div className="flex-1 flex items-center gap-2">
-        <div ref={progressRef} onClick={handleProgressClick} className="w-full h-1 bg-muted-foreground/30 rounded-full cursor-pointer">
-            <div style={{ width: `${progress}%` }} className="h-full bg-primary rounded-full"></div>
+    return (
+        <div className="flex items-center space-x-2 flex-grow">
+            <Button onClick={togglePlay} size="icon" variant="ghost">
+                {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+            </Button>
+            <div ref={progressRef} onClick={handleSeek} className="w-full h-2 bg-gray-300 rounded-full cursor-pointer">
+                <div style={{ width: `${progress}%`}} className="h-full bg-primary rounded-full"></div>
+            </div>
+            {audioRef.current && <span className="text-sm font-mono text-muted-foreground">{formatDuration(audioRef.current.duration)}</span>}
         </div>
-        <span className="text-xs font-mono text-muted-foreground">{formatTime(duration > 0 ? duration : 0)}</span>
-      </div>
-    </div>
-  );
+    );
 }
