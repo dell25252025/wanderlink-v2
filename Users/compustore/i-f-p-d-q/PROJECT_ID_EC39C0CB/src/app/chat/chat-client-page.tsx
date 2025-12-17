@@ -590,9 +590,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
                 <div className="relative w-full h-full flex items-center justify-center p-4">
                     <Image src={zoomedImageUrl} alt="Image zoomée" fill className="object-contain" />
                 </div>
-                <DialogFooter className="absolute bottom-4 left-1/2 -translate-x-1/2">
-                    <Button variant="secondary" onClick={handleDownloadImage}><Download className="mr-2 h-4 w-4" />Télécharger</Button>
-                </DialogFooter>
             </DialogContent>
         </Dialog>
       )}
