@@ -387,22 +387,29 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     if (!hasPermission || !currentUser || !otherUser) return;
 
     try {
-      const image = await Camera.getPhoto({ quality: 90, allowEditing: false, resultType: CameraResultType.Uri, source });
-      if (!image.webPath) return;
+      const image = await Camera.getPhoto({ quality: 90, allowEditing: false, resultType: CameraResultType.DataUrl, source });
+      if (!image.dataUrl) return;
       setIsUploading(true);
-      const response = await fetch(image.webPath);
-      const blob = await response.blob();
-      const fileName = `${new Date().getTime()}.${image.webPath.split('.').pop() || 'jpg'}`;
+
+      const blob = await (await fetch(image.dataUrl)).blob();
+      const fileName = `${new Date().getTime()}.jpeg`;
       const chatId = getChatId(currentUser.uid, otherUserId);
       const storageRef = ref(storage, `chat_images/${chatId}/${fileName}`);
+      
       const uploadTask = uploadBytesResumable(storageRef, blob);
-      uploadTask.on('state_changed', () => {}, 
+      
+      uploadTask.on('state_changed', 
+        () => {}, // progress
         (error) => {
             console.error("Upload failed:", error);
             toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer l\'image.' });
             setIsUploading(false);
         },
-        () => { getDownloadURL(uploadTask.snapshot.ref).then((url) => { handleSendMessage(undefined, { imageUrl: url }); setIsUploading(false); }); }
+        async () => { 
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            await handleSendMessage(undefined, { imageUrl: downloadURL, text: '' }); 
+            setIsUploading(false);
+        }
       );
     } catch (error) { console.info("Photo selection/capture cancelled."); setIsUploading(false); }
   }, [currentUser, otherUser, handleSendMessage, toast, requestCameraPermission, requestStoragePermission]);
@@ -421,11 +428,10 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
                 toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer le message vocal.' });
                 setIsUploading(false);
             },
-            () => {
-                getDownloadURL(uploadTask.snapshot.ref).then((url) => {
-                    handleSendMessage(undefined, { audioUrl: url, audioDuration: duration });
-                    setIsUploading(false);
-                });
+            async () => {
+                const url = await getDownloadURL(uploadTask.snapshot.ref);
+                await handleSendMessage(undefined, { audioUrl: url, audioDuration: duration });
+                setIsUploading(false);
             }
         );
     } catch (error) {
@@ -449,7 +455,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
     const result = await initiateCall(currentUser.uid, otherUserId, isVideo);
 
-    if (result.success) {
+    if (result.success && result.channelId) {
         router.push(`/call/${result.channelId}`);
     } else {
         toast({
