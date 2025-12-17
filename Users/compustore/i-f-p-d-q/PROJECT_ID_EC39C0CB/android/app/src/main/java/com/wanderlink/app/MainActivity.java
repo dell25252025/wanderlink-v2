@@ -19,7 +19,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onResume() {
         super.onResume();
-        // Secure the window as soon as the app comes to the foreground
+        // Sécurise la fenêtre contre les captures d'écran dès que l'app revient au premier plan.
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
 
         WebView webView = this.bridge.getWebView();
@@ -51,17 +51,12 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onPause() {
         super.onPause();
-        // Clear the secure flag when the app goes into the background
+        // Retire la protection lorsque l'application passe en arrière-plan.
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
     }
 
-    // --- CORRECTION ---
-    // Gère la réponse de la demande de permission et la transmet à Capacitor.
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        // L'appel à 'super' est suffisant, car BridgeActivity se charge déjà de transmettre
-        // le résultat au pont Capacitor. L'appel direct que j'avais ajouté était redondant
-        // et causait une erreur de compilation.
     }
 }
