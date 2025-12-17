@@ -1,8 +1,9 @@
+
 'use client';
 
 import { useState, useEffect, useRef, memo, useCallback, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Video, Loader2, CheckCircle, PlusCircle, Trash2, Download, Camera as CameraIcon, Mic, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Video, Loader2, CheckCircle, PlusCircle, Trash2, Camera as CameraIcon, Mic, Image as ImageIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getUserProfile, initiateCall } from '@/lib/firebase-actions';
@@ -34,8 +35,8 @@ interface Message {
   senderId: string;
   timestamp: Timestamp;
   imageUrl?: string | null;
-  audioUrl?: string | null; // For voice messages
-  audioDuration?: number; // Duration in seconds
+  audioUrl?: string | null;
+  audioDuration?: number;
   reactions?: { [userId: string]: string };
 }
 
@@ -57,6 +58,110 @@ interface MessageItemProps {
 // --- Constants ---
 const availableReactions = ['❤️', '😂', '👍', '😢', '😮', '😡'];
 const getChatId = (uid1: string, uid2: string) => [uid1, uid2].sort().join('_');
+
+// --- Photo Viewer Component for Zooming ---
+const PhotoViewer = ({ imageUrl, onClose }: { imageUrl: string; onClose: () => void; }) => {
+    const [scale, setScale] = useState(1);
+    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const imageRef = useRef<HTMLImageElement>(null);
+    const lastDist = useRef(0);
+
+    const resetZoom = () => {
+        setScale(1);
+        setPosition({ x: 0, y: 0 });
+        lastDist.current = 0;
+    };
+
+    useEffect(() => {
+        const handleWheel = (e: WheelEvent) => {
+            e.preventDefault();
+            if (e.ctrlKey) {
+                setScale(s => Math.max(1, Math.min(3, s - e.deltaY * 0.01)));
+            } else {
+                setPosition(p => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
+            }
+        };
+
+        const handleTouchStart = (e: TouchEvent) => {
+            if (e.touches.length === 2) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                lastDist.current = Math.sqrt(dx * dx + dy * dy);
+            }
+        };
+
+        const handleTouchMove = (e: TouchEvent) => {
+            if (e.touches.length === 2) {
+                e.preventDefault();
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const change = dist - lastDist.current;
+                setScale(s => Math.max(1, Math.min(3, s + change * 0.01)));
+                lastDist.current = dist;
+            }
+        };
+
+        const imageEl = imageRef.current;
+        imageEl?.addEventListener('wheel', handleWheel, { passive: false });
+        imageEl?.addEventListener('touchstart', handleTouchStart, { passive: true });
+        imageEl?.addEventListener('touchmove', handleTouchMove, { passive: false });
+        
+        return () => {
+            imageEl?.removeEventListener('wheel', handleWheel);
+            imageEl?.removeEventListener('touchstart', handleTouchStart);
+            imageEl?.removeEventListener('touchmove', handleTouchMove);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (scale === 1) {
+            setPosition({ x: 0, y: 0 });
+        }
+    }, [scale]);
+
+    return (
+        <DialogContent className="p-0 m-0 w-full h-full max-w-full max-h-screen bg-black/80 backdrop-blur-sm border-0 flex flex-col items-center justify-center">
+            <DialogHeader>
+                <DialogTitle>
+                    <VisuallyHidden>Image en plein écran</VisuallyHidden>
+                </DialogTitle>
+            </DialogHeader>
+            <DialogClose asChild className="absolute top-2 right-2 z-50">
+                <Button variant="ghost" size="icon" className="h-9 w-9 text-white bg-black/30 hover:bg-black/50 hover:text-white" onClick={onClose}>
+                    <X className="h-5 w-5" />
+                </Button>
+            </DialogClose>
+            <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+                <Image
+                    ref={imageRef}
+                    src={imageUrl}
+                    alt="Image zoomée"
+                    fill
+                    className="object-contain transition-transform duration-200 touch-none"
+                    style={{
+                        transform: `scale(${scale}) translate(${position.x}px, ${position.y}px)`,
+                        cursor: scale > 1 ? 'grab' : 'auto',
+                    }}
+                     onMouseDown={(e) => {
+                        if (scale <= 1) return;
+                        const startPos = { x: e.clientX - position.x, y: e.clientY - position.y };
+                        const handleMouseMove = (me: MouseEvent) => {
+                            setPosition({ x: me.clientX - startPos.x, y: me.clientY - startPos.y });
+                        };
+                        const handleMouseUp = () => {
+                            window.removeEventListener('mousemove', handleMouseMove);
+                            window.removeEventListener('mouseup', handleMouseUp);
+                        };
+                        window.addEventListener('mousemove', handleMouseMove);
+                        window.addEventListener('mouseup', handleMouseUp);
+                    }}
+                />
+            </div>
+        </DialogContent>
+    );
+};
+
 
 // --- Memoized Message Component ---
 const MessageItem = memo<MessageItemProps>(({ 
@@ -357,26 +462,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     setShowReactionPopoverFor(null);
   }, [currentUser, otherUser, toast]);
   
-  const handleDownloadImage = useCallback(async () => {
-    const urlToDownload = zoomedImageUrl;
-    if (!urlToDownload) return;
-    setZoomedImageUrl(null);
-    try {
-        const hasPermission = await requestStoragePermission();
-        if (!hasPermission) return;
-        const fileName = `WanderLink_${new Date().getTime()}.jpeg`;
-        await Filesystem.downloadFile({
-            url: urlToDownload,
-            path: fileName,
-            directory: Directory.Downloads,
-        });
-        toast({ title: 'Image téléchargée', description: `Enregistrée dans vos téléchargements.`, action: <CheckCircle className="h-5 w-5 text-green-500" /> });
-    } catch (e: any) {
-        console.error('Error downloading image', e);
-        toast({ variant: 'destructive', title: 'Erreur de téléchargement', description: e.message || 'Impossible d\'enregistrer l\'image.' });
-    }
-}, [zoomedImageUrl, toast, requestStoragePermission]);
-
   const takePicture = useCallback(async (source: CameraSource) => {
     let hasPermission = false;
     if (source === CameraSource.Camera) {
@@ -584,22 +669,13 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         </DialogContent>
       </Dialog>
 
-      {zoomedImageUrl && (
-        <Dialog open={!!zoomedImageUrl} onOpenChange={(isOpen) => !isOpen && setZoomedImageUrl(null)}>
-          <DialogContent className="p-0 m-0 w-full h-full max-w-full max-h-screen bg-black/80 backdrop-blur-sm border-0 flex flex-col items-center justify-center">
-                <DialogHeader>
-                    <DialogTitle>
-                        <VisuallyHidden>Image en plein écran</VisuallyHidden>
-                    </DialogTitle>
-                </DialogHeader>
-                <DialogClose asChild className="absolute top-2 right-2 z-50"><Button variant="ghost" size="icon" className="h-9 w-9 text-white bg-black/30 hover:bg-black/50 hover:text-white"><X className="h-5 w-5" /></Button></DialogClose>
-                <div className="relative w-full h-full flex items-center justify-center p-4">
-                    <Image src={zoomedImageUrl} alt="Image zoomée" fill className="object-contain" />
-                </div>
-            </DialogContent>
-        </Dialog>
-      )}
+      <Dialog open={!!zoomedImageUrl} onOpenChange={(isOpen) => !isOpen && setZoomedImageUrl(null)}>
+        {zoomedImageUrl && <PhotoViewer imageUrl={zoomedImageUrl} onClose={() => setZoomedImageUrl(null)} />}
+      </Dialog>
       <ReportAbuseDialog isOpen={isReportModalOpen} onOpenChange={setIsReportModalOpen} reportedUser={otherUser} />
     </div>
   );
 }
+
+
+    
