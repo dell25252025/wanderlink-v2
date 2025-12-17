@@ -1,12 +1,11 @@
-
 'use client';
 
 import { useState, useEffect, useRef, memo, useCallback, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Phone, Video, Loader2, CheckCircle, PlusCircle, Trash2, Download, Camera as CameraIcon, Mic, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Video, Loader2, CheckCircle, PlusCircle, Trash2, Download, Camera as CameraIcon, Mic, Image as ImageIcon } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { getUserProfile } from '@/lib/firebase-actions';
+import { getUserProfile, initiateCall } from '@/lib/firebase-actions';
 import { auth, db, storage } from '@/lib/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { Drawer, DrawerContent, DrawerTrigger, DrawerClose, DrawerHeader, DrawerTitle, DrawerDescription } from '@/components/ui/drawer';
@@ -22,10 +21,11 @@ import { useMediaQuery } from '@/hooks/use-media-query';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDocs, limit, deleteField } from 'firebase/firestore';
 import type { DocumentData, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
-import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
-import type { PermissionStatus, CameraPermissionType } from '@capacitor/core';
+import { Camera, CameraResultType, CameraSource, PermissionState } from '@capacitor/camera';
+import { AndroidPermissions } from '@awesome-cordova-plugins/android-permissions';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { AudioPlayer, VoiceRecorder } from './voice-message';
 
 // --- Interfaces ---
 interface Message {
@@ -34,6 +34,8 @@ interface Message {
   senderId: string;
   timestamp: Timestamp;
   imageUrl?: string | null;
+  audioUrl?: string | null; // For voice messages
+  audioDuration?: number; // Duration in seconds
   reactions?: { [userId: string]: string };
 }
 
@@ -64,6 +66,16 @@ const MessageItem = memo<MessageItemProps>(({
 }) => {
     const reactions = message.reactions ? Object.entries(message.reactions) : [];
 
+    const renderContent = () => {
+        if (message.imageUrl) {
+            return <button onClick={() => onZoomImage(message.imageUrl!)}><Image src={message.imageUrl} alt="" width={250} height={300} className="object-cover" /></button>;
+        }
+        if (message.audioUrl) {
+            return <AudioPlayer audioUrl={message.audioUrl} isSender={isSender} />;
+        }
+        return message.text;
+    }
+
     return (
         <div onContextMenu={(e) => e.preventDefault()}>
             <Popover open={showReactionPopoverFor === message.id} onOpenChange={(isOpen) => !isOpen && setShowReactionPopoverFor(null)}>
@@ -77,7 +89,7 @@ const MessageItem = memo<MessageItemProps>(({
                         className={`flex items-end gap-2 relative ${isSender ? 'justify-end' : 'justify-start'}`}>
                         {!isSender && <Avatar className="h-6 w-6 self-end"><AvatarImage src={otherUserImage} /><AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback></Avatar>}
                         <div className={`max-w-[75%] rounded-2xl break-words relative ${isSender ? 'active:scale-95 transition-transform duration-150' : ''} ${message.imageUrl ? 'p-0 overflow-hidden' : 'px-3 py-2 ' + (isSender ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-secondary')}`}>
-                            {message.imageUrl ? <button onClick={() => onZoomImage(message.imageUrl!)}><Image src={message.imageUrl} alt="" width={250} height={300} className="object-cover" /></button> : message.text}
+                            {renderContent()}
                             {reactions.length > 0 && <div className={`absolute -bottom-3 text-xs rounded-full bg-secondary border px-1.5 py-0.5 ${isSender ? 'right-2' : 'left-2'}`}>{reactions.map(([_, emoji]) => emoji)[0]} {reactions.length > 1 ? `+${reactions.length - 1}`: ''}</div>}
                         </div>
                     </div>
@@ -113,6 +125,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [zoomedImageUrl, setZoomedImageUrl] = useState<string | null>(null);
   const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
   const [showReactionPopoverFor, setShowReactionPopoverFor] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -125,32 +138,94 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
   }, [otherUserId]);
 
-  const requestPermission = useCallback(async (
-    permission: CameraPermissionType
-  ): Promise<boolean> => {
+  const requestCameraPermission = useCallback(async (): Promise<boolean> => {
     const result = await Camera.checkPermissions();
-    const status = result[permission];
-  
+    let status: PermissionState = result.camera;
+
     if (status === 'granted') {
       return true;
     }
-  
+
     if (status === 'denied') {
       toast({
         title: 'Permission requise',
-        description: "Veuillez autoriser l'accès dans les réglages de votre téléphone.",
+        description: "Veuillez autoriser l'accès à la caméra dans les réglages du téléphone.",
       });
       return false;
     }
-  
+
     if (status === 'prompt' || status === 'prompt-with-rationale') {
       const newResult = await Camera.requestPermissions({
-        permissions: [permission],
+        permissions: ['camera'],
       });
-      return newResult[permission] === 'granted';
+      return newResult.camera === 'granted';
     }
-  
+
     return false;
+  }, [toast]);
+
+  const requestMicrophonePermission = useCallback(async (): Promise<boolean> => {
+    try {
+      const checkResult = await AndroidPermissions.checkPermission(AndroidPermissions.PERMISSION.RECORD_AUDIO);
+      if (checkResult.hasPermission) {
+        return true;
+      }
+      const requestResult = await AndroidPermissions.requestPermission(AndroidPermissions.PERMISSION.RECORD_AUDIO);
+      if (requestResult.hasPermission) {
+        return true;
+      }
+      toast({
+        title: 'Permission requise',
+        description: "L'accès au microphone a été refusé.",
+        variant: 'destructive'
+      });
+      return false;
+    } catch (error) {
+      console.error('Error requesting microphone permission:', error);
+      toast({
+        title: 'Erreur de permission',
+        description: "Impossible de demander l'accès au microphone.",
+        variant: 'destructive'
+      });
+      return false;
+    }
+  }, [toast]);
+  
+  const requestStoragePermission = useCallback(async (): Promise<boolean> => {
+      try {
+        const permissionToRequest = AndroidPermissions.PERMISSION.READ_MEDIA_IMAGES;
+        const checkResult = await AndroidPermissions.checkPermission(permissionToRequest);
+        if (checkResult.hasPermission) {
+          return true;
+        }
+  
+        const requestResult = await AndroidPermissions.requestPermission(permissionToRequest);
+  
+        if (requestResult.hasPermission) {
+          return true;
+        } else {
+          const oldPermCheck = await AndroidPermissions.checkPermission(AndroidPermissions.PERMISSION.READ_EXTERNAL_STORAGE);
+          if(oldPermCheck.hasPermission) return true;
+
+          const oldPermRequest = await AndroidPermissions.requestPermission(AndroidPermissions.PERMISSION.READ_EXTERNAL_STORAGE);
+          if(oldPermRequest.hasPermission) return true;
+        }
+  
+        toast({
+          title: 'Permission requise',
+          description: "L'accès aux photos a été refusé.",
+          variant: 'destructive'
+        });
+        return false;
+      } catch (error) {
+        console.error('Error requesting storage permission:', error);
+        toast({
+            title: 'Erreur de permission',
+            description: "Impossible de demander l'accès aux photos.",
+            variant: 'destructive'
+        });
+        return false;
+      }
   }, [toast]);
 
   useEffect(() => {
@@ -192,21 +267,51 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
   }, [messages, loadingMessages]);
 
-  const handleSendMessage = useCallback(async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, imageUrl: string | null = null) => {
-    if(e) e.preventDefault();
-    if ((!newMessage.trim() && !imageUrl) || !currentUser || !otherUser) return;
+  const handleSendMessage = useCallback(async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, messageData: Partial<Message> = {}) => {
+    if (e) e.preventDefault();
+    const text = newMessage.trim();
+
+    if ((!text && !messageData.imageUrl && !messageData.audioUrl) || !currentUser || !otherUser) return;
+  
     const chatId = getChatId(currentUser.uid, otherUserId);
     const chatDocRef = doc(db, 'chats', chatId);
     const messagesColRef = collection(chatDocRef, 'messages');
-    const messageText = newMessage;
+  
     setNewMessage('');
+  
     try {
-      const newDocRef = await addDoc(messagesColRef, { text: messageText, senderId: currentUser.uid, timestamp: serverTimestamp(), imageUrl: imageUrl });
-      await setDoc(chatDocRef, { participants: [currentUser.uid, otherUserId], lastMessage: { id: newDocRef.id, text: imageUrl ? '📷 Photo' : messageText, senderId: currentUser.uid, timestamp: serverTimestamp(), read: false } }, { merge: true });
+      const finalMessageData = {
+        text: text,
+        senderId: currentUser.uid,
+        timestamp: serverTimestamp(),
+        imageUrl: messageData.imageUrl || null,
+        audioUrl: messageData.audioUrl || null,
+        audioDuration: messageData.audioDuration || null,
+      };
+  
+      const newDocRef = await addDoc(messagesColRef, finalMessageData);
+      
+      let lastMessageText = text;
+      if (finalMessageData.imageUrl) {
+        lastMessageText = '📷 Photo';
+      } else if (finalMessageData.audioUrl) {
+        lastMessageText = '🎤 Message vocal';
+      }
+  
+      await setDoc(chatDocRef, { 
+        participants: [currentUser.uid, otherUserId], 
+        lastMessage: { 
+          id: newDocRef.id, 
+          text: lastMessageText, 
+          senderId: currentUser.uid, 
+          timestamp: serverTimestamp(), 
+          read: false 
+        } 
+      }, { merge: true });
     } catch (error) {
-      console.error("Erreur lors de l\'envoi du message:", error);
+      console.error("Erreur lors de l'envoi du message:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
-      setNewMessage(messageText);
+      setNewMessage(text);
     }
   }, [newMessage, currentUser, otherUser, toast]);
 
@@ -217,6 +322,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     const chatRef = doc(db, 'chats', chatId);
     try {
         if (messageToDelete.imageUrl) { await deleteObject(ref(storage, messageToDelete.imageUrl)); }
+        if (messageToDelete.audioUrl) { await deleteObject(ref(storage, messageToDelete.audioUrl)); }
         await deleteDoc(messageRef);
         if (chat?.lastMessage?.id === messageToDelete.id) {
             const messagesQuery = query(collection(db, 'chats', chatId, 'messages'), orderBy('timestamp', 'desc'), limit(1));
@@ -256,7 +362,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     if (!urlToDownload) return;
     setZoomedImageUrl(null);
     try {
-        const hasPermission = await requestPermission('photos');
+        const hasPermission = await requestStoragePermission();
         if (!hasPermission) return;
         const fileName = `WanderLink_${new Date().getTime()}.jpeg`;
         await Filesystem.downloadFile({
@@ -269,11 +375,17 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         console.error('Error downloading image', e);
         toast({ variant: 'destructive', title: 'Erreur de téléchargement', description: e.message || 'Impossible d\'enregistrer l\'image.' });
     }
-}, [zoomedImageUrl, toast, requestPermission]);
+}, [zoomedImageUrl, toast, requestStoragePermission]);
 
   const takePicture = useCallback(async (source: CameraSource) => {
-    const ok = await requestPermission(source === CameraSource.Camera ? 'camera' : 'photos');
-    if (!ok || !currentUser || !otherUser) return;
+    let hasPermission = false;
+    if (source === CameraSource.Camera) {
+        hasPermission = await requestCameraPermission();
+    } else {
+        hasPermission = await requestStoragePermission();
+    }
+    if (!hasPermission || !currentUser || !otherUser) return;
+
     try {
       const image = await Camera.getPhoto({ quality: 90, allowEditing: false, resultType: CameraResultType.Uri, source });
       if (!image.webPath) return;
@@ -290,29 +402,70 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
             toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer l\'image.' });
             setIsUploading(false);
         },
-        () => { getDownloadURL(uploadTask.snapshot.ref).then((url) => { handleSendMessage(undefined, url); setIsUploading(false); }); }
+        () => { getDownloadURL(uploadTask.snapshot.ref).then((url) => { handleSendMessage(undefined, { imageUrl: url }); setIsUploading(false); }); }
       );
     } catch (error) { console.info("Photo selection/capture cancelled."); setIsUploading(false); }
-  }, [currentUser, otherUser, handleSendMessage, toast, requestPermission]);
+  }, [currentUser, otherUser, handleSendMessage, toast, requestCameraPermission, requestStoragePermission]);
+
+  const handleSendVoiceMessage = useCallback(async (blob: Blob, duration: number) => {
+    if (!currentUser || !otherUser) return;
+    setIsUploading(true);
+    try {
+        const chatId = getChatId(currentUser.uid, otherUserId);
+        const fileName = `${new Date().getTime()}.webm`;
+        const storageRef = ref(storage, `chat_audio/${chatId}/${fileName}`);
+        const uploadTask = uploadBytesResumable(storageRef, blob);
+        uploadTask.on('state_changed', () => {},
+            (error) => {
+                console.error("Voice message upload failed:", error);
+                toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer le message vocal.' });
+                setIsUploading(false);
+            },
+            () => {
+                getDownloadURL(uploadTask.snapshot.ref).then((url) => {
+                    handleSendMessage(undefined, { audioUrl: url, audioDuration: duration });
+                    setIsUploading(false);
+                });
+            }
+        );
+    } catch (error) {
+        console.error("Failed to send voice message", error);
+        toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible d\'envoyer le message vocal.' });
+        setIsUploading(false);
+    } finally {
+        setIsRecording(false);
+    }
+  }, [currentUser, otherUser, handleSendMessage, toast]);
 
   const handleStartCall = useCallback(async (isVideo: boolean) => {
     if (!currentUser) return;
-    // For simplicity in this example, we assume microphone permissions are handled by the browser/OS before call initiation.
-    // In a real app, you'd request microphone permission here using a Capacitor plugin if needed.
-    try {
-      const callDocRef = await addDoc(collection(db, 'calls'), {
-        callerId: currentUser.uid,
-        calleeId: otherUserId,
-        status: 'ringing',
-        type: isVideo ? 'video' : 'audio',
-        createdAt: serverTimestamp(),
-      });
-      router.push(`/call?callId=${callDocRef.id}&video=${isVideo}`);
-    } catch (error) {
-      console.error("Error creating call:", error);
-      toast({ variant: 'destructive', title: 'Erreur d\'appel', description: 'Impossible de démarrer l\'appel.' });
+    const audioOk = await requestMicrophonePermission();
+    if (!audioOk) return;
+
+    if (isVideo) {
+        const videoOk = await requestCameraPermission();
+        if (!videoOk) return;
     }
-  }, [currentUser, otherUserId, router, toast]);
+
+    const result = await initiateCall(currentUser.uid, otherUserId, isVideo);
+
+    if (result.success) {
+        router.push(`/call/${result.channelId}`);
+    } else {
+        toast({
+            title: "Erreur lors du lancement de l'appel",
+            description: result.error ?? "Une erreur inconnue est survenue.",
+            variant: "destructive"
+        });
+    }
+  }, [requestMicrophonePermission, requestCameraPermission, currentUser, otherUserId, router, toast]);
+
+  const handleStartRecording = useCallback(async () => {
+    const hasPermission = await requestMicrophonePermission(); 
+    if (hasPermission) {
+        setIsRecording(true);
+    }
+  }, [requestMicrophonePermission]);
 
   const handleLongPressStart = useCallback((messageId: string) => { longPressTimer.current = setTimeout(() => { setShowReactionPopoverFor(messageId); }, 500); }, []);
   const handleLongPressEnd = useCallback(() => { if(longPressTimer.current) clearTimeout(longPressTimer.current); }, []);
@@ -332,7 +485,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       <header className="fixed top-0 z-10 flex w-full items-center gap-2 border-b bg-background/95 px-2 py-1 backdrop-blur-sm h-12">
         <Button onClick={() => router.back()} variant="ghost" size="icon" className="h-8 w-8"><ArrowLeft className="h-4 w-4" /></Button>
         <Link href={`/profile?id=${otherUserId}`} className="flex min-w-0 flex-1 items-center gap-2 truncate"><Avatar className="h-8 w-8"><AvatarImage src={otherUserImage} alt={otherUserName} /><AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback></Avatar><div className="flex-1 truncate"><h1 className="truncate text-sm font-semibold">{otherUserName}</h1></div></Link>
-        <Button onClick={() => handleStartCall(false)} variant="ghost" size="icon" className="h-8 w-8"><Phone className="h-4 w-4" /></Button>
         <Button onClick={() => handleStartCall(true)} variant="ghost" size="icon" className="h-8 w-8"><Video className="h-4 w-4" /></Button>
         <Drawer><DrawerTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DrawerTrigger><DrawerContent><div className="mx-auto w-full max-w-sm"><DrawerHeader><DrawerTitle>Options</DrawerTitle><DrawerDescription>Gérez votre interaction avec {otherUserName}.</DrawerDescription></DrawerHeader><div className="p-4 pt-0"><div className="mt-3 h-full"><DrawerClose asChild><Button variant="outline" className="w-full justify-start p-4 h-auto text-base"><Ban className="mr-2 h-5 w-5" /> Bloquer</Button></DrawerClose><div className="my-2 border-t"></div><DrawerClose asChild><Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={() => setIsReportModalOpen(true)}><ShieldAlert className="mr-2 h-5 w-5" /> Signaler</Button></DrawerClose></div></div><div className="p-4"><DrawerClose asChild><Button variant="secondary" className="w-full h-12 text-base">Annuler</Button></DrawerClose></div></div></DrawerContent></Drawer>
       </header>
@@ -363,52 +515,60 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       </main>
       
       <footer className="fixed bottom-0 z-10 w-full border-t bg-background/95 backdrop-blur-sm px-2 py-1.5">
-        <form onSubmit={handleSendMessage} className="flex items-end gap-1.5 w-full">
-          <Drawer>
-              <DrawerTrigger asChild>
-                  <Button type="button" variant="ghost" size="icon" className="shrink-0 h-8 w-8" disabled={isUploading}><PlusCircle className="h-5 w-5 text-muted-foreground" /></Button>
-              </DrawerTrigger>
-              <DrawerContent>
-                  <div className="mx-auto w-full max-w-sm">
-                      <DrawerHeader>
-                          <DrawerTitle>Joindre un fichier</DrawerTitle>
-                          <DrawerDescription>Que souhaitez-vous partager ?</DrawerDescription>
-                      </DrawerHeader>
-                      <div className="p-4 pt-0 grid grid-cols-2 gap-4">
-                          <DrawerClose asChild>
-                              <Button variant="outline" className="w-full justify-center p-4 h-auto text-base flex-col gap-2" onClick={() => takePicture(CameraSource.Photos)}><ImageIcon className="h-6 w-6" /> Bibliothèque</Button>
-                          </DrawerClose>
-                          <DrawerClose asChild>
-                              <Button variant="outline" className="w-full justify-center p-4 h-auto text-base flex-col gap-2" onClick={() => takePicture(CameraSource.Camera)}><CameraIcon className="h-6 w-6" /> Appareil photo</Button>
-                          </DrawerClose>
-                      </div>
-                      <div className="p-4">
-                          <DrawerClose asChild><Button variant="secondary" className="w-full h-12 text-base">Annuler</Button></DrawerClose>
-                      </div>
-                  </div>
-              </DrawerContent>
-          </Drawer>
-            <div className="flex-1 relative flex items-center min-w-0 bg-secondary rounded-xl">
-                <Textarea
-                    ref={textareaRef}
-                    rows={1}
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Message..."
-                    className="w-full resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent py-2.5 px-3 pr-8 min-h-[20px] max-h-32 overflow-y-auto text-sm"
-                />
-                <Popover open={isEmojiPickerOpen} onOpenChange={setIsEmojiPickerOpen}>
-                  <PopoverTrigger asChild>
-                      <Button type="button" variant="ghost" size="icon" className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6"><Smile className="h-4 w-4 text-muted-foreground" /></Button>
-                  </PopoverTrigger>
-                  <PopoverContent side="top" align="end" className="w-full max-w-[320px] p-0 border-none mb-2"><Picker onEmojiClick={handleEmojiClick} emojiStyle={EmojiStyle.NATIVE} width="100%" /></PopoverContent>
-                </Popover>
-            </div>
-            <div className="shrink-0">
-              <Button type="submit" variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-primary" disabled={!newMessage.trim()}><Send className="h-4 w-4" /></Button>
-            </div>
-        </form>
+        {isRecording ? (
+            <VoiceRecorder onSend={handleSendVoiceMessage} onCancel={() => setIsRecording(false)} isSending={isUploading} />
+        ) : (
+            <form onSubmit={(e) => handleSendMessage(e)} className="flex items-end gap-1.5 w-full">
+            <Drawer>
+                <DrawerTrigger asChild>
+                    <Button type="button" variant="ghost" size="icon" className="shrink-0 h-8 w-8" disabled={isUploading}><PlusCircle className="h-5 w-5 text-muted-foreground" /></Button>
+                </DrawerTrigger>
+                <DrawerContent>
+                    <div className="mx-auto w-full max-w-sm">
+                        <DrawerHeader>
+                            <DrawerTitle>Joindre un fichier</DrawerTitle>
+                            <DrawerDescription>Que souhaitez-vous partager ?</DrawerDescription>
+                        </DrawerHeader>
+                        <div className="p-4 pt-0 grid grid-cols-2 gap-4">
+                            <DrawerClose asChild>
+                                <Button variant="outline" className="w-full justify-center p-4 h-auto text-base flex-col gap-2" onClick={() => takePicture(CameraSource.Photos)}><ImageIcon className="h-6 w-6" /> Bibliothèque</Button>
+                            </DrawerClose>
+                            <DrawerClose asChild>
+                                <Button variant="outline" className="w-full justify-center p-4 h-auto text-base flex-col gap-2" onClick={() => takePicture(CameraSource.Camera)}><CameraIcon className="h-6 w-6" /> Appareil photo</Button>
+                            </DrawerClose>
+                        </div>
+                        <div className="p-4">
+                            <DrawerClose asChild><Button variant="secondary" className="w-full h-12 text-base">Annuler</Button></DrawerClose>
+                        </div>
+                    </div>
+                </DrawerContent>
+            </Drawer>
+                <div className="flex-1 relative flex items-center min-w-0 bg-secondary rounded-xl">
+                    <Textarea
+                        ref={textareaRef}
+                        rows={1}
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Message..."
+                        className="w-full resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent py-2.5 px-3 pr-8 min-h-[20px] max-h-32 overflow-y-auto text-sm"
+                    />
+                    <Popover open={isEmojiPickerOpen} onOpenChange={setIsEmojiPickerOpen}>
+                    <PopoverTrigger asChild>
+                        <Button type="button" variant="ghost" size="icon" className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6"><Smile className="h-4 w-4 text-muted-foreground" /></Button>
+                    </PopoverTrigger>
+                    <PopoverContent side="top" align="end" className="w-full max-w-[320px] p-0 border-none mb-2"><Picker onEmojiClick={handleEmojiClick} emojiStyle={EmojiStyle.NATIVE} width="100%" /></PopoverContent>
+                    </Popover>
+                </div>
+                <div className="shrink-0">
+                {!newMessage.trim() ? (
+                <Button type="button" onClick={handleStartRecording} variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-primary"><Mic className="h-4 w-4" /></Button>
+                ) : (
+                <Button type="submit" variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-primary" disabled={isUploading}><Send className="h-4 w-4" /></Button>
+                )}
+                </div>
+            </form>
+        )}
       </footer>
 
       <Dialog open={!!messageToDelete} onOpenChange={(isOpen) => !isOpen && setMessageToDelete(null)}>
