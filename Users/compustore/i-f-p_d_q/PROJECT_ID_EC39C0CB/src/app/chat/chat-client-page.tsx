@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, memo, useCallback, useLayoutEffect } from 'react';
@@ -20,7 +21,7 @@ import { ReportAbuseDialog } from '@/components/report-abuse-dialog';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDocs, limit, deleteField } from 'firebase/firestore';
 import type { DocumentData, Timestamp } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject, uploadString } from "firebase/storage";
 import { Camera, CameraResultType, CameraSource, PermissionState } from '@capacitor/camera';
 import { AndroidPermissions } from '@awesome-cordova-plugins/android-permissions';
 import { Filesystem, Directory } from '@capacitor/filesystem';
@@ -300,7 +301,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
       setNewMessage(text);
     }
-  }, [newMessage, currentUser, otherUser, toast]);
+  }, [newMessage, currentUser, otherUserId, toast]);
 
   const handleDeleteMessage = useCallback(async () => {
     if (!messageToDelete || !currentUser || !otherUser) return;
@@ -364,34 +365,54 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
 }, [zoomedImageUrl, toast, requestStoragePermission]);
 
-  const takePicture = useCallback(async (source: CameraSource) => {
+const takePicture = useCallback(async (source: CameraSource) => {
     let hasPermission = false;
     if (source === CameraSource.Camera) {
-        hasPermission = await requestCameraPermission();
+      hasPermission = await requestCameraPermission();
     } else {
-        hasPermission = await requestStoragePermission();
+      hasPermission = await requestStoragePermission();
     }
     if (!hasPermission || !currentUser || !otherUser) return;
 
     try {
-      const image = await Camera.getPhoto({ quality: 90, allowEditing: false, resultType: CameraResultType.Uri, source });
-      if (!image.webPath) return;
+      const image = await Camera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: CameraResultType.Uri, // Keep using URI for reliability
+        source,
+      });
+
+      if (!image.path) {
+        console.error("No file path returned from camera.");
+        return;
+      }
       setIsUploading(true);
-      const response = await fetch(image.webPath);
-      const blob = await response.blob();
-      const fileName = `${new Date().getTime()}.${image.webPath.split('.').pop() || 'jpg'}`;
+
+      // Read the file from the URI into base64
+      const fileData = await Filesystem.readFile({
+        path: image.path,
+      });
+
+      // Construct the data URL manually
+      const dataUrl = `data:${image.format === 'png' ? 'image/png' : 'image/jpeg'};base64,${fileData.data}`;
+      
+      const fileName = `${new Date().getTime()}.${image.format}`;
       const chatId = getChatId(currentUser.uid, otherUserId);
       const storageRef = ref(storage, `chat_images/${chatId}/${fileName}`);
-      const uploadTask = uploadBytesResumable(storageRef, blob);
-      uploadTask.on('state_changed', () => {}, 
-        (error) => {
-            console.error("Upload failed:", error);
-            toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer l\'image.' });
-            setIsUploading(false);
-        },
-        () => { getDownloadURL(uploadTask.snapshot.ref).then((url) => { handleSendMessage(undefined, { imageUrl: url }); setIsUploading(false); }); }
-      );
-    } catch (error) { console.info("Photo selection/capture cancelled."); setIsUploading(false); }
+
+      // Upload the data URL string
+      const uploadTask = await uploadString(storageRef, dataUrl, 'data_url');
+      const downloadUrl = await getDownloadURL(uploadTask.ref);
+
+      // Send message with the final URL
+      handleSendMessage(undefined, { imageUrl: downloadUrl, text: '' });
+
+    } catch (error) {
+      console.error("Photo capture or processing failed:", error);
+      toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer l\'image.' });
+    } finally {
+      setIsUploading(false);
+    }
   }, [currentUser, otherUser, handleSendMessage, toast, requestCameraPermission, requestStoragePermission]);
 
   const handleSendVoiceMessage = useCallback(async (blob: Blob, duration: number) => {
@@ -458,7 +479,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const handleLongPressEnd = useCallback(() => { if(longPressTimer.current) clearTimeout(longPressTimer.current); }, []);
   const handleSetupDelete = useCallback((message: Message) => { setShowReactionPopoverFor(null); setMessageToDelete(message); }, []);
   const handleZoomImage = useCallback((imageUrl: string) => setZoomedImageUrl(imageUrl), []);
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && !e.shiftKey && !isDesktop) { handleSendMessage(e); } };
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && !e.shiftKey && !isDesktop) { e.preventDefault(); handleSendMessage(e); } };
   useEffect(() => { if(textareaRef.current){ textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`; } }, [newMessage]);
   const handleEmojiClick = (emoji: EmojiClickData) => { setNewMessage(p => p + emoji.emoji); if (!isDesktop) setIsEmojiPickerOpen(false); };
 
@@ -588,4 +609,3 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   );
 }
 
-    
