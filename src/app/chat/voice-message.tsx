@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -80,15 +79,21 @@ export function VoiceRecorder({ onSend, onCancel, isSending }: VoiceRecorderProp
       onCancel();
   };
 
-
   useEffect(() => {
+    // Start recording immediately on mount
+    startRecording();
+
     // Cleanup on unmount
     return () => {
       clearInterval(timerRef.current);
-      if (mediaRecorderRef.current) {
-        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        mediaRecorderRef.current.stop();
       }
+       if (mediaRecorderRef.current) {
+           mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const formatTime = (seconds: number) => {
@@ -99,8 +104,8 @@ export function VoiceRecorder({ onSend, onCancel, isSending }: VoiceRecorderProp
 
   if (audioBlob) {
     return (
-      <div className="flex items-center space-x-2 p-2 bg-muted rounded-lg">
-        <AudioPlayer blob={audioBlob} />
+      <div className="flex items-center space-x-2 p-2 bg-muted rounded-lg w-full">
+        <AudioPlayer blob={audioBlob} duration={recordingTime} />
         <Button onClick={handleSend} size="icon" disabled={isSending}>
           {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>
@@ -112,105 +117,124 @@ export function VoiceRecorder({ onSend, onCancel, isSending }: VoiceRecorderProp
   }
 
   return (
-    <div className="flex items-center space-x-2 p-2">
-      {!isRecording ? (
-        <Button onClick={startRecording} size="icon" className="rounded-full">
-          <Mic className="h-5 w-5" />
-        </Button>
-      ) : (
-        <div className="flex items-center space-x-2 flex-grow bg-muted p-2 rounded-lg">
-           <Button onClick={stopRecording} size="icon" variant="destructive" className="rounded-full">
-                <Mic className="h-5 w-5" />
-           </Button>
-          <div className="text-sm text-red-500 font-mono w-12">{formatTime(recordingTime)}</div>
-          <div className="text-sm text-muted-foreground">Recording...</div>
+    <div className="flex items-center space-x-2 p-2 w-full">
+        <div className="flex items-center space-x-3 flex-grow bg-muted p-2 rounded-lg">
+           <Mic className="h-5 w-5 text-red-500 animate-pulse" />
+           <div className="text-sm text-red-500 font-mono w-12">{formatTime(recordingTime)}</div>
+           <div className="flex-grow text-sm text-muted-foreground">Enregistrement...</div>
+            <Button onClick={stopRecording} size="icon" variant="secondary" className="rounded-full">
+                 <CheckCircle className="h-5 w-5 text-green-500" />
+            </Button>
            <Button onClick={handleCancelRecording} size="icon" variant="ghost">
              <Trash2 className="h-4 w-4" />
            </Button>
         </div>
-      )}
     </div>
   );
 }
 
-// --- Audio Player for preview ---
+// --- Audio Player for preview and chat messages ---
 interface AudioPlayerProps {
-    blob: Blob;
+    blob?: Blob;
+    url?: string;
+    duration: number; // duration in seconds
 }
 
-function AudioPlayer({ blob }: AudioPlayerProps) {
+export function AudioPlayer({ blob, url, duration }: AudioPlayerProps) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [progress, setProgress] = useState(0);
+    const [currentTime, setCurrentTime] = useState(0);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const progressRef = useRef<HTMLDivElement | null>(null);
 
-
     useEffect(() => {
-        const url = URL.createObjectURL(blob);
-        audioRef.current = new Audio(url);
+        const audioUrl = url || (blob ? URL.createObjectURL(blob) : null);
+        if (!audioUrl) return;
+
+        const audio = new Audio(audioUrl);
+        audioRef.current = audio;
 
         const handleTimeUpdate = () => {
-            if(audioRef.current) {
+            if(audioRef.current && audioRef.current.duration) {
                 setProgress((audioRef.current.currentTime / audioRef.current.duration) * 100);
+                setCurrentTime(audioRef.current.currentTime);
             }
         };
+
+        const handleLoadedMetadata = () => {
+             if(audioRef.current) {
+                setCurrentTime(0);
+                setProgress(0);
+             }
+        }
 
         const handleEnded = () => {
             setIsPlaying(false);
             setProgress(0);
+            setCurrentTime(0);
         };
 
-        audioRef.current.addEventListener('timeupdate', handleTimeUpdate);
-        audioRef.current.addEventListener('ended', handleEnded);
+        audio.addEventListener('timeupdate', handleTimeUpdate);
+        audio.addEventListener('ended', handleEnded);
+        audio.addEventListener('loadedmetadata', handleLoadedMetadata);
 
         return () => {
-            URL.revokeObjectURL(url);
-            if (audioRef.current) {
-                audioRef.current.removeEventListener('timeupdate', handleTimeUpdate);
-                audioRef.current.removeEventListener('ended', handleEnded);
+            if (blob && audioUrl && audioUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(audioUrl);
+            }
+            if (audio) {
+                audio.removeEventListener('timeupdate', handleTimeUpdate);
+                audio.removeEventListener('ended', handleEnded);
+                audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+                audio.pause();
+                audio.src = '';
             }
         };
-    }, [blob]);
+    }, [blob, url]);
 
     const togglePlay = () => {
         if (audioRef.current) {
             if (isPlaying) {
                 audioRef.current.pause();
             } else {
-                audioRef.current.play();
+                audioRef.current.play().catch(e => console.error("Audio play failed:", e));
             }
             setIsPlaying(!isPlaying);
         }
     };
 
     const handleSeek = (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-        if (audioRef.current && progressRef.current) {
+        if (audioRef.current && progressRef.current && audioRef.current.duration) {
             const rect = progressRef.current.getBoundingClientRect();
             const x = event.clientX - rect.left;
             const width = rect.width;
-            const duration = audioRef.current.duration;
-            const newTime = (x/width) * duration;
+            const newTime = (x/width) * audioRef.current.duration;
             audioRef.current.currentTime = newTime;
         }
     }
 
-    const formatDuration = (seconds: number): string => {
-        if (isNaN(seconds) || seconds === 0) return "0:00";
+    const formatTime = (seconds: number): string => {
+        if (isNaN(seconds) || seconds < 0) return "0:00";
         const minutes = Math.floor(seconds / 60);
         const secs = Math.floor(seconds % 60);
         return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
     }
 
+    const displayDuration = audioRef.current?.duration && isFinite(audioRef.current.duration) ? audioRef.current.duration : duration;
 
     return (
-        <div className="flex items-center space-x-2 flex-grow">
-            <Button onClick={togglePlay} size="icon" variant="ghost">
+        <div className="flex items-center space-x-2 flex-grow w-full">
+            <Button onClick={togglePlay} size="icon" variant="ghost" className="shrink-0">
                 {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
             </Button>
-            <div ref={progressRef} onClick={handleSeek} className="w-full h-2 bg-gray-300 rounded-full cursor-pointer">
-                <div style={{ width: `${progress}%`}} className="h-full bg-primary rounded-full"></div>
+            <div className="flex items-center space-x-2 flex-grow">
+                <div ref={progressRef} onClick={handleSeek} className="w-full h-1.5 bg-gray-300 rounded-full cursor-pointer relative group">
+                    <div style={{ width: `${progress}%`}} className="h-full bg-primary rounded-full relative">
+                       <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-3 h-3 bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    </div>
+                </div>
+                <span className="text-xs font-mono text-muted-foreground w-16 text-right">{isPlaying ? formatTime(currentTime) : formatTime(displayDuration)}</span>
             </div>
-            {audioRef.current && <span className="text-sm font-mono text-muted-foreground">{formatDuration(audioRef.current.duration)}</span>}
         </div>
     );
 }
