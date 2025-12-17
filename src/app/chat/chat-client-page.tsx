@@ -390,19 +390,26 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       const image = await Camera.getPhoto({ quality: 90, allowEditing: false, resultType: CameraResultType.DataUrl, source });
       if (!image.dataUrl) return;
       setIsUploading(true);
-      const response = await fetch(image.dataUrl);
-      const blob = await response.blob();
+
+      const blob = await (await fetch(image.dataUrl)).blob();
       const fileName = `${new Date().getTime()}.jpeg`;
       const chatId = getChatId(currentUser.uid, otherUserId);
       const storageRef = ref(storage, `chat_images/${chatId}/${fileName}`);
+      
       const uploadTask = uploadBytesResumable(storageRef, blob);
-      uploadTask.on('state_changed', () => {}, 
+      
+      uploadTask.on('state_changed', 
+        () => {}, // progress
         (error) => {
             console.error("Upload failed:", error);
             toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer l\'image.' });
             setIsUploading(false);
         },
-        () => { getDownloadURL(uploadTask.snapshot.ref).then((url) => { handleSendMessage(undefined, { imageUrl: url, text: '' }); setIsUploading(false); }); }
+        async () => { 
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            await handleSendMessage(undefined, { imageUrl: downloadURL, text: '' }); 
+            setIsUploading(false);
+        }
       );
     } catch (error) { console.info("Photo selection/capture cancelled."); setIsUploading(false); }
   }, [currentUser, otherUser, handleSendMessage, toast, requestCameraPermission, requestStoragePermission]);
@@ -421,11 +428,10 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
                 toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer le message vocal.' });
                 setIsUploading(false);
             },
-            () => {
-                getDownloadURL(uploadTask.snapshot.ref).then((url) => {
-                    handleSendMessage(undefined, { audioUrl: url, audioDuration: duration });
-                    setIsUploading(false);
-                });
+            async () => {
+                const url = await getDownloadURL(uploadTask.snapshot.ref);
+                await handleSendMessage(undefined, { audioUrl: url, audioDuration: duration });
+                setIsUploading(false);
             }
         );
     } catch (error) {
@@ -449,7 +455,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
     const result = await initiateCall(currentUser.uid, otherUserId, isVideo);
 
-    if (result.success) {
+    if (result.success && result.channelId) {
         router.push(`/call/${result.channelId}`);
     } else {
         toast({
@@ -590,9 +596,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
                 <div className="relative w-full h-full flex items-center justify-center p-4">
                     <Image src={zoomedImageUrl} alt="Image zoomée" fill className="object-contain" />
                 </div>
-                <DialogFooter className="absolute bottom-4 left-1/2 -translate-x-1/2">
-                    <Button variant="secondary" onClick={handleDownloadImage}><Download className="mr-2 h-4 w-4" />Télécharger</Button>
-                </DialogFooter>
             </DialogContent>
         </Dialog>
       )}
