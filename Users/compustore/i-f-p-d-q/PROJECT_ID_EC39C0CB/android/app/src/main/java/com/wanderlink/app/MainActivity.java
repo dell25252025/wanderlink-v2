@@ -1,11 +1,13 @@
 package com.wanderlink.app;
 
 import android.os.Bundle;
+import android.view.WindowManager;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.PluginMethod;
 import androidx.annotation.NonNull;
 
 public class MainActivity extends BridgeActivity {
@@ -43,6 +45,21 @@ public class MainActivity extends BridgeActivity {
             });
         }
     }
+
+    @PluginMethod
+    public void enableSecure() {
+        runOnUiThread(() -> {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        });
+    }
+
+    @PluginMethod
+    public void disableSecure() {
+        runOnUiThread(() -> {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        });
+    }
+
 
     // --- CORRECTION ---
     // Gère la réponse de la demande de permission et la transmet à Capacitor.

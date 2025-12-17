@@ -21,12 +21,15 @@ import { ReportAbuseDialog } from '@/components/report-abuse-dialog';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDocs, limit, deleteField } from 'firebase/firestore';
 import type { DocumentData, Timestamp } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject, uploadString } from "firebase/storage";
 import { Camera, CameraResultType, CameraSource, PermissionState } from '@capacitor/camera';
 import { AndroidPermissions } from '@awesome-cordova-plugins/android-permissions';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { AudioPlayer, VoiceRecorder } from './voice-message';
+import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
+
 
 // --- Interfaces ---
 interface Message {
@@ -237,6 +240,41 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const longPressTimer = useRef<NodeJS.Timeout>();
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
+  // Gérer la protection d'écran
+  useEffect(() => {
+    const enableSecure = async () => {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          // Note: Le nom du plugin est automatiquement déduit du nom de la classe native (MainActivity)
+          await CapacitorApp.requestPlugins().then((plugins) => {
+            (plugins.App as any).enableSecure();
+          });
+          console.log('Screen capture protection enabled.');
+        } catch (e) {
+          console.error('Failed to enable screen capture protection', e);
+        }
+      }
+    };
+
+    const disableSecure = async () => {
+      if (Capacitor.isNativePlatform()) {
+        try {
+           await CapacitorApp.requestPlugins().then((plugins) => {
+            (plugins.App as any).disableSecure();
+          });
+          console.log('Screen capture protection disabled.');
+        } catch (e) {
+          console.error('Failed to disable screen capture protection', e);
+        }
+      }
+    };
+
+    enableSecure();
+    return () => {
+      disableSecure();
+    };
+  }, []);
+
   useEffect(() => {
     if (otherUserId) {
       getUserProfile(otherUserId).then(setOtherUser);
@@ -372,47 +410,34 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
   }, [messages, loadingMessages]);
 
-  const handleSendMessage = useCallback(async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, messageData: Partial<Message> = {}) => {
-    if (e) e.preventDefault();
+  const handleSendMessage = useCallback(async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, messageData: Partial<Omit<Message, 'id' | 'senderId' | 'timestamp' | 'reactions'>> = {}) => {
+    if(e) e.preventDefault();
     const text = newMessage.trim();
-
     if ((!text && !messageData.imageUrl && !messageData.audioUrl) || !currentUser || !otherUser) return;
-  
+
     const chatId = getChatId(currentUser.uid, otherUserId);
     const chatDocRef = doc(db, 'chats', chatId);
     const messagesColRef = collection(chatDocRef, 'messages');
-  
+    
     setNewMessage('');
-  
+
     try {
-      const finalMessageData = {
-        text: text,
-        senderId: currentUser.uid,
-        timestamp: serverTimestamp(),
-        imageUrl: messageData.imageUrl || null,
-        audioUrl: messageData.audioUrl || null,
-        audioDuration: messageData.audioDuration || null,
-      };
-  
+        const finalMessageData = {
+            text: text,
+            senderId: currentUser.uid,
+            timestamp: serverTimestamp(),
+            imageUrl: messageData.imageUrl || null,
+            audioUrl: messageData.audioUrl || null,
+            audioDuration: messageData.audioDuration || null,
+        };
+
       const newDocRef = await addDoc(messagesColRef, finalMessageData);
       
-      let lastMessageText = text;
-      if (finalMessageData.imageUrl) {
-        lastMessageText = '📷 Photo';
-      } else if (finalMessageData.audioUrl) {
-        lastMessageText = '🎤 Message vocal';
-      }
-  
-      await setDoc(chatDocRef, { 
-        participants: [currentUser.uid, otherUserId], 
-        lastMessage: { 
-          id: newDocRef.id, 
-          text: lastMessageText, 
-          senderId: currentUser.uid, 
-          timestamp: serverTimestamp(), 
-          read: false 
-        } 
-      }, { merge: true });
+      let lastMessageText = '📷 Photo';
+      if(finalMessageData.audioUrl) lastMessageText = '🎤 Message vocal';
+      else if(text) lastMessageText = text;
+
+      await setDoc(chatDocRef, { participants: [currentUser.uid, otherUserId], lastMessage: { id: newDocRef.id, text: lastMessageText, senderId: currentUser.uid, timestamp: serverTimestamp(), read: false } }, { merge: true });
     } catch (error) {
       console.error("Erreur lors de l'envoi du message:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
@@ -461,42 +486,47 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
     setShowReactionPopoverFor(null);
   }, [currentUser, otherUser, toast]);
-  
-  const takePicture = useCallback(async (source: CameraSource) => {
+
+const takePicture = useCallback(async (source: CameraSource) => {
     let hasPermission = false;
     if (source === CameraSource.Camera) {
-        hasPermission = await requestCameraPermission();
+      hasPermission = await requestCameraPermission();
     } else {
-        hasPermission = await requestStoragePermission();
+      hasPermission = await requestStoragePermission();
     }
     if (!hasPermission || !currentUser || !otherUser) return;
 
     try {
-      const image = await Camera.getPhoto({ quality: 90, allowEditing: false, resultType: CameraResultType.DataUrl, source });
-      if (!image.dataUrl) return;
-      setIsUploading(true);
+      const image = await Camera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl,
+        source,
+      });
 
-      const blob = await (await fetch(image.dataUrl)).blob();
+      if (!image.dataUrl) {
+        console.error("No data URL returned from camera.");
+        return;
+      }
+      setIsUploading(true);
+      
       const fileName = `${new Date().getTime()}.jpeg`;
       const chatId = getChatId(currentUser.uid, otherUserId);
       const storageRef = ref(storage, `chat_images/${chatId}/${fileName}`);
-      
-      const uploadTask = uploadBytesResumable(storageRef, blob);
-      
-      uploadTask.on('state_changed', 
-        () => {}, // progress
-        (error) => {
-            console.error("Upload failed:", error);
-            toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer l\'image.' });
-            setIsUploading(false);
-        },
-        async () => { 
-            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            await handleSendMessage(undefined, { imageUrl: downloadURL, text: '' }); 
-            setIsUploading(false);
-        }
-      );
-    } catch (error) { console.info("Photo selection/capture cancelled."); setIsUploading(false); }
+
+      // Upload the data URL string
+      const uploadTask = await uploadString(storageRef, image.dataUrl, 'data_url');
+      const downloadUrl = await getDownloadURL(uploadTask.ref);
+
+      // Send message with the final URL
+      await handleSendMessage(undefined, { imageUrl: downloadUrl, text: '' });
+
+    } catch (error) {
+      console.error("Photo capture or processing failed:", error);
+      toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer l\'image.' });
+    } finally {
+      setIsUploading(false);
+    }
   }, [currentUser, otherUser, handleSendMessage, toast, requestCameraPermission, requestStoragePermission]);
 
   const handleSendVoiceMessage = useCallback(async (blob: Blob, duration: number) => {
@@ -507,26 +537,35 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         const fileName = `${new Date().getTime()}.webm`;
         const storageRef = ref(storage, `chat_audio/${chatId}/${fileName}`);
         const uploadTask = uploadBytesResumable(storageRef, blob);
-        uploadTask.on('state_changed', () => {},
-            (error) => {
-                console.error("Voice message upload failed:", error);
-                toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer le message vocal.' });
-                setIsUploading(false);
-            },
-            async () => {
-                const url = await getDownloadURL(uploadTask.snapshot.ref);
-                await handleSendMessage(undefined, { audioUrl: url, audioDuration: duration });
-                setIsUploading(false);
-            }
-        );
+        
+        await new Promise((resolve, reject) => {
+            uploadTask.on('state_changed', 
+                () => {}, // progress
+                (error) => {
+                    console.error("Voice message upload failed:", error);
+                    toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer le message vocal.' });
+                    setIsUploading(false);
+                    reject(error);
+                },
+                async () => {
+                    const url = await getDownloadURL(uploadTask.snapshot.ref);
+                    await handleSendMessage(undefined, { audioUrl: url, audioDuration: duration });
+                    setIsUploading(false);
+                    resolve(url);
+                }
+            );
+        });
+
     } catch (error) {
         console.error("Failed to send voice message", error);
-        toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible d\'envoyer le message vocal.' });
-        setIsUploading(false);
+        if (!isUploading) { // Avoid duplicate toasts if error handled in listener
+             toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible d\'envoyer le message vocal.' });
+        }
     } finally {
         setIsRecording(false);
     }
-  }, [currentUser, otherUser, handleSendMessage, toast]);
+  }, [currentUser, otherUser, handleSendMessage, toast, isUploading]);
+
 
   const handleStartCall = useCallback(async (isVideo: boolean) => {
     if (!currentUser) return;
@@ -540,7 +579,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
     const result = await initiateCall(currentUser.uid, otherUserId, isVideo);
 
-    if (result.success && result.channelId) {
+    if (result.success) {
         router.push(`/call/${result.channelId}`);
     } else {
         toast({
