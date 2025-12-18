@@ -231,7 +231,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [newMessage, setNewMessage] = useState('');
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isUploading, setIsUploading] = useState(isUploading);
   const [zoomedImageUrl, setZoomedImageUrl] = useState<string | null>(null);
   const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
   const [showReactionPopoverFor, setShowReactionPopoverFor] = useState<string | null>(null);
@@ -694,5 +694,3 @@ const takePicture = useCallback(async (source: CameraSource) => {
     </div>
   );
 }
-
-    
