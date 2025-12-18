@@ -455,14 +455,20 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, [currentUser, otherUser, toast]);
   
   const handleCopy = useCallback(async (text: string) => {
+    if (!text) return;
     try {
         await navigator.clipboard.writeText(text);
         toast({ description: "Message copié !" });
     } catch (error) {
         console.error('Failed to copy text: ', error);
         toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de copier le message.' });
+    } finally {
+        // Use a small timeout to ensure the UI has time to process the toast
+        // before the popover is removed from the DOM.
+        setTimeout(() => {
+            setShowReactionPopoverFor(null);
+        }, 100);
     }
-    setShowReactionPopoverFor(null);
   }, [toast]);
 
 const takePicture = useCallback(async (source: CameraSource) => {
