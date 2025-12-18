@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef, memo, useCallback, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Video, Loader2, CheckCircle, PlusCircle, Trash2, Download, Camera as CameraIcon, Mic, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Video, Loader2, CheckCircle, PlusCircle, Trash2, Download, Camera as CameraIcon, Mic, Image as ImageIcon, Copy } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getUserProfile, initiateCall } from '@/lib/firebase-actions';
@@ -53,6 +53,7 @@ interface MessageItemProps {
   onLongPressEnd: () => void;
   onReact: (message: Message, emoji: string) => void;
   onSetupDelete: (message: Message) => void;
+  onCopy: (text: string) => void;
   onZoomImage: (imageUrl: string) => void;
   showReactionPopoverFor: string | null;
   setShowReactionPopoverFor: (id: string | null) => void;
@@ -169,7 +170,7 @@ const PhotoViewer = ({ imageUrl, onClose }: { imageUrl: string; onClose: () => v
 // --- Memoized Message Component ---
 const MessageItem = memo<MessageItemProps>(({ 
     message, isSender, isLastRead, otherUserImage, otherUserName, 
-    onLongPressStart, onLongPressEnd, onReact, onSetupDelete, onZoomImage,
+    onLongPressStart, onLongPressEnd, onReact, onSetupDelete, onCopy, onZoomImage,
     showReactionPopoverFor, setShowReactionPopoverFor
 }) => {
     const reactions = message.reactions ? Object.entries(message.reactions) : [];
@@ -205,6 +206,7 @@ const MessageItem = memo<MessageItemProps>(({
                 <PopoverContent className="w-auto p-1 rounded-full">
                     <div className="flex items-center gap-1">
                         {availableReactions.map(emoji => <Button key={emoji} onClick={() => onReact(message, emoji)} variant="ghost" size="icon" className="rounded-full h-8 w-8 text-lg">{emoji}</Button>)}
+                        {message.text && <Button onClick={() => onCopy(message.text)} variant="ghost" size="icon" className="rounded-full h-8 w-8"><Copy className="h-4 w-4" /></Button>}
                         {isSender && <Button onClick={() => onSetupDelete(message)} variant="ghost" size="icon" className="rounded-full h-8 w-8"><Trash2 className="h-4 w-4" /></Button>}
                     </div>
                 </PopoverContent>
@@ -474,6 +476,17 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     setShowReactionPopoverFor(null);
   }, [currentUser, otherUser, toast]);
 
+  const handleCopy = useCallback(async (text: string) => {
+    try {
+        await navigator.clipboard.writeText(text);
+        toast({ description: "Message copié !" });
+    } catch (error) {
+        console.error('Failed to copy text: ', error);
+        toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de copier le message.' });
+    }
+    setShowReactionPopoverFor(null);
+  }, [toast]);
+
 const takePicture = useCallback(async (source: CameraSource) => {
     let hasPermission = false;
     if (source === CameraSource.Camera) {
@@ -622,6 +635,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                     onLongPressEnd={handleLongPressEnd}
                     onReact={handleReact}
                     onSetupDelete={handleSetupDelete}
+                    onCopy={handleCopy}
                     onZoomImage={handleZoomImage}
                     showReactionPopoverFor={showReactionPopoverFor}
                     setShowReactionPopoverFor={setShowReactionPopoverFor}
@@ -702,6 +716,3 @@ const takePicture = useCallback(async (source: CameraSource) => {
     </div>
   );
 }
-
-
-    
