@@ -13,15 +13,13 @@ import androidx.annotation.NonNull;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        // Log pour vérifier que cette méthode est bien exécutée au lancement.
-        android.util.Log.e("FLAG_SECURE_TEST", "onCreate MainActivity executing");
-        
-        // Appliquer le drapeau de sécurité AVANT l'initialisation de l'activité parente
-        // C'est la méthode la plus robuste pour s'assurer que le flag n'est pas écrasé.
+        // Appliquer le drapeau de sécurité AVANT l'initialisation de l'activité parente.
+        // C'est la méthode la plus robuste pour s'assurer que le flag est appliqué.
         getWindow().setFlags(
             WindowManager.LayoutParams.FLAG_SECURE,
             WindowManager.LayoutParams.FLAG_SECURE
         );
+        android.util.Log.e("FLAG_SECURE_TEST", "onCreate MainActivity executing");
 
         super.onCreate(savedInstanceState);
     }
