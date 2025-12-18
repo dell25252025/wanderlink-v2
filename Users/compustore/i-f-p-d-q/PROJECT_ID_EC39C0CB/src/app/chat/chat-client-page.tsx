@@ -182,7 +182,7 @@ const MessageItem = memo<MessageItemProps>(({
         if (message.audioUrl) {
             return <AudioPlayer audioUrl={message.audioUrl} isSender={isSender} />;
         }
-        return message.text;
+        return <span className="select-text">{message.text}</span>;
     }
 
     return (
@@ -694,3 +694,5 @@ const takePicture = useCallback(async (source: CameraSource) => {
     </div>
   );
 }
+
+    
