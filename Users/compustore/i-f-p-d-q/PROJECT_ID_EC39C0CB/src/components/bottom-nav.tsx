@@ -124,7 +124,7 @@ const BottomNav = () => {
         <nav className="h-14 w-full rounded-full border bg-background/90 p-1 shadow-lg backdrop-blur-md">
           <div className="grid h-full grid-cols-5 items-center justify-around">
             
-            <NavItem href="/discover" icon={Compass} label="Découvrir" active={isDiscoverActive} />
+            <NavItem href="/" icon={Compass} label="Découvrir" active={isDiscoverActive} />
             <NavItem href="/friends" icon={Users} label="Amis" active={areFriendsActive} />
 
             {/* Bouton central de profil */}
