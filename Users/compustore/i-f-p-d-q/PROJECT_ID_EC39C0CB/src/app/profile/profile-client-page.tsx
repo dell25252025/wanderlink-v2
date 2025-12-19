@@ -549,7 +549,7 @@ export default function ProfileClientPage() {
                         </div>
                         
                         <div className="flex items-center gap-2 pl-2">
-                             {isOwner && (
+                            {isOwner && (
                                 <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
                                     <Link href={`/profile/edit?id=${profileId}`}>
                                         <Edit className="h-4 w-4" />
@@ -559,42 +559,55 @@ export default function ProfileClientPage() {
                             )}
                             
                             {!isOwner && (
-                                <Drawer>
-                                    <DrawerTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                                            <MoreVertical className="h-4 w-4 md:h-5 md:w-5" />
+                                <>
+                                    <div className="hidden md:flex items-center gap-2">
+                                        <FriendButtonContent />
+                                        <Button asChild size="sm">
+                                            <Link href={`/chat?id=${profileId}`}>
+                                                <Send className="mr-2 h-4 w-4" />
+                                                Message
+                                            </Link>
                                         </Button>
-                                    </DrawerTrigger>
-                                    <DrawerContent>
-                                        <div className="mx-auto w-full max-w-sm">
-                                            <DrawerHeaderComponent>
-                                                <DrawerTitle>Options</DrawerTitle>
-                                                <DrawerDescriptionComponent>Gérez votre interaction avec ce profil.</DrawerDescriptionComponent>
-                                            </DrawerHeaderComponent>
-                                            <div className="p-4 pb-0">
-                                                <div className="mt-3 h-full space-y-2">
-                                                    <FriendButtonContent />
-                                                    <div className="border-t"></div>
+                                    </div>
+                                    <Drawer>
+                                        <DrawerTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                <MoreVertical className="h-4 w-4 md:h-5 md:w-5" />
+                                            </Button>
+                                        </DrawerTrigger>
+                                        <DrawerContent>
+                                            <div className="mx-auto w-full max-w-sm">
+                                                <DrawerHeaderComponent>
+                                                    <DrawerTitle>Options</DrawerTitle>
+                                                    <DrawerDescriptionComponent>Gérez votre interaction avec ce profil.</DrawerDescriptionComponent>
+                                                </DrawerHeaderComponent>
+                                                <div className="p-4 pb-0">
+                                                    <div className="mt-3 h-full space-y-2">
+                                                        <div className="md:hidden">
+                                                            <FriendButtonContent />
+                                                        </div>
+                                                        <div className="border-t md:hidden"></div>
+                                                        <DrawerClose asChild>
+                                                            <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleBlockUser}>
+                                                                <Ban className="mr-2 h-5 w-5" /> Bloquer
+                                                            </Button>
+                                                        </DrawerClose>
+                                                        <DrawerClose asChild>
+                                                            <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleReportUser}>
+                                                                <ShieldAlert className="mr-2 h-5 w-5" /> Signaler un abus
+                                                            </Button>
+                                                        </DrawerClose>
+                                                    </div>
+                                                </div>
+                                                <div className="p-4">
                                                     <DrawerClose asChild>
-                                                        <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleBlockUser}>
-                                                            <Ban className="mr-2 h-5 w-5" /> Bloquer
-                                                        </Button>
-                                                    </DrawerClose>
-                                                    <DrawerClose asChild>
-                                                        <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleReportUser}>
-                                                            <ShieldAlert className="mr-2 h-5 w-5" /> Signaler un abus
-                                                        </Button>
+                                                        <Button variant="secondary" className="w-full h-12 text-base">Annuler</Button>
                                                     </DrawerClose>
                                                 </div>
                                             </div>
-                                            <div className="p-4">
-                                                <DrawerClose asChild>
-                                                    <Button variant="secondary" className="w-full h-12 text-base">Annuler</Button>
-                                                </DrawerClose>
-                                            </div>
-                                        </div>
-                                    </DrawerContent>
-                                </Drawer>
+                                        </DrawerContent>
+                                    </Drawer>
+                                </>
                             )}
                         </div>
                         
@@ -769,3 +782,5 @@ export default function ProfileClientPage() {
     </div>
   );
 }
+
+    
