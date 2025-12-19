@@ -231,7 +231,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [newMessage, setNewMessage] = useState('');
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [isUploading, setIsUploading] = useState(isUploading);
+  const [isUploading, setIsUploading] = useState(false);
   const [zoomedImageUrl, setZoomedImageUrl] = useState<string | null>(null);
   const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
   const [showReactionPopoverFor, setShowReactionPopoverFor] = useState<string | null>(null);
@@ -461,8 +461,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         console.error('Failed to copy text: ', err);
         toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de copier le message.' });
     }).finally(() => {
-        // Use a small timeout to ensure the UI has time to process the toast
-        // before the popover is removed from the DOM.
         setTimeout(() => {
             setShowReactionPopoverFor(null);
         }, 100);
