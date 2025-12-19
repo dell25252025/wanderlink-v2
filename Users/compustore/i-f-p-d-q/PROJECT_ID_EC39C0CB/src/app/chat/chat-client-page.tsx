@@ -24,11 +24,8 @@ import type { DocumentData, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject, uploadString } from "firebase/storage";
 import { Camera, CameraResultType, CameraSource, PermissionState } from '@capacitor/camera';
 import { AndroidPermissions } from '@awesome-cordova-plugins/android-permissions';
-import { Filesystem, Directory } from '@capacitor/filesystem';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { AudioPlayer, VoiceRecorder } from './voice-message';
-import { Capacitor } from '@capacitor/core';
-import { App as CapacitorApp } from '@capacitor/app';
 
 
 // --- Interfaces ---
@@ -643,7 +640,6 @@ const takePicture = useCallback(async (source: CameraSource) => {
                     onClick={handleMessageClick}
                     onReact={handleReact}
                     onSetupDelete={handleSetupDelete}
-                    onCopy={handleCopy}
                     onZoomImage={handleZoomImage}
                     showReactionPopoverFor={showReactionPopoverFor}
                     setShowReactionPopoverFor={setShowReactionPopoverFor}
@@ -724,3 +720,5 @@ const takePicture = useCallback(async (source: CameraSource) => {
     </div>
   );
 }
+
+    
