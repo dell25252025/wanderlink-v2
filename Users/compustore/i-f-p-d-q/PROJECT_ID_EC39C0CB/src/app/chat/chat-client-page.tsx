@@ -182,12 +182,18 @@ const MessageItem = memo<MessageItemProps>(({
         return <span className="select-text">{message.text}</span>;
     }
 
+    const handleLongPress = (e: React.TouchEvent | React.MouseEvent) => {
+        e.preventDefault();
+        onLongPress(message);
+    };
+
     return (
         <div onContextMenu={(e) => e.preventDefault()}>
             <Popover open={showReactionPopoverFor === message.id} onOpenChange={(isOpen) => !isOpen && setShowReactionPopoverFor(null)}>
                 <PopoverTrigger asChild>
                     <div 
-                        onLongPress={() => onLongPress(message)}
+                        onTouchStart={handleLongPress}
+                        onMouseDown={handleLongPress}
                         onClick={() => onClick(message)}
                         className={`flex items-end gap-2 relative ${isSender ? 'justify-end' : 'justify-start'}`}>
                         {!isSender && <Avatar className="h-6 w-6 self-end"><AvatarImage src={otherUserImage} /><AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback></Avatar>}
@@ -449,14 +455,20 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   
   const handleCopy = useCallback(() => {
     if (!selectedMessage?.text) return;
-    navigator.clipboard.writeText(selectedMessage.text).then(() => {
+    navigator.clipboard.writeText(selectedMessage.text)
+      .then(() => {
         toast({ description: "Message copié !" });
-    }).catch(err => {
+      })
+      .catch(err => {
         console.error('Failed to copy text: ', err);
         toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de copier le message.' });
-    }).finally(() => {
-       setSelectedMessage(null);
-    });
+      })
+      .finally(() => {
+        // Use a timeout to ensure state updates properly
+        setTimeout(() => {
+            setSelectedMessage(null);
+        }, 100);
+      });
   }, [selectedMessage, toast]);
 
 const takePicture = useCallback(async (source: CameraSource) => {
@@ -571,8 +583,11 @@ const takePicture = useCallback(async (source: CameraSource) => {
   
   const handleMessageLongPress = useCallback((message: Message) => {
     setSelectedMessage(message);
-    setShowReactionPopoverFor(message.id);
-  }, []);
+    // Open reaction popover only if it's not a text message, or on desktop
+    if (!message.text || isDesktop) {
+        setShowReactionPopoverFor(message.id);
+    }
+  }, [isDesktop]);
 
   const handleMessageClick = useCallback((message: Message) => {
     if (selectedMessage) {
@@ -720,5 +735,3 @@ const takePicture = useCallback(async (source: CameraSource) => {
     </div>
   );
 }
-
-    
