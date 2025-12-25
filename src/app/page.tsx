@@ -4,117 +4,69 @@
 import { Suspense, useEffect, useState } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { getAllUsers, getUserProfile } from '@/lib/firebase-actions';
 import BottomNav from '@/components/bottom-nav';
 import WanderlinkHeader from '@/components/wanderlink-header';
 import { useToast } from '@/hooks/use-toast';
 import type { DocumentData } from 'firebase/firestore';
-import type { UserProfile } from '@/lib/schema';
-import ProfileCard from '@/components/profile-card';
+import DiscoverClientPage from '@/app/discover/discover-client-page';
 
-// --- Sub-component for Authenticated Users --- //
-
-function DiscoverPage({ user }: { user: User }) {
+function AuthenticatedHomePage({ user }: { user: User }) {
   const { toast } = useToast();
-  const searchParams = useSearchParams();
-
   const [currentUserProfile, setCurrentUserProfile] = useState<DocumentData | null>(null);
-  const [allUsers, setAllUsers] = useState<DocumentData[]>([]);
-  const [displayMatches, setDisplayMatches] = useState<DocumentData[]>([]);
+  const [initialProfiles, setInitialProfiles] = useState<DocumentData[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchProfiles() {
-      try {
-        setProfilesLoading(true);
-        // Let's limit the number of users we fetch to improve performance
-        const [userProfile, users] = await Promise.all([
-          getUserProfile(user.uid),
-          getAllUsers(12), // Fetch a limited number of users
-        ]);
-        setCurrentUserProfile(userProfile);
-        const otherUsers = users.filter(u => u.id !== user.uid);
-        setAllUsers(otherUsers);
-        setDisplayMatches(otherUsers); // Initially display the fetched users
-      } catch (error) {
-        console.error("Failed to fetch profiles:", error);
-        toast({ variant: 'destructive', title: 'Error fetching profiles' });
-      } finally {
+    function fetchInitialData() {
+      const searchResults = localStorage.getItem('searchResults');
+      if (searchResults) {
+        try {
+          const parsedResults = JSON.parse(searchResults);
+          setInitialProfiles(parsedResults);
+          localStorage.removeItem('searchResults'); // Clear after use
+        } catch (error) {
+          console.error("Error parsing search results from localStorage:", error);
+          setInitialProfiles([]); 
+        }
         setProfilesLoading(false);
+      } else {
+        // Fetch initial set of users if no search results are present
+        getAllUsers(12)
+          .then(users => {
+            const otherUsers = users.filter(u => u.id !== user.uid);
+            setInitialProfiles(otherUsers);
+          })
+          .catch(error => {
+            console.error("Failed to fetch initial users:", error);
+            toast({ variant: 'destructive', title: 'Error fetching users' });
+          })
+          .finally(() => setProfilesLoading(false));
       }
     }
-    fetchProfiles();
+
+    fetchInitialData();
+    getUserProfile(user.uid).then(setCurrentUserProfile);
   }, [user, toast]);
-  
-  // Minimal filtering logic can be added back here if needed
-  useEffect(() => {
-    // This effect can be expanded later to re-introduce filtering logic
-    // For now, it just ensures displayMatches is populated from allUsers
-    if (allUsers.length > 0) {
-      setDisplayMatches(allUsers);
-    }
-  }, [allUsers, searchParams]);
-
-
-  const getMappedProfiles = (profiles: DocumentData[]): UserProfile[] => {
-      return profiles.map(p => ({
-        id: p.id,
-        name: p.firstName,
-        age: p.age,
-        gender: p.gender,
-        bio: p.bio,
-        location: p.location || 'N/A',
-        travelStyle: p.travelStyle || 'Tous',
-        dreamDestinations: [p.destination] || ['Toutes'],
-        languagesSpoken: p.languages || [],
-        travelIntention: p.intention || '50/50',
-        verified: p.isVerified ?? false,
-        isVerified: p.isVerified ?? false,
-        image: p.profilePictures?.[0] || `https://picsum.photos/seed/${p.id}/800/1200`
-    }));
-  }
-
-  const mappedProfiles = getMappedProfiles(displayMatches);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
       <WanderlinkHeader />
       <main className="flex-1 pb-24 pt-10 md:pt-12">
         <div className="container mx-auto max-w-7xl px-2">
-          <div className="text-center">
-            {profilesLoading ? (
-              <div className="flex flex-col items-center justify-center text-center h-96">
-                <Loader2 className="h-16 w-16 animate-spin text-primary" />
-                <h2 className="mt-6 text-2xl font-semibold">Chargement des profils...</h2>
-              </div>
-            ) : (
-              <>
-                
-                <div className="mt-0">
-                   {displayMatches.length > 0 ? (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4">
-                      {mappedProfiles.map((profile) => (
-                        <ProfileCard key={profile.id} profile={profile} />
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground mt-8">Aucun autre profil trouvé.</p>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+          <DiscoverClientPage 
+            initialProfiles={initialProfiles} 
+            loading={profilesLoading} 
+            currentUserProfile={currentUserProfile}
+          />
         </div>
       </main>
       <BottomNav />
     </div>
   );
 }
-
-
-// --- Main Component --- //
 
 function ConditionalHome() {
   const [currentUserAuth, setCurrentUserAuth] = useState<User | null>(null);
@@ -130,7 +82,6 @@ function ConditionalHome() {
   }, []);
 
   useEffect(() => {
-    // Redirect only when authentication check is complete and user is not logged in.
     if (!loadingAuth && !currentUserAuth) {
       router.push('/login');
     }
@@ -147,12 +98,11 @@ function ConditionalHome() {
   if (currentUserAuth) {
     return (
       <Suspense fallback={<div className="flex h-screen w-full flex-col items-center justify-center bg-background"><Loader2 className="h-16 w-16 animate-spin text-primary" /></div>}>
-        <DiscoverPage user={currentUserAuth} />
+        <AuthenticatedHomePage user={currentUserAuth} />
       </Suspense>
     );
   }
   
-  // Return a loader while redirecting to prevent rendering anything else
   return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-background">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />

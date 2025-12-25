@@ -1,4 +1,5 @@
-'use client';
+
+"use client";
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
@@ -166,7 +167,7 @@ export default function DiscoverPage() {
             const { hits } = await usersIndex.search('', searchOptions);
             const searchResults = hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined, objectID: undefined }));
             localStorage.setItem('searchResults', JSON.stringify(searchResults));
-            router.push('/');
+            router.push('/'); // Redirect to home page with results
         } catch (error) {
             console.error("Error searching with Algolia:", error);
         } finally {
