@@ -104,7 +104,7 @@ export default function FriendsClientPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         {friends.map(friend => (
           <div key={friend.uid} className="bg-card p-4 rounded-lg shadow-sm flex flex-col items-center text-center">
-            <Link href={\`/profile?id=${friend.uid}\`} className="w-full">
+            <Link href={`/profile?id=${friend.uid}`} className="w-full">
                 <div className="relative h-24 w-24 rounded-full overflow-hidden mx-auto">
                 <Image 
                     src={friend.profilePictures?.[0] || '/default-avatar.png'} 
@@ -118,7 +118,7 @@ export default function FriendsClientPage() {
             </Link>
             <div className="mt-4 flex w-full gap-2">
                <Button asChild size="sm" className="flex-1">
-                 <Link href={\`/chat?id=${friend.uid}\`}>
+                 <Link href={`/chat?id=${friend.uid}`}>
                    <Send className="mr-2 h-4 w-4" /> Message
                  </Link>
                </Button>
