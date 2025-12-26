@@ -50,6 +50,14 @@ export default function RootLayout({
   return (
     <html lang="fr" suppressHydrationWarning>
       <body className={cn("font-sans antialiased", poppins.variable, playfair.variable, ptsans.variable)}>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.__ALGOLIA_APP_ID__ = "VOTRE_APP_ID_ICI";
+              window.__ALGOLIA_SEARCH_KEY__ = "VOTRE_CLÉ_DE_RECHERCHE_ICI";
+            `,
+          }}
+        />
         <AuthProvider>
           <ThemeProvider
             attribute="class"

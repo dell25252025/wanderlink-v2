@@ -24,7 +24,11 @@ import { Loader2, Search, Crown } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 declare global {
-    interface Window { algoliasearch: any; }
+    interface Window { 
+        algoliasearch: any;
+        __ALGOLIA_APP_ID__: string;
+        __ALGOLIA_SEARCH_KEY__: string;
+    }
 }
 
 export default function DiscoverPage() {
@@ -55,33 +59,29 @@ export default function DiscoverPage() {
     const [activities, setActivities] = useState('Toutes');
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
+        let algoliaInterval: NodeJS.Timeout | null = null;
+
+        const authUnsubscribe = onAuthStateChanged(auth, (user) => {
             setCurrentUser(user);
             if (user) {
                 getUserProfile(user.uid).then(profile => {
                     setUserProfile(profile);
                     if (profile) {
-                        if (profile.gender === 'Femme') {
-                            setShowMe('Homme');
-                        } else if (profile.gender === 'Autre') {
-                            setShowMe('Autre');
-                        } else {
-                            setShowMe('Femme');
-                        }
+                        if (profile.gender === 'Femme') setShowMe('Homme');
+                        else if (profile.gender === 'Autre') setShowMe('Autre');
+                        else setShowMe('Femme');
                     }
                 });
 
-                const appId = process.env.NEXT_PUBLIC_ALGOLIA_APP_ID;
-                const searchKey = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY;
+                const appId = process.env.NEXT_PUBLIC_ALGOLIA_APP_ID || (window as any).__ALGOLIA_APP_ID__;
+                const searchKey = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY || (window as any).__ALGOLIA_SEARCH_KEY__;
 
                 if (!appId || !searchKey) {
-                    console.error('Algolia environment variables are not set.');
+                    console.error('Algolia environment variables are not set IN process.env OR window object.');
                     setLoading(false);
                     return;
                 }
 
-                // --- ROBUST SCRIPT LOADING --- 
-                // 1. Check if script already exists
                 if (!document.querySelector('script[src="https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js"]')) {
                     const script = document.createElement('script');
                     script.src = 'https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js';
@@ -89,25 +89,27 @@ export default function DiscoverPage() {
                     document.body.appendChild(script);
                 }
                 
-                // 2. Poll to wait for the script to be loaded and ready
-                const interval = setInterval(() => {
+                algoliaInterval = setInterval(() => {
                     if (window.algoliasearch) {
-                        clearInterval(interval);
+                        if (algoliaInterval) clearInterval(algoliaInterval);
                         const client = window.algoliasearch(appId, searchKey);
                         setAlgoliaClient(client);
                         setLoading(false);
                     }
-                }, 100); // Check every 100ms
-
-                // 3. Cleanup interval on component unmount
-                return () => clearInterval(interval);
+                }, 100);
 
             } else {
                 setLoading(false);
                 router.push('/login');
             }
         });
-        return () => unsubscribe();
+
+        return () => {
+            authUnsubscribe();
+            if (algoliaInterval) {
+                clearInterval(algoliaInterval);
+            }
+        };
     }, [router]);
 
     const handleNearbyChange = (checked: boolean) => {
@@ -129,8 +131,10 @@ export default function DiscoverPage() {
     };
 
     const handleSearch = async () => {
+        // CORRECTED: Guard clause first, THEN set loading state.
         if (!usersIndex || !userProfile || !currentUser) {
-            console.log('Search aborted. Index or profile not ready.', { usersIndex, userProfile, currentUser });
+            console.log('Search aborted. Index or profile not ready yet.', { usersIndex: !!usersIndex, userProfile: !!userProfile, currentUser: !!currentUser });
+            // Silently fail or show a toast message, but don't get stuck.
             return;
         }
         setIsSearching(true);
@@ -164,7 +168,7 @@ export default function DiscoverPage() {
             const { hits } = await usersIndex.search('', searchOptions);
             const searchResults = hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined, objectID: undefined }));
             localStorage.setItem('searchResults', JSON.stringify(searchResults));
-            router.push('/'); // Redirect to home page with results
+            router.push('/');
         } catch (error) {
             console.error("Error searching with Algolia:", error);
         } finally {
