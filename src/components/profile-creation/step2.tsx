@@ -57,38 +57,44 @@ const Step2 = () => {
   const { toast } = useToast();
 
   const handleLocate = async (isAutomatic = false) => {
-    // Dynamically import Capacitor to ensure it's only loaded on the client-side
-    const { Capacitor } = await import('@capacitor/core');
-
-    if (!Capacitor.isNativePlatform()) {
-        console.log("Capacitor features are not available in the browser.");
-        if (!isAutomatic) {
-            toast({ variant: 'destructive', title: "Fonctionnalité non disponible", description: "La géolocalisation n'est disponible que sur l'application mobile." });
-        }
-        return;
-    }
-
     setIsLocating(true);
     try {
-      // Dynamically import Geolocation and Http since they depend on Capacitor
+      const { Capacitor } = await import('@capacitor/core');
+      if (!Capacitor.isNativePlatform()) {
+          console.log("Capacitor not available in browser. Skipping auto-location.");
+          if (!isAutomatic) {
+              toast({ variant: 'destructive', title: "Fonctionnalité non disponible", description: "La géolocalisation n'est disponible que sur l'application mobile." });
+          }
+          setIsLocating(false);
+          return;
+      }
+      
       const { Geolocation } = await import('@capacitor/geolocation');
       const { Http } = await import('@capacitor/http');
 
+      // 1. Check current permission status
       let permissionStatus = await Geolocation.checkPermissions();
 
+      // 2. If not granted, ALWAYS request it. This is the key change.
       if (permissionStatus.location !== 'granted') {
-        if (isAutomatic) {
-          setIsLocating(false);
-          return; 
-        }
         permissionStatus = await Geolocation.requestPermissions();
-        if (permissionStatus.location !== 'granted') {
-          toast({ variant: 'destructive', title: "Permission refusée", description: "L'accès à la localisation a été refusé." });
-          setIsLocating(false);
-          return;
-        }
       }
 
+      // 3. After requesting, if it's STILL not granted, then we stop.
+      if (permissionStatus.location !== 'granted') {
+        // Only show a toast if the user clicked the button manually.
+        if (!isAutomatic) {
+          toast({ 
+            variant: 'destructive', 
+            title: "Permission refusée", 
+            description: "L'accès à la localisation a été refusé. Vous pouvez l'activer dans les paramètres de l'application."
+          });
+        }
+        setIsLocating(false);
+        return;
+      }
+
+      // 4. If we reach here, permission is granted. Proceed to get location.
       const position = await Geolocation.getCurrentPosition({ 
         timeout: 15000, 
         enableHighAccuracy: false 
@@ -117,6 +123,7 @@ const Step2 = () => {
         const foundCountry = countries.find(c => c.code.toLowerCase() === countryCode.toLowerCase());
         if (foundCountry) {
             setValue('location', foundCountry.name, { shouldValidate: true });
+            // Only show success toast on manual click for a better UX
             if (!isAutomatic) {
                 toast({ title: "Position trouvée !", description: `Pays défini sur : ${foundCountry.name}` });
             }
@@ -128,6 +135,7 @@ const Step2 = () => {
       }
     } catch (error: any) {
       console.error("Error with geolocation:", error);
+      // Only show error toast on manual click.
       if (!isAutomatic) {
           toast({ variant: 'destructive', title: "Erreur de localisation", description: "Impossible de déterminer votre position. Veuillez réessayer ou sélectionner manuellement." });
       }
@@ -136,11 +144,14 @@ const Step2 = () => {
     }
   };
 
+  // This effect will run once when the component mounts.
   useEffect(() => {
     const currentLocation = getValues('location');
+    // If no location is set, trigger the automatic location detection.
     if (!currentLocation) {
       handleLocate(true);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
