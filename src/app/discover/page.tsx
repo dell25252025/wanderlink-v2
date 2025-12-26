@@ -3,6 +3,8 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+// IMPORTANT: The Algolia script is loaded via CDN. This is just for type safety.
+import type algoliasearch from 'algoliasearch/lite';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -25,11 +27,44 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 declare global {
     interface Window { 
-        algoliasearch: any;
+        algoliasearch: typeof algoliasearch;
         __ALGOLIA_APP_ID__: string;
         __ALGOLIA_SEARCH_KEY__: string;
     }
 }
+
+// --- STABLE SINGLETON PATTERN --- //
+// This lives outside the React component and survives re-renders.
+let usersIndexSingleton: ReturnType<ReturnType<typeof algoliasearch>['initIndex']> | null = null;
+
+function getUsersIndex() {
+  // Return the existing instance if it's already created.
+  if (usersIndexSingleton) {
+    return usersIndexSingleton;
+  }
+
+  // Ensure the Algolia script has been loaded from the CDN.
+  if (typeof window === 'undefined' || typeof window.algoliasearch === 'undefined') {
+    console.error("Algolia script not loaded or not in a browser environment.");
+    return null;
+  }
+
+  // Use fallback for Capacitor environment, as diagnosed.
+  const appId = process.env.NEXT_PUBLIC_ALGOLIA_APP_ID || window.__ALGOLIA_APP_ID__;
+  const searchKey = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY || window.__ALGOLIA_SEARCH_KEY__;
+
+  if (!appId || !searchKey) {
+    console.error("Algolia keys are missing from both process.env and window object.");
+    return null;
+  }
+
+  // Create the client and index ONCE, then store it in the singleton.
+  const client = window.algoliasearch(appId, searchKey);
+  usersIndexSingleton = client.initIndex("users");
+
+  return usersIndexSingleton;
+}
+// --- END OF SINGLETON PATTERN --- //
 
 export default function DiscoverPage() {
     const router = useRouter();
@@ -38,14 +73,8 @@ export default function DiscoverPage() {
     const [loading, setLoading] = useState(true);
     const [isPremiumDialogOpen, setIsPremiumDialogOpen] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
-    const [algoliaClient, setAlgoliaClient] = useState<any>(null);
-
-    const usersIndex = useMemo(() => {
-        if (algoliaClient) {
-            return algoliaClient.initIndex("users");
-        }
-        return null;
-    }, [algoliaClient]);
+    
+    // REMOVED: algoliaClient and usersIndex are no longer in React state.
 
     const [showMe, setShowMe] = useState('Femme');
     const [ageRange, setAgeRange] = useState<[number, number]>([25, 45]);
@@ -59,7 +88,14 @@ export default function DiscoverPage() {
     const [activities, setActivities] = useState('Toutes');
 
     useEffect(() => {
-        let algoliaInterval: NodeJS.Timeout | null = null;
+        // Ensure the Algolia script is on the page. We don't need to wait for it here.
+        // The singleton will handle initialization when it's first needed.
+        if (!document.querySelector('script[src="https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js"]')) {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js';
+            script.async = true;
+            document.body.appendChild(script);
+        }
 
         const authUnsubscribe = onAuthStateChanged(auth, (user) => {
             setCurrentUser(user);
@@ -71,45 +107,16 @@ export default function DiscoverPage() {
                         else if (profile.gender === 'Autre') setShowMe('Autre');
                         else setShowMe('Femme');
                     }
-                });
-
-                const appId = process.env.NEXT_PUBLIC_ALGOLIA_APP_ID || (window as any).__ALGOLIA_APP_ID__;
-                const searchKey = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY || (window as any).__ALGOLIA_SEARCH_KEY__;
-
-                if (!appId || !searchKey) {
-                    console.error('Algolia environment variables are not set IN process.env OR window object.');
+                    // The page is ready once we have the user profile.
                     setLoading(false);
-                    return;
-                }
-
-                if (!document.querySelector('script[src="https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js"]')) {
-                    const script = document.createElement('script');
-                    script.src = 'https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js';
-                    script.async = true;
-                    document.body.appendChild(script);
-                }
-                
-                algoliaInterval = setInterval(() => {
-                    if (window.algoliasearch) {
-                        if (algoliaInterval) clearInterval(algoliaInterval);
-                        const client = window.algoliasearch(appId, searchKey);
-                        setAlgoliaClient(client);
-                        setLoading(false);
-                    }
-                }, 100);
-
+                });
             } else {
                 setLoading(false);
                 router.push('/login');
             }
         });
 
-        return () => {
-            authUnsubscribe();
-            if (algoliaInterval) {
-                clearInterval(algoliaInterval);
-            }
-        };
+        return () => authUnsubscribe();
     }, [router]);
 
     const handleNearbyChange = (checked: boolean) => {
@@ -131,12 +138,16 @@ export default function DiscoverPage() {
     };
 
     const handleSearch = async () => {
-        // CORRECTED: Guard clause first, THEN set loading state.
-        if (!usersIndex || !userProfile || !currentUser) {
-            console.log('Search aborted. Index or profile not ready yet.', { usersIndex: !!usersIndex, userProfile: !!userProfile, currentUser: !!currentUser });
-            // Silently fail or show a toast message, but don't get stuck.
+        // 1. Get the stable singleton instance of the index.
+        const index = getUsersIndex();
+
+        // 2. Guard clause to ensure everything is ready.
+        if (!index || !userProfile || !currentUser) {
+            console.log('Search aborted. Index or profile not ready yet.', { index: !!index, userProfile: !!userProfile, currentUser: !!currentUser });
             return;
         }
+        
+        // 3. Set loading state and perform search.
         setIsSearching(true);
     
         const filters = [];
@@ -165,7 +176,7 @@ export default function DiscoverPage() {
         }
     
         try {
-            const { hits } = await usersIndex.search('', searchOptions);
+            const { hits } = await index.search('', searchOptions);
             const searchResults = hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined, objectID: undefined }));
             localStorage.setItem('searchResults', JSON.stringify(searchResults));
             router.push('/');
