@@ -22,10 +22,6 @@ import { getUserProfile } from '@/lib/firebase-actions';
 import type { DocumentData } from 'firebase/firestore';
 import { Loader2, Search, Crown } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { functions } from '@/lib/firebase';
-
-const getAlgoliaConfig = httpsCallable(functions, 'getAlgoliaConfig');
 
 declare global {
     interface Window { algoliasearch: any; }
@@ -75,38 +71,32 @@ export default function DiscoverPage() {
                     }
                 });
 
-                getAlgoliaConfig()
-                    .then(result => {
-                        const config = result.data as { appId: string, searchKey: string };
-                        if (!config || !config.appId || !config.searchKey) {
-                            console.error('Could not initialize Algolia. Invalid config received.');
-                            setLoading(false);
-                            return;
-                        }
+                const appId = process.env.NEXT_PUBLIC_ALGOLIA_APP_ID;
+                const searchKey = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY;
 
-                        const script = document.createElement('script');
-                        script.src = 'https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js';
-                        script.async = true;
-                        script.onload = () => {
-                            const algoliaInit = window.algoliasearch;
-                            if (typeof algoliaInit === 'function') {
-                                const client = algoliaInit(config.appId, config.searchKey);
-                                setAlgoliaClient(client);
-                            } else {
-                                console.error('Algolia UMD not loaded correctly:', algoliaInit);
-                            }
-                            setLoading(false);
-                        };
-                        script.onerror = () => {
-                            console.error('Failed to load the Algolia script from CDN.');
-                            setLoading(false);
-                        };
-                        document.body.appendChild(script);
-                    })
-                    .catch((error) => {
-                        console.error("Error fetching Algolia config:", error);
+                if (!appId || !searchKey) {
+                    console.error('Algolia environment variables are not set.');
+                    setLoading(false);
+                } else {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js';
+                    script.async = true;
+                    script.onload = () => {
+                        const algoliaInit = window.algoliasearch;
+                        if (typeof algoliaInit === 'function') {
+                            const client = algoliaInit(appId, searchKey);
+                            setAlgoliaClient(client);
+                        } else {
+                            console.error('Algolia UMD not loaded correctly:', algoliaInit);
+                        }
                         setLoading(false);
-                    });
+                    };
+                    script.onerror = () => {
+                        console.error('Failed to load the Algolia script from CDN.');
+                        setLoading(false);
+                    };
+                    document.body.appendChild(script);
+                }
 
             } else {
                 setLoading(false);
@@ -292,7 +282,7 @@ export default function DiscoverPage() {
                 </div>
             </main>
             <footer className="fixed bottom-0 z-10 w-full p-2 bg-background/80 backdrop-blur-sm border-t">
-                <Button onClick={handleSearch} size="lg" className="w-full" disabled={isSearching || !algoliaClient}>
+                <Button onClick={handleSearch} size="lg" className="w-full" disabled={isSearching}>
                     {isSearching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                     {isSearching ? 'Recherche...' : 'Recherche'}
                 </Button>
