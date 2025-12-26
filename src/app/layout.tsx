@@ -53,8 +53,8 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              window.__ALGOLIA_APP_ID__ = "VOTRE_APP_ID_ICI";
-              window.__ALGOLIA_SEARCH_KEY__ = "VOTRE_CLÉ_DE_RECHERCHE_ICI";
+              window.__ALGOLIA_APP_ID__ = "H8QSO88UZ6";
+              window.__ALGOLIA_SEARCH_KEY__ = "8f4fafe81767d23252f012b6210fc101";
             `,
           }}
         />
