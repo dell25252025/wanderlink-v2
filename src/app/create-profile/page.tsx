@@ -33,6 +33,34 @@ export default function CreateProfilePage() {
   const router = useRouter();
   const { toast } = useToast();
 
+  // --- PERMISSION REQUEST LOGIC --- //
+  useEffect(() => {
+    const requestAllPermissions = async () => {
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        if (Capacitor.isNativePlatform()) {
+          console.log("Requesting all necessary permissions on native platform.");
+          // Request Camera & Photos (Storage) permissions together
+          const { Camera } = await import('@capacitor/camera');
+          await Camera.requestPermissions(); 
+          
+          // Request Geolocation permissions
+          const { Geolocation } = await import('@capacitor/geolocation');
+          await Geolocation.requestPermissions();
+        }
+      } catch (error) {
+        console.error("Error while requesting permissions:", error);
+        toast({
+          variant: 'destructive',
+          title: 'Erreur de permissions',
+          description: "Impossible de demander les autorisations nécessaires pour l'appareil photo et la localisation."
+        });
+      }
+    };
+
+    requestAllPermissions();
+  }, [toast]); // Run once on component mount
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -67,7 +95,7 @@ export default function CreateProfilePage() {
       travelStyle: 'Tous',
       intention: undefined,
     },
-    mode: 'onChange' // Validate on change for better user experience
+    mode: 'onChange'
   });
 
   const { trigger, handleSubmit } = methods;
@@ -84,8 +112,8 @@ export default function CreateProfilePage() {
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
     }
-  };
-  
+  }; 
+
   const handleCancel = () => {
     router.push('/');
   }
