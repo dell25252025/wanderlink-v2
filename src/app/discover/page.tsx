@@ -77,26 +77,30 @@ export default function DiscoverPage() {
                 if (!appId || !searchKey) {
                     console.error('Algolia environment variables are not set.');
                     setLoading(false);
-                } else {
+                    return;
+                }
+
+                // --- ROBUST SCRIPT LOADING --- 
+                // 1. Check if script already exists
+                if (!document.querySelector('script[src="https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js"]')) {
                     const script = document.createElement('script');
                     script.src = 'https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js';
                     script.async = true;
-                    script.onload = () => {
-                        const algoliaInit = window.algoliasearch;
-                        if (typeof algoliaInit === 'function') {
-                            const client = algoliaInit(appId, searchKey);
-                            setAlgoliaClient(client);
-                        } else {
-                            console.error('Algolia UMD not loaded correctly:', algoliaInit);
-                        }
-                        setLoading(false);
-                    };
-                    script.onerror = () => {
-                        console.error('Failed to load the Algolia script from CDN.');
-                        setLoading(false);
-                    };
                     document.body.appendChild(script);
                 }
+                
+                // 2. Poll to wait for the script to be loaded and ready
+                const interval = setInterval(() => {
+                    if (window.algoliasearch) {
+                        clearInterval(interval);
+                        const client = window.algoliasearch(appId, searchKey);
+                        setAlgoliaClient(client);
+                        setLoading(false);
+                    }
+                }, 100); // Check every 100ms
+
+                // 3. Cleanup interval on component unmount
+                return () => clearInterval(interval);
 
             } else {
                 setLoading(false);
@@ -125,7 +129,10 @@ export default function DiscoverPage() {
     };
 
     const handleSearch = async () => {
-        if (!usersIndex || !userProfile || !currentUser) return;
+        if (!usersIndex || !userProfile || !currentUser) {
+            console.log('Search aborted. Index or profile not ready.', { usersIndex, userProfile, currentUser });
+            return;
+        }
         setIsSearching(true);
     
         const filters = [];
@@ -282,7 +289,7 @@ export default function DiscoverPage() {
                 </div>
             </main>
             <footer className="fixed bottom-0 z-10 w-full p-2 bg-background/80 backdrop-blur-sm border-t">
-                <Button onClick={handleSearch} size="lg" className="w-full" disabled={isSearching}>
+                <Button onClick={handleSearch} size="lg" className="w-full" disabled={isSearching || loading}>
                     {isSearching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                     {isSearching ? 'Recherche...' : 'Lancer la recherche'}
                 </Button>
