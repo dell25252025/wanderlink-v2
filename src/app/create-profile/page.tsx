@@ -17,6 +17,12 @@ import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { formSchema, type FormData } from '@/lib/schema';
+import { Capacitor } from '@capacitor/core';
+import { Camera } from '@capacitor/camera';
+import { Geolocation } from '@capacitor/geolocation';
+
+// Import for Android-specific permissions
+declare var cordova: any; 
 
 const steps = [
   { id: 1, title: 'Qui êtes-vous ?', component: Step1, fields: ['firstName', 'age', 'gender', 'profilePictures', 'bio'] },
@@ -36,30 +42,58 @@ export default function CreateProfilePage() {
   // --- PERMISSION REQUEST LOGIC --- //
   useEffect(() => {
     const requestAllPermissions = async () => {
+      if (!Capacitor.isNativePlatform()) return;
+
       try {
-        const { Capacitor } = await import('@capacitor/core');
-        if (Capacitor.isNativePlatform()) {
-          console.log("Requesting all necessary permissions on native platform.");
-          // Request Camera & Photos (Storage) permissions together
-          const { Camera } = await import('@capacitor/camera');
-          await Camera.requestPermissions(); 
+        console.log("Requesting all necessary permissions on native platform.");
+
+        // 1. Camera & Storage (Photos) - The Capacitor way
+        await Camera.requestPermissions({ permissions: ['camera', 'photos'] });
+
+        // 2. Geolocation - The Capacitor way
+        await Geolocation.requestPermissions();
+        
+        // 3. Microphone & Nearby Devices - Using the cordova plugin for specific Android permissions
+        if (Capacitor.getPlatform() === 'android') {
+          const androidPermissions = cordova.plugins.permissions;
+          if (!androidPermissions) {
+            console.warn('Android permissions plugin not found. Skipping Mic/Nearby requests.');
+            return;
+          }
           
-          // Request Geolocation permissions
-          const { Geolocation } = await import('@capacitor/geolocation');
-          await Geolocation.requestPermissions();
+          const permissionsToRequest = [
+            androidPermissions.permission.RECORD_AUDIO, // Microphone
+            androidPermissions.permission.BLUETOOTH_SCAN, // Nearby Devices
+            androidPermissions.permission.BLUETOOTH_CONNECT // Nearby Devices
+          ];
+
+          androidPermissions.requestPermissions(permissionsToRequest, 
+            (status: any) => {
+              if (!status.hasPermission) {
+                console.warn('Some Android-specific permissions were not granted.');
+              }
+            },
+            (error: any) => {
+              console.error('Error requesting Android-specific permissions:', error);
+            }
+          );
         }
+
       } catch (error) {
         console.error("Error while requesting permissions:", error);
         toast({
           variant: 'destructive',
           title: 'Erreur de permissions',
-          description: "Impossible de demander les autorisations nécessaires pour l'appareil photo et la localisation."
+          description: "Impossible de demander toutes les autorisations nécessaires."
         });
       }
     };
 
-    requestAllPermissions();
-  }, [toast]); // Run once on component mount
+    // Use a small timeout to ensure plugins are ready
+    const timer = setTimeout(requestAllPermissions, 500);
+    return () => clearTimeout(timer);
+
+  }, [toast]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
