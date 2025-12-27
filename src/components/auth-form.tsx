@@ -103,7 +103,7 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
       toast({ title: 'Connexion réussie !', description: 'Bienvenue sur WanderLink.' });
       
       if (profileResult.isNewUser) {
-        router.push(`/create-profile`);
+        router.push(`/google-onboarding`);
       } else {
         router.push('/');
       }
