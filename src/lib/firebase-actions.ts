@@ -8,6 +8,25 @@ import { v4 as uuidv4 } from 'uuid';
 // Nous avons retiré 'use server' et 'agora-token' car ils nécessitent Node.js.
 // Sur mobile (Capacitor), ce code s'exécute dans le navigateur du téléphone.
 
+function sanitizeData(obj: any): any {
+  if (obj === undefined) {
+    return null;
+  }
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeData(item));
+  }
+  const newObj: { [key: string]: any } = {};
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      newObj[key] = sanitizeData(obj[key]);
+    }
+  }
+  return newObj;
+}
+
 export async function generateAgoraToken(channelName: string, uid: number | string) {
   // En mode production, cette fonction devrait appeler une Cloud Function Firebase via httpsCallable.
   // Pour le développement, on retourne null.
@@ -95,7 +114,7 @@ export async function createOrUpdateGoogleUserProfile(userId: string, profileDat
                 gender: undefined,
                 intention: undefined,
             };
-            await setDoc(userRef, newProfileData);
+            await setDoc(userRef, sanitizeData(newProfileData));
             return { success: true, id: userId, isNewUser: true };
         }
 
@@ -114,14 +133,6 @@ export async function createUserProfile(userId: string, profileData: any) {
     try {
         const { profilePictures: photoDataUris, ...restOfProfileData } = profileData;
 
-        // Handle undefined values by converting them to null
-        const sanitizedData = { ...restOfProfileData };
-        for (const key in sanitizedData) {
-            if (sanitizedData[key] === undefined) {
-                sanitizedData[key] = null;
-            }
-        }
-
         const userDoc = await getDoc(doc(db, "users", userId));
         const existingPhotos = userDoc.exists() ? userDoc.data().profilePictures || [] : [];
         
@@ -138,7 +149,7 @@ export async function createUserProfile(userId: string, profileData: any) {
         }
         
         const finalProfileData = {
-            ...sanitizedData,
+            ...restOfProfileData,
             profilePictures: uploadedPhotoUrls,
             updatedAt: new Date().toISOString(),
         };
@@ -150,7 +161,7 @@ export async function createUserProfile(userId: string, profileData: any) {
           finalProfileData.dates.to = new Date(finalProfileData.dates.to);
         }
 
-        await setDoc(doc(db, "users", userId), finalProfileData, { merge: true });
+        await setDoc(doc(db, "users", userId), sanitizeData(finalProfileData), { merge: true });
         
         return { success: true, id: userId };
 
@@ -181,7 +192,7 @@ export async function updateUserProfile(userId: string, profileData: any) {
             finalProfileData.dates.to = new Date(finalProfileData.dates.to);
         }
 
-        await updateDoc(doc(db, "users", userId), finalProfileData);
+        await updateDoc(doc(db, "users", userId), sanitizeData(finalProfileData));
         
         return { success: true, id: userId };
 
