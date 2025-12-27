@@ -114,6 +114,14 @@ export async function createUserProfile(userId: string, profileData: any) {
     try {
         const { profilePictures: photoDataUris, ...restOfProfileData } = profileData;
 
+        // Handle undefined values by converting them to null
+        const sanitizedData = { ...restOfProfileData };
+        for (const key in sanitizedData) {
+            if (sanitizedData[key] === undefined) {
+                sanitizedData[key] = null;
+            }
+        }
+
         const userDoc = await getDoc(doc(db, "users", userId));
         const existingPhotos = userDoc.exists() ? userDoc.data().profilePictures || [] : [];
         
@@ -130,7 +138,7 @@ export async function createUserProfile(userId: string, profileData: any) {
         }
         
         const finalProfileData = {
-            ...restOfProfileData,
+            ...sanitizedData,
             profilePictures: uploadedPhotoUrls,
             updatedAt: new Date().toISOString(),
         };
