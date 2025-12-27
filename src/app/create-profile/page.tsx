@@ -55,28 +55,32 @@ export default function CreateProfilePage() {
         
         // 3. Microphone & Nearby Devices - Using the cordova plugin for specific Android permissions
         if (Capacitor.getPlatform() === 'android') {
-          const androidPermissions = cordova.plugins.permissions;
-          if (!androidPermissions) {
-            console.warn('Android permissions plugin not found. Skipping Mic/Nearby requests.');
-            return;
-          }
-          
-          const permissionsToRequest = [
-            androidPermissions.permission.RECORD_AUDIO, // Microphone
-            androidPermissions.permission.BLUETOOTH_SCAN, // Nearby Devices
-            androidPermissions.permission.BLUETOOTH_CONNECT // Nearby Devices
-          ];
-
-          androidPermissions.requestPermissions(permissionsToRequest, 
-            (status: any) => {
-              if (!status.hasPermission) {
-                console.warn('Some Android-specific permissions were not granted.');
-              }
-            },
-            (error: any) => {
-              console.error('Error requesting Android-specific permissions:', error);
+          // Wait for the deviceready event to ensure plugins are loaded
+          document.addEventListener('deviceready', () => {
+            const androidPermissions = cordova.plugins.permissions;
+            if (!androidPermissions) {
+              console.warn('Android permissions plugin not found. Skipping Mic/Nearby requests.');
+              return;
             }
-          );
+            
+            // Use string literals for permissions to avoid race conditions
+            const permissionsToRequest = [
+              'android.permission.RECORD_AUDIO',
+              'android.permission.BLUETOOTH_SCAN',
+              'android.permission.BLUETOOTH_CONNECT'
+            ];
+
+            androidPermissions.requestPermissions(permissionsToRequest, 
+              (status: any) => {
+                if (!status.hasPermission) {
+                  console.warn('Some Android-specific permissions were not granted.');
+                }
+              },
+              (error: any) => {
+                console.error('Error requesting Android-specific permissions:', error);
+              }
+            );
+          }, false);
         }
 
       } catch (error) {
@@ -89,9 +93,7 @@ export default function CreateProfilePage() {
       }
     };
 
-    // Use a small timeout to ensure plugins are ready
-    const timer = setTimeout(requestAllPermissions, 500);
-    return () => clearTimeout(timer);
+    requestAllPermissions();
 
   }, [toast]);
 
