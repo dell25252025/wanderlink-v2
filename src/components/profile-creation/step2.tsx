@@ -17,6 +17,8 @@ import { Crosshair, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { countries } from '@/lib/countries';
+import { Capacitor } from '@capacitor/core';
+import { Geolocation } from '@capacitor/geolocation';
 
 const allLanguages = [
     { id: 'fr', label: 'Français' },
@@ -59,9 +61,8 @@ const Step2 = () => {
   const handleLocate = async (isAutomatic = false) => {
     setIsLocating(true);
     try {
-      const { Capacitor } = await import('@capacitor/core');
       if (!Capacitor.isNativePlatform()) {
-          console.log("Capacitor not available in browser. Skipping auto-location.");
+          console.log("Not a native platform. Skipping auto-location.");
           if (!isAutomatic) {
               toast({ variant: 'destructive', title: "Fonctionnalité non disponible", description: "La géolocalisation n'est disponible que sur l'application mobile." });
           }
@@ -69,32 +70,24 @@ const Step2 = () => {
           return;
       }
       
-      const { Geolocation } = await import('@capacitor/geolocation');
-      const { Http } = await import('@capacitor/http');
-
-      // 1. Check current permission status
       let permissionStatus = await Geolocation.checkPermissions();
 
-      // 2. If not granted, ALWAYS request it. This is the key change.
       if (permissionStatus.location !== 'granted') {
         permissionStatus = await Geolocation.requestPermissions();
       }
 
-      // 3. After requesting, if it's STILL not granted, then we stop.
       if (permissionStatus.location !== 'granted') {
-        // Only show a toast if the user clicked the button manually.
         if (!isAutomatic) {
           toast({ 
             variant: 'destructive', 
             title: "Permission refusée", 
-            description: "L'accès à la localisation a été refusé. Vous pouvez l'activer dans les paramètres de l'application."
+            description: "L'accès à la localisation a été refusé. Vous pouvez l'activer dans les paramètres."
           });
         }
         setIsLocating(false);
         return;
       }
 
-      // 4. If we reach here, permission is granted. Proceed to get location.
       const position = await Geolocation.getCurrentPosition({ 
         timeout: 15000, 
         enableHighAccuracy: false 
@@ -102,40 +95,34 @@ const Step2 = () => {
 
       const { latitude, longitude } = position.coords;
       
-      const options = {
-        url: 'https://nominatim.openstreetmap.org/reverse',
-        params: {
-          format: 'json',
-          lat: latitude.toString(),
-          lon: longitude.toString(),
-          'accept-language': 'fr',
-          zoom: '3'
-        },
-        headers: { 'User-Agent': 'WanderLink/1.0 (tech.wanderlink.app)' }
-      };
+      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=fr&zoom=3`;
 
-      const response = await Http.get(options);
-      const data = response.data;
-      
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'WanderLink/1.0 (tech.wanderlink.app)' }
+      });
+
+      if (!response.ok) {
+        throw new Error(`API request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
       const countryCode = data?.address?.country_code;
 
       if (countryCode) {
         const foundCountry = countries.find(c => c.code.toLowerCase() === countryCode.toLowerCase());
         if (foundCountry) {
             setValue('location', foundCountry.name, { shouldValidate: true });
-            // Only show success toast on manual click for a better UX
             if (!isAutomatic) {
                 toast({ title: "Position trouvée !", description: `Pays défini sur : ${foundCountry.name}` });
             }
         } else {
-             throw new Error(`Code pays "${countryCode}" non trouvé dans notre liste.`);
+             throw new Error(`Country code "${countryCode}" not found in our list.`);
         }
       } else {
-        throw new Error("Code pays non trouvé dans la réponse de l'API.");
+        throw new Error("Country code not found in API response.");
       }
     } catch (error: any) {
       console.error("Error with geolocation:", error);
-      // Only show error toast on manual click.
       if (!isAutomatic) {
           toast({ variant: 'destructive', title: "Erreur de localisation", description: "Impossible de déterminer votre position. Veuillez réessayer ou sélectionner manuellement." });
       }
@@ -144,10 +131,8 @@ const Step2 = () => {
     }
   };
 
-  // This effect will run once when the component mounts.
   useEffect(() => {
     const currentLocation = getValues('location');
-    // If no location is set, trigger the automatic location detection.
     if (!currentLocation) {
       handleLocate(true);
     }
@@ -256,7 +241,8 @@ const Step2 = () => {
                     placeholder="Ex: 175" 
                     {...field} 
                     value={field.value ?? ''}
-                    onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value))} />
+                    onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value))}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -274,7 +260,8 @@ const Step2 = () => {
                     placeholder="Ex: 70" 
                     {...field} 
                     value={field.value ?? ''}
-                    onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value))} />
+                    onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value))}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
