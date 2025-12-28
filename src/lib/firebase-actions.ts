@@ -1,9 +1,11 @@
 
 import { db, storage } from "@/lib/firebase";
 import { collection, doc, getDoc, DocumentData, setDoc, updateDoc, getDocs, arrayUnion, arrayRemove, addDoc, serverTimestamp, limit, query as firestoreQuery } from "firebase/firestore";
-import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, signInWithPopup, GoogleAuthProvider, signInWithCredential } from "firebase/auth";
 import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 import { v4 as uuidv4 } from 'uuid';
+import { Capacitor } from '@capacitor/core';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 
 // --- VERSION CLIENT-SIDE (Compatible Mobile) ---
 // Nous avons retiré 'use server' et 'agora-token' car ils nécessitent Node.js.
@@ -59,7 +61,7 @@ export async function initiateCall(callerId: string, receiverId: string, isVideo
     console.error("Error initiating call:", error);
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
     return { success: false, error: errorMessage };
-ain}
+  }
 }
 
 async function uploadProfilePicture(userId: string, photoDataUri: string): Promise<string | null> {
@@ -97,16 +99,18 @@ export async function createOrUpdateGoogleUserProfile(userId: string, profileDat
                 });
             }
             
-            return { success: true, id: userId, isNewUser: !isComplete };
+            return { success: true, id: userId, isNewUser: !isComplete, profileComplete: isComplete };
         } else {
             const [firstName] = profileData.displayName?.split(' ') || [''];
             
             const newProfileData = {
+                uid: userId,
                 email: profileData.email,
                 firstName: firstName,
+                name: profileData.displayName,
                 profilePictures: profileData.photoURL ? [profileData.photoURL] : [],
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
                 friends: [],
                 isPremium: false,
                 subscriptionEndDate: null,
@@ -114,9 +118,10 @@ export async function createOrUpdateGoogleUserProfile(userId: string, profileDat
                 age: undefined,
                 gender: undefined,
                 intention: undefined,
+                profileComplete: false
             };
             await setDoc(userRef, sanitizeData(newProfileData));
-            return { success: true, id: userId, isNewUser: true };
+            return { success: true, id: userId, isNewUser: true, profileComplete: false };
         }
 
     } catch (e: any) {
@@ -125,6 +130,37 @@ export async function createOrUpdateGoogleUserProfile(userId: string, profileDat
     }
 }
 
+export async function signInWithGoogleHybrid() {
+  const auth = getAuth();
+  let userCredential;
+
+  try {
+    if (Capacitor.isNativePlatform()) {
+      // Mobile natif
+      const result = await GoogleAuth.signIn();
+      const credential = GoogleAuthProvider.credential(result.authentication.idToken);
+      userCredential = await signInWithCredential(auth, credential);
+    } else {
+      // Web fallback
+      const provider = new GoogleAuthProvider();
+      userCredential = await signInWithPopup(auth, provider);
+    }
+
+    const user = userCredential.user;
+    const profileResult = await createOrUpdateGoogleUserProfile(user.uid, {
+      email: user.email,
+      displayName: user.displayName,
+      photoURL: user.photoURL
+    });
+
+    return profileResult;
+
+  } catch (error) {
+    console.error("Error during hybrid Google sign-in:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+    return { success: false, error: errorMessage };
+  }
+}
 
 export async function createUserProfile(userId: string, profileData: any) {
     if (!userId) {
@@ -446,41 +482,5 @@ export async function getFriends(userId: string) {
   } catch (error) {
     console.error("Error getting friends:", error);
     throw new Error("Failed to retrieve friends list.");
-  }
-}
-
-export async function signInWithGoogle(): Promise<{ uid: string; name: string | null; email: string | null; } | null> {
-  const auth = getAuth();
-  const provider = new GoogleAuthProvider();
-
-  try {
-    const result = await signInWithPopup(auth, provider);
-    const user = result.user;
-
-    const userRef = doc(db, "users", user.uid);
-    const userDoc = await getDoc(userRef);
-
-    if (!userDoc.exists()) {
-      await setDoc(userRef, {
-        uid: user.uid,
-        name: user.displayName,
-        email: user.email,
-        createdAt: serverTimestamp(),
-        profileComplete: false,
-        profilePictures: user.photoURL ? [user.photoURL] : [],
-        friends: [],
-        isPremium: false,
-      });
-    }
-
-    return {
-      uid: user.uid,
-      name: user.displayName,
-      email: user.email,
-    };
-
-  } catch (error) {
-    console.error("Error during Google sign-in:", error);
-    return null;
   }
 }
