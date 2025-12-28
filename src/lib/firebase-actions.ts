@@ -1,6 +1,7 @@
 
 import { db, storage } from "@/lib/firebase";
 import { collection, doc, getDoc, DocumentData, setDoc, updateDoc, getDocs, arrayUnion, arrayRemove, addDoc, serverTimestamp, limit, query as firestoreQuery } from "firebase/firestore";
+import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 import { v4 as uuidv4 } from 'uuid';
 
@@ -58,7 +59,7 @@ export async function initiateCall(callerId: string, receiverId: string, isVideo
     console.error("Error initiating call:", error);
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
     return { success: false, error: errorMessage };
-  }
+ain}
 }
 
 async function uploadProfilePicture(userId: string, photoDataUri: string): Promise<string | null> {
@@ -445,5 +446,41 @@ export async function getFriends(userId: string) {
   } catch (error) {
     console.error("Error getting friends:", error);
     throw new Error("Failed to retrieve friends list.");
+  }
+}
+
+export async function signInWithGoogle(): Promise<{ uid: string; name: string | null; email: string | null; } | null> {
+  const auth = getAuth();
+  const provider = new GoogleAuthProvider();
+
+  try {
+    const result = await signInWithPopup(auth, provider);
+    const user = result.user;
+
+    const userRef = doc(db, "users", user.uid);
+    const userDoc = await getDoc(userRef);
+
+    if (!userDoc.exists()) {
+      await setDoc(userRef, {
+        uid: user.uid,
+        name: user.displayName,
+        email: user.email,
+        createdAt: serverTimestamp(),
+        profileComplete: false,
+        profilePictures: user.photoURL ? [user.photoURL] : [],
+        friends: [],
+        isPremium: false,
+      });
+    }
+
+    return {
+      uid: user.uid,
+      name: user.displayName,
+      email: user.email,
+    };
+
+  } catch (error) {
+    console.error("Error during Google sign-in:", error);
+    return null;
   }
 }
