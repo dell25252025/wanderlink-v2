@@ -8,7 +8,7 @@ import { Playfair_Display, Poppins, PT_Sans } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { CallManager } from '@/components/call-manager';
 import { AuthProvider } from '@/context/AuthContext';
-
+import CapacitorSetup from '@/components/capacitor-setup'; // Import du nouveau composant
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -65,6 +65,7 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
+            <CapacitorSetup /> {/* Ajout du composant d'initialisation */}
             <BackButtonHandler />
             <CallManager />
             <main>{children}</main>
