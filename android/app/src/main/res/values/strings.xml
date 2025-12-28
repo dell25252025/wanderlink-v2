@@ -4,4 +4,5 @@
     <string name="title_activity_main">WanderLink</string>
     <string name="package_name">com.wanderlink.app</string>
     <string name="custom_url_scheme">com.wanderlink.app</string>
+    <string name="server_client_id">186522309970-kimg8pa9cd9lrmbl9uajk129nb0lrre2.apps.googleusercontent.com</string>
 </resources>
