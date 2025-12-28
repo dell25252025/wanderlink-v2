@@ -11,10 +11,10 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Mail, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase';
-import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup, sendEmailVerification } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
 import { useRouter } from 'next/navigation';
-import { createOrUpdateGoogleUserProfile } from '@/lib/firebase-actions';
+import { signInWithGoogleHybrid } from '@/lib/firebase-actions';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Adresse e-mail invalide.' }),
@@ -35,7 +35,7 @@ type AuthFormProps = {
   setIsLogin: (isLogin: boolean) => void;
   isEmailFormVisible: boolean;
   setIsEmailFormVisible: (isVisible: boolean) => void;
-  onSuccess?: () => void; // Made onSuccess optional as we handle redirection here
+  onSuccess?: () => void; 
 };
 
 export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setIsEmailFormVisible, onSuccess }: AuthFormProps) {
@@ -61,11 +61,8 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
         if (onSuccess) onSuccess(); else router.push('/');
       } else {
         const signupValues = values as z.infer<typeof signupSchema>;
-        const userCredential = await createUserWithEmailAndPassword(auth, signupValues.email, signupValues.password);
-        // await sendEmailVerification(userCredential.user); // We will add this later
-
+        await createUserWithEmailAndPassword(auth, signupValues.email, signupValues.password);
         toast({ title: 'Compte créé !', description: "Vous pouvez maintenant vous connecter." });
-        // Redirect to login or directly to profile creation
         router.push('/create-profile');
       }
     } catch (error) {
@@ -85,27 +82,19 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
 
   async function handleGoogleSignIn() {
     setIsGoogleLoading(true);
-    const provider = new GoogleAuthProvider();
     try {
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-      
-      const profileResult = await createOrUpdateGoogleUserProfile(user.uid, {
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL
-      });
+      const result = await signInWithGoogleHybrid();
 
-      if (!profileResult.success) {
-        throw new Error(profileResult.error || "Failed to create or update profile.");
-      }
-      
-      toast({ title: 'Connexion réussie !', description: 'Bienvenue sur WanderLink.' });
-      
-      if (profileResult.isNewUser) {
-        router.push(`/google-onboarding`);
+      if (result.success) {
+        toast({ title: 'Connexion réussie !', description: 'Bienvenue sur WanderLink.' });
+        
+        if (!result.profileComplete) {
+          router.push('/onboarding');
+        } else {
+          router.push('/');
+        }
       } else {
-        router.push('/');
+        throw new Error(result.error || "Une erreur inattendue lors de la connexion Google.");
       }
       
     } catch (error) {
