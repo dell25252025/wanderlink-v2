@@ -14,7 +14,7 @@ import { auth } from '@/lib/firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
 import { useRouter } from 'next/navigation';
-import { signInWithGoogle } from '@/lib/firebase-actions'; // Mise à jour de l'import
+import { signInWithGoogle } from '@/lib/firebase-actions';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Adresse e-mail invalide.' }),
@@ -84,22 +84,22 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
     setIsGoogleLoading(true);
     try {
       const result = await signInWithGoogle();
-      
-      // La logique pour mobile (redirection) ne renverra rien ici.
-      // La gestion se fera via AuthHandler au retour dans l'app.
-      if (result) {
-        if (result.success) {
-            toast({ title: 'Connexion réussie !', description: 'Bienvenue sur WanderLink.' });
-            if (result.isNewUser) {
-                router.push('/create-profile');
-            } else {
-                router.push('/');
-            }
+
+      if (result?.success) {
+        toast({ title: 'Connexion réussie !', description: 'Bienvenue sur WanderLink.' });
+        if (result.isNewUser) {
+          router.push('/create-profile');
         } else {
-            throw new Error(result.error || "Une erreur inattendue lors de la connexion Google.");
+          if (onSuccess) onSuccess(); else router.push('/');
+        }
+      } else if (result?.error) {
+        // Gère le cas où l'utilisateur ferme la pop-up sur mobile
+        if (result.error.includes('popup-closed') || result.error.includes('12501')) {
+             console.log('Connexion Google annulée par l\'utilisateur.');
+        } else {
+             throw new Error(result.error);
         }
       }
-      // Si result est null, c'est que la redirection est en cours sur mobile. Ne rien faire.
 
     } catch (error) {
       console.error("Erreur de connexion Google:", error);

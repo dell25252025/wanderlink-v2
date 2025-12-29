@@ -3,17 +3,25 @@
 
 import { useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 
-// Ce composant ne rend rien. Son seul but est d'initialiser les plugins Capacitor
+// Ce composant ne rend rien. Son seul but est d'initialiser les plugins
 // au démarrage de l'application sur les plateformes natives.
-export default function CapacitorSetup() {
+
+const CapacitorSetup = () => {
   useEffect(() => {
-    // Ce hook est conservé pour de futures initialisations de plugins Capacitor,
-    // mais il est actuellement vide car nous n'utilisons plus GoogleAuth.
     if (Capacitor.isNativePlatform()) {
-      // Exemple: SplashScreen.hide();
+      console.log('Initialisation de Capacitor...');
+      // Initialise le plugin Google Auth au démarrage
+      GoogleAuth.initialize({
+        clientId: '866051543733-3vj8h0dt0p8f9cpep2c0amg12jjt80bs.apps.googleusercontent.com',
+        scopes: ['profile', 'email'],
+        grantOfflineAccess: true,
+      });
     }
   }, []);
 
-  return null; // Ne rend aucun élément visuel
-}
+  return null; // Ce composant ne rend rien dans l'UI
+};
+
+export default CapacitorSetup;

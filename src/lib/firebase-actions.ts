@@ -1,13 +1,14 @@
 
 import { db, storage } from "@/lib/firebase";
 import { collection, doc, getDoc, DocumentData, setDoc, updateDoc, getDocs, arrayUnion, arrayRemove, addDoc, serverTimestamp, limit, query as firestoreQuery } from "firebase/firestore";
-import { getAuth, signInWithPopup, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from "firebase/auth";
+import { getAuth, signInWithPopup, GoogleAuthProvider, OAuthProvider, signInWithCredential } from "firebase/auth";
 import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 import { v4 as uuidv4 } from 'uuid';
 import { Capacitor } from '@capacitor/core';
+// On importe le plugin natif que nous allons utiliser
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 
-// --- NOUVELLE LOGIQUE D'AUTHENTIFICATION UNIVERSELLE (WEB & MOBILE) ---
-
+// --- LOGIQUE DE GESTION D'UTILISATEUR (INCHANGÉE) ---
 async function handleUser(user: any) {
   const userRef = doc(db, "users", user.uid);
   const userDoc = await getDoc(userRef);
@@ -32,53 +33,62 @@ async function handleUser(user: any) {
     return { success: true, id: user.uid, isNewUser: true, profileComplete: false };
   } else {
     const data = userDoc.data();
+    // Un utilisateur est considéré "nouveau" si son profil n'est pas complet.
     const isComplete = !!data.intention && !!data.age;
     return { success: true, id: user.uid, isNewUser: !isComplete, profileComplete: isComplete };
   }
 }
 
+// --- NOUVELLE STRATÉGIE D'AUTHENTIFICATION HYBRIDE ---
 export async function signInWithGoogle() {
-  try {
-    const auth = getAuth();
-    const provider = new GoogleAuthProvider();
+  const auth = getAuth();
 
-    // 📱 Mobile → Utilise la redirection
-    if (Capacitor.isNativePlatform()) {
-      await signInWithRedirect(auth, provider);
-      return null; // La redirection est en cours, la gestion se fera au retour dans l'app
-    }
+  // 📱 Si on est sur mobile (Android/iOS)
+  if (Capacitor.isNativePlatform()) {
+    try {
+      // On utilise le plugin natif pour obtenir le "idToken" de Google
+      const googleUser = await GoogleAuth.signIn();
+      const idToken = googleUser.authentication.idToken;
 
-    // 🌐 Web → Utilise une popup
-    const result = await signInWithPopup(auth, provider);
-    return await handleUser(result.user);
-
-  } catch (error) {
-    console.error("Erreur Google Sign-In :", error);
-    // Retourner une structure d'erreur cohérente
-    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-    return { success: false, error: errorMessage };
-  }
-}
-
-export async function handleGoogleRedirect() {
-  try {
-    const auth = getAuth();
-    const result = await getRedirectResult(auth);
-    
-    if (result?.user) {
+      // On crée une "crédential" Firebase avec ce token
+      const credential = GoogleAuthProvider.credential(idToken);
+      
+      // On connecte l'utilisateur à Firebase avec cette crédential
+      const result = await signInWithCredential(auth, credential);
+      
+      // On gère le profil de l'utilisateur (création ou mise à jour)
       return await handleUser(result.user);
-    }
-    return null; // Pas d'utilisateur après redirection
 
-  } catch (error) {
-    console.error("Erreur durant la redirection Google :", error);
-    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-    return { success: false, error: errorMessage };
+    } catch (error) {
+      console.error("Erreur avec le plugin natif Google Sign-In :", error);
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred on mobile.";
+      return { success: false, error: errorMessage };
+    }
+  } 
+  
+  // 🌐 Sinon, sur le web
+  else {
+    try {
+      const provider = new GoogleAuthProvider();
+      // On utilise la popup standard du SDK web
+      const result = await signInWithPopup(auth, provider);
+      return await handleUser(result.user);
+    } catch (error) {
+      console.error("Erreur Google Sign-In (Web) :", error);
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred on web.";
+      return { success: false, error: errorMessage };
+    }
   }
 }
 
 
-// --- AUTRES ACTIONS (INCHANGÉES) ---
+// --- Fonctions utilitaires et autres actions (INCHANGÉES) ---
+
+// handleGoogleRedirect n'est plus nécessaire avec cette approche
+export async function handleGoogleRedirect() {
+    console.log("handleGoogleRedirect is deprecated with the native plugin approach.");
+    return null;
+}
 
 function sanitizeData(obj: any): any {
   if (obj === undefined) {
@@ -248,7 +258,7 @@ export async function removeProfilePicture(userId: string, photoUrl: string) {
     } catch (e) {
         console.error("Error removing profile picture:", e);
         const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
-        return { success: false, error: `Failed to remove profile picture: '${errorMessage}'` };
+        return { success: false, error: `Failed to remove picture: '${errorMessage}'` };
     }
 }
 
@@ -258,7 +268,6 @@ export async function getUserProfile(id: string): Promise<DocumentData | null> {
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
-      // ... (le reste de la fonction de conversion de date reste identique)
       return { id: docSnap.id, ...data };
     } else {
       return null;
@@ -269,7 +278,6 @@ export async function getUserProfile(id: string): Promise<DocumentData | null> {
   }
 }
 
-// ... (Les autres fonctions comme getAllUsers, submitAbuseReport etc. restent inchangées)
 export async function getAllUsers(count?: number) {
   try {
     const usersCollection = collection(db, "users");
@@ -376,7 +384,7 @@ export async function removeFriend(currentUserId: string, friendId: string) {
     const currentUserRef = doc(db, 'users', currentUserId);
     const friendRef = doc(db, 'users', friendId);
     await updateDoc(currentUserRef, {
-      friends: arrayRemove(friendId),
+      friends: arrayRemove(currentUserId),
     });
     await updateDoc(friendRef, {
       friends: arrayRemove(currentUserId),
