@@ -14,7 +14,7 @@ import { auth } from '@/lib/firebase';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
 import { useRouter } from 'next/navigation';
-import { signInWithGoogleHybrid } from '@/lib/firebase-actions';
+import { signInWithGoogle } from '@/lib/firebase-actions'; // Mise à jour de l'import
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Adresse e-mail invalide.' }),
@@ -83,20 +83,24 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
   async function handleGoogleSignIn() {
     setIsGoogleLoading(true);
     try {
-      const result = await signInWithGoogleHybrid();
-
-      if (result.success) {
-        toast({ title: 'Connexion réussie !', description: 'Bienvenue sur WanderLink.' });
-        
-        if (!result.profileComplete) {
-          router.push('/onboarding');
-        } else {
-          router.push('/');
-        }
-      } else {
-        throw new Error(result.error || "Une erreur inattendue lors de la connexion Google.");
-      }
+      const result = await signInWithGoogle();
       
+      // La logique pour mobile (redirection) ne renverra rien ici.
+      // La gestion se fera via AuthHandler au retour dans l'app.
+      if (result) {
+        if (result.success) {
+            toast({ title: 'Connexion réussie !', description: 'Bienvenue sur WanderLink.' });
+            if (result.isNewUser) {
+                router.push('/create-profile');
+            } else {
+                router.push('/');
+            }
+        } else {
+            throw new Error(result.error || "Une erreur inattendue lors de la connexion Google.");
+        }
+      }
+      // Si result est null, c'est que la redirection est en cours sur mobile. Ne rien faire.
+
     } catch (error) {
       console.error("Erreur de connexion Google:", error);
       const errorMessage = error instanceof Error ? error.message : "Une erreur inattendue s'est produite.";
