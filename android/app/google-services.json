@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "186522309970",
+    "project_id": "wanderlink-c1a35",
+    "storage_bucket": "wanderlink-c1a35.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:186522309970:android:73a54caf4f7b8b801b968b",
+        "android_client_info": {
+          "package_name": "com.wanderlink.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "186522309970-r97v1iqpfdsh6g0c5p4h3sgl9vpg7cdd.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.wanderlink.app",
+            "certificate_hash": "bc83682893b180c141d1c84258ef1c6f0b5da7df"
+          }
+        },
+        {
+          "client_id": "186522309970-kimg8pa9cd9lrmbl9uajk129nb0lrre2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB9yOXr7Bxr4ZaiyuHncKbsGEDOe2qUPKg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "186522309970-kimg8pa9cd9lrmbl9uajk129nb0lrre2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
