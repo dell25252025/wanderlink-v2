@@ -13,8 +13,9 @@ const CapacitorSetup = () => {
     if (Capacitor.isNativePlatform()) {
       console.log('Initialisation de Capacitor...');
       // Initialise le plugin Google Auth au démarrage
+      // [CORRECTION] Utilisation du bon Web Client ID de votre projet Firebase
       GoogleAuth.initialize({
-        clientId: '866051543733-3vj8h0dt0p8f9cpep2c0amg12jjt80bs.apps.googleusercontent.com',
+        clientId: '186522309970-kimg8pa9cd9lrmbl9uajk129nb0lrre2.apps.googleusercontent.com',
         scopes: ['profile', 'email'],
         grantOfflineAccess: true,
       });
