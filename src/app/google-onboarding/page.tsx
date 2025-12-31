@@ -1,93 +1,75 @@
 
 "use client";
 
-import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
-import { auth } from '@/lib/firebase';
+import { useState, useEffect } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
-import { updateUserProfile } from '@/lib/firebase-actions';
-import { Loader2 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Camera } from '@capacitor/camera';
 import { Geolocation } from '@capacitor/geolocation';
-
-declare var cordova: any;
-
-const intentions = [
-  { id: '50-50', label: '50/50' },
-  { id: 'sponsor', label: 'Sponsor' },
-  { id: 'sponsored', label: 'Sponsorisé' },
-  { id: 'group', label: 'Groupe' },
-];
+import { updateUserProfile } from '@/lib/firebase-actions';
+import { auth } from '@/lib/firebase';
+import { Button } from '@/components/ui/button';
+import { Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import WanderlinkHeader from '@/components/wanderlink-header';
 
 export default function GoogleOnboardingPage() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [intention, setIntention] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUser(user);
-        requestAllPermissions();
+        // Only request permissions if it's a native platform
+        if (Capacitor.isNativePlatform()) {
+          requestPermissions();
+        }
       } else {
         router.push('/login');
       }
       setIsLoading(false);
     });
+
     return () => unsubscribe();
   }, [router]);
 
-  const requestAllPermissions = async () => {
-    if (!Capacitor.isNativePlatform()) return;
-
+  const requestPermissions = async () => {
     try {
       await Camera.requestPermissions({ permissions: ['camera', 'photos'] });
       await Geolocation.requestPermissions();
-      
-      if (Capacitor.getPlatform() === 'android') {
-        document.addEventListener('deviceready', () => {
-          const androidPermissions = cordova.plugins.permissions;
-          if (!androidPermissions) return;
-          
-          const permissionsToRequest = [
-            'android.permission.RECORD_AUDIO',
-            'android.permission.BLUETOETOOTH_SCAN',
-            'android.permission.BLUETOOTH_CONNECT'
-          ];
-
-          androidPermissions.requestPermissions(permissionsToRequest, 
-            (status: any) => {
-              if (!status.hasPermission) {
-                console.warn('Some Android-specific permissions were not granted.');
-              }
-            },
-            (error: any) => {
-              console.error('Error requesting Android-specific permissions:', error);
-            }
-          );
-        }, false);
-      }
     } catch (error) {
-      console.error("Error while requesting permissions:", error);
+      console.error("Erreur de demande de permissions :", error);
       toast({
         variant: 'destructive',
         title: 'Erreur de permissions',
-        description: "Impossible de demander toutes les autorisations nécessaires."
+        description: "Impossible de demander toutes les autorisations nécessaires.",
       });
     }
   };
 
-  const handleSelectIntention = async (intention: string) => {
-    if (!currentUser) return;
+  const handleSubmit = async () => {
+    if (!intention || !currentUser) {
+      toast({
+        variant: 'destructive',
+        title: 'Action requise',
+        description: 'Veuillez sélectionner une intention avant de continuer.',
+      });
+      return;
+    }
 
     setIsSubmitting(true);
     try {
-      const result = await updateUserProfile(currentUser.uid, { intention });
+      // On réutilise la fonction `updateUserProfile` existante comme demandé
+      const result = await updateUserProfile(currentUser.uid, {
+        intention,
+        profileComplete: true
+      });
       
       if (!result.success) {
         throw new Error(result.error || "La mise à jour du profil a échoué.");
@@ -98,7 +80,7 @@ export default function GoogleOnboardingPage() {
         description: "Bienvenue sur WanderLink.",
       });
       router.push('/');
-
+ 
     } catch (error) {
       console.error('Failed to update profile:', error);
       const errorMessage = error instanceof Error ? error.message : 'Une erreur inconnue est survenue.';
@@ -112,6 +94,8 @@ export default function GoogleOnboardingPage() {
     }
   };
 
+  const intentions = ['50/50', 'Sponsor', 'Sponsorisé', 'Groupe'];
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -121,24 +105,44 @@ export default function GoogleOnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md text-center">
-        <h1 className="text-3xl font-bold mb-2">Presque fini !</h1>
-        <p className="text-muted-foreground mb-8">Choisissez votre intention de voyage principale.</p>
-
-        <div className="grid grid-cols-2 gap-4">
-          {intentions.map((intention) => (
-            <Button 
-              key={intention.id} 
-              variant="outline" 
-              className="h-24 text-lg"
-              onClick={() => handleSelectIntention(intention.id)}
-              disabled={isSubmitting}
+    <div className="min-h-screen bg-background text-foreground">
+      <WanderlinkHeader />
+      <div className="container mx-auto max-w-md flex flex-col items-center justify-center text-center pt-20">
+        <h1 className="text-2xl font-bold">
+          Bienvenue, {currentUser?.displayName?.split(' ')[0] || 'voyageur'} !
+        </h1>
+        <p className="text-muted-foreground mt-2 mb-8">
+          Une dernière étape. Quelle est votre intention de voyage ?
+        </p>
+        
+        <div className="grid grid-cols-2 gap-4 w-full">
+          {intentions.map((opt) => (
+            <Button
+              key={opt}
+              variant={intention === opt ? 'default' : 'outline'}
+              className="h-20 text-lg"
+              onClick={() => setIntention(opt)}
             >
-              {isSubmitting ? <Loader2 className="h-6 w-6 animate-spin" /> : intention.label}
+              {opt}
             </Button>
           ))}
         </div>
+        
+        <Button 
+          onClick={handleSubmit} 
+          disabled={!intention || isSubmitting}
+          className="w-full mt-8"
+          size="lg"
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Finalisation...
+            </>
+          ) : (
+            "Terminer l'inscription"
+          )}
+        </Button>
       </div>
     </div>
   );

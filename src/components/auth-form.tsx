@@ -88,23 +88,23 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
       if (result?.success) {
         toast({ title: 'Connexion réussie !', description: 'Bienvenue sur WanderLink.' });
         if (result.isNewUser) {
-          router.push('/create-profile');
+          router.push('/google-onboarding'); // MODIFIED: Redirect new Google users to the simplified onboarding
         } else {
           if (onSuccess) onSuccess(); else router.push('/');
         }
       } else if (result?.error) {
-        // Gère le cas où l'utilisateur ferme la pop-up sur mobile
+        // Handles the case where the user closes the pop-up on mobile
         if (result.error.includes('popup-closed') || result.error.includes('12501')) {
-             console.log('Connexion Google annulée par l\'utilisateur.');
+             console.log('Google Sign-In canceled by user.');
         } else {
              throw new Error(result.error);
         }
       }
 
     } catch (error) {
-      console.error("Erreur de connexion Google:", error);
-      const errorMessage = error instanceof Error ? error.message : "Une erreur inattendue s'est produite.";
-      toast({ variant: 'destructive', title: 'Erreur de connexion Google', description: errorMessage });
+      console.error("Google Sign-In Error:", error);
+      const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
+      toast({ variant: 'destructive', title: 'Google Sign-In Error', description: errorMessage });
     } finally {
       setIsGoogleLoading(false);
     }
