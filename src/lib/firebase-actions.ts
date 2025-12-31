@@ -5,10 +5,10 @@ import { getAuth, signInWithPopup, GoogleAuthProvider, OAuthProvider, signInWith
 import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 import { v4 as uuidv4 } from 'uuid';
 import { Capacitor } from '@capacitor/core';
-// On importe le plugin natif que nous allons utiliser
-import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
+// Import the new Firebase Authentication plugin
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 
-// --- LOGIQUE DE GESTION D'UTILISATEUR (INCHANGÉE) ---
+// --- USER MANAGEMENT LOGIC (UNCHANGED) ---
 async function handleUser(user: any) {
   const userRef = doc(db, "users", user.uid);
   const userDoc = await getDoc(userRef);
@@ -33,48 +33,47 @@ async function handleUser(user: any) {
     return { success: true, id: user.uid, isNewUser: true, profileComplete: false };
   } else {
     const data = userDoc.data();
-    // Un utilisateur est considéré "nouveau" si son profil n'est pas complet.
+    // A user is considered "new" if their profile is not complete.
     const isComplete = !!data.intention && !!data.age;
     return { success: true, id: user.uid, isNewUser: !isComplete, profileComplete: isComplete };
   }
 }
 
-// --- NOUVELLE STRATÉGIE D'AUTHENTIFICATION HYBRIDE ---
+// --- NEW HYBRID AUTHENTICATION STRATEGY ---
 export async function signInWithGoogle() {
   const auth = getAuth();
 
-  // 📱 Si on est sur mobile (Android/iOS)
+  // 📱 If on mobile (Android/iOS)
   if (Capacitor.isNativePlatform()) {
     try {
-      // On utilise le plugin natif pour obtenir le "idToken" de Google
-      const googleUser = await GoogleAuth.signIn();
-      const idToken = googleUser.authentication.idToken;
-
-      // On crée une "crédential" Firebase avec ce token
-      const credential = GoogleAuthProvider.credential(idToken);
+      // Use the native plugin to get the Google Sign-In result
+      const result = await FirebaseAuthentication.signInWithGoogle();
       
-      // On connecte l'utilisateur à Firebase avec cette crédential
-      const result = await signInWithCredential(auth, credential);
+      // Create a Firebase credential with the token
+      const credential = GoogleAuthProvider.credential(result.credential.idToken);
       
-      // On gère le profil de l'utilisateur (création ou mise à jour)
-      return await handleUser(result.user);
+      // Sign in to Firebase with the credential
+      const authResult = await signInWithCredential(auth, credential);
+      
+      // Handle the user profile (creation or update)
+      return await handleUser(authResult.user);
 
     } catch (error) {
-      console.error("Erreur avec le plugin natif Google Sign-In :", error);
+      console.error("Error with native Google Sign-In plugin:", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred on mobile.";
       return { success: false, error: errorMessage };
     }
   } 
   
-  // 🌐 Sinon, sur le web
+  // 🌐 Otherwise, on the web
   else {
     try {
       const provider = new GoogleAuthProvider();
-      // On utilise la popup standard du SDK web
+      // Use the standard web SDK popup
       const result = await signInWithPopup(auth, provider);
       return await handleUser(result.user);
     } catch (error) {
-      console.error("Erreur Google Sign-In (Web) :", error);
+      console.error("Google Sign-In Error (Web):", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred on web.";
       return { success: false, error: errorMessage };
     }
@@ -82,9 +81,9 @@ export async function signInWithGoogle() {
 }
 
 
-// --- Fonctions utilitaires et autres actions (INCHANGÉES) ---
+// --- Utility functions and other actions (UNCHANGED) ---
 
-// handleGoogleRedirect n'est plus nécessaire avec cette approche
+// handleGoogleRedirect is no longer necessary with this approach
 export async function handleGoogleRedirect() {
     console.log("handleGoogleRedirect is deprecated with the native plugin approach.");
     return null;
@@ -110,7 +109,7 @@ function sanitizeData(obj: any): any {
 }
 
 export async function generateAgoraToken(channelName: string, uid: number | string) {
-  console.warn("Generation de token simulée (Client Side). Assurez-vous d'être en mode Test sur Agora.");
+  console.warn("Simulated token generation (Client Side). Make sure you are in Test mode on Agora.");
   return { success: true, token: null };
 }
 
@@ -312,7 +311,7 @@ export async function submitAbuseReport(
   details: string
 ) {
   if (!reporterId || !reportedId || !reason) {
-    return { success: false, error: 'Informations manquantes pour le signalement.' };
+    return { success: false, error: 'Missing information for the report.' };
   }
   try {
     const reportsCollection = collection(db, 'abuseReports');
@@ -326,8 +325,8 @@ export async function submitAbuseReport(
     });
     return { success: true };
   } catch (error) {
-    console.error("Erreur lors de la soumission du signalement:", error);
-    const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
+    console.error("Error submitting report:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
     return { success: false, error: errorMessage };
   }
 }
