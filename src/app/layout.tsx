@@ -49,7 +49,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr" suppressHydrationWarning>
-      <body className={cn("font-sans antialiased pt-12 md:pt-0", poppins.variable, playfair.variable, ptsans.variable)}>
+      <body className={cn("font-sans antialiased", poppins.variable, playfair.variable, ptsans.variable)}>
         <script
           dangerouslySetInnerHTML={{
             __html: `

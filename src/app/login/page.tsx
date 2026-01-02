@@ -48,7 +48,7 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-background -mt-12 md:mt-0">
+    <div className="relative min-h-screen bg-background">
       <div className="absolute top-0 left-0 h-full w-full overflow-hidden">
         <video
           key={isMobile ? 'mobile' : 'desktop'}
