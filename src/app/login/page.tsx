@@ -22,7 +22,7 @@ export default function AuthPage() {
 
   if (isMobile && isEmailFormVisible) {
     return (
-      <div className="flex h-screen flex-col bg-background p-4">
+      <div className="flex h-screen flex-col bg-background p-4 pt-12">
         <div className="flex-shrink-0">
           <button onClick={resetAuthState} aria-label="Retour">
             <svg className="h-6 w-6 text-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -81,7 +81,7 @@ export default function AuthPage() {
               </p>
             </div>
 
-            <div className="flex flex-col h-screen p-4 md:items-center md:justify-center md:h-auto">
+            <div className="flex flex-col h-screen p-4 pt-12 md:items-center md:justify-center md:h-auto md:pt-4">
                 <div className="text-center md:hidden pt-2 flex-shrink-0">
                     <button onClick={resetAuthState} className="flex w-full justify-center items-center gap-2 bg-transparent border-none p-0" aria-label="Retour à l'accueil de l'authentification">
                         <h1 className="text-3xl font-bold font-logo text-white">
