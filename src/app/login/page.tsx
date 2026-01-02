@@ -48,7 +48,7 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-background">
+    <div className="relative min-h-screen bg-background -mt-[env(safe-area-inset-top)]">
       <div className="absolute top-0 left-0 h-full w-full overflow-hidden">
         <video
           key={isMobile ? 'mobile' : 'desktop'}
@@ -92,7 +92,7 @@ export default function AuthPage() {
                     </p>
                 </div>
             
-                <div className='flex-1 flex flex-col w-full max-w-sm mx-auto justify-center pb-4 md:justify-center md:bg-black/20 md:backdrop-blur-sm md:p-8 md:rounded-2xl md:relative'>
+                <div class='flex-1 flex flex-col w-full max-w-sm mx-auto justify-center pb-4 md:justify-center md:bg-black/20 md:backdrop-blur-sm md:p-8 md:rounded-2xl md:relative'>
                   {isEmailFormVisible && (
                     <div className="absolute top-4 left-4 hidden md:block">
                       <button onClick={resetAuthState} aria-label="Retour" className="p-2 rounded-full bg-black/20 text-white hover:bg-black/40 transition-colors">
