@@ -10,6 +10,11 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
 
+        <!-- Ajout de la meta-data pour le thème transparent -->
+        <meta-data
+            android:name="com.codetrixstudio.capacitor.GoogleAuth.Theme"
+            android:value="@style/TransparentTheme" />
+
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:name=".MainActivity"
