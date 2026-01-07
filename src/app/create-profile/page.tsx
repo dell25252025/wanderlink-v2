@@ -18,7 +18,6 @@ import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { formSchema, type FormData } from '@/lib/schema';
 import { Capacitor } from '@capacitor/core';
-import { App } from '@capacitor/app'; // <-- IMPORT THE APP PLUGIN
 import { Camera } from '@capacitor/camera';
 import { Geolocation } from '@capacitor/geolocation';
 
@@ -37,8 +36,8 @@ export default function CreateProfilePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  // State to re-trigger permission check when app resumes
-  const [permissionTrigger, setPermissionTrigger] = useState(0);
+  // State to show the manual retry button
+  const [showPermissionRetry, setShowPermissionRetry] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -69,25 +68,13 @@ export default function CreateProfilePage() {
 
   const { trigger, handleSubmit, setValue } = methods;
 
-  // This effect listens for the app resuming from the background
-  useEffect(() => {
-    const listener = App.addListener('appStateChange', ({ isActive }) => {
-      if (isActive && Capacitor.isNativePlatform()) {
-        console.log('App resumed. Re-triggering permission check.');
-        // Increment the trigger to re-run the permission logic
-        setPermissionTrigger(prev => prev + 1);
-      }
-    });
-
-    return () => {
-      listener.remove();
-    };
-  }, []);
-
-  // --- PERMISSION REQUEST LOGIC (NOW RE-TRIGGERABLE) --- //
+  // --- PERMISSION REQUEST LOGIC (FINAL - WITH MANUAL RETRY) --- //
   useEffect(() => {
     const requestAllPermissions = async () => {
       if (!Capacitor.isNativePlatform()) return;
+      
+      // Hide retry button at the start of a request attempt
+      setShowPermissionRetry(false);
 
       // --- 1. Geolocation First & Auto-fill --- 
       try {
@@ -101,7 +88,9 @@ export default function CreateProfilePage() {
         }
       } catch (error: any) {
          if (error.message === "Location services are not enabled") {
-          toast({ variant: 'destructive', title: 'Activez la Localisation', description: "Pour continuer, veuillez activer le GPS de votre téléphone puis revenez à l\'application." });
+          toast({ variant: 'destructive', title: 'Activez la Localisation', description: "Veuillez activer le GPS, puis appuyez sur Réessayer." });
+          // Show the manual retry button and stop
+          setShowPermissionRetry(true);
         } else {
           toast({ variant: 'destructive', title: 'Erreur de Géolocalisation', description: "Impossible de demander la permission de localisation." });
         }
@@ -109,33 +98,27 @@ export default function CreateProfilePage() {
       }
 
       // --- 2. Camera & Photos ---
-      try {
-        await Camera.requestPermissions({ permissions: ['camera', 'photos'] });
-      } catch (error) {
-        toast({ title: 'Erreur de Caméra', description: "Impossible d'obtenir la permission pour la caméra." });
-      }
+      try { await Camera.requestPermissions({ permissions: ['camera', 'photos'] }); } catch (e) { console.error(e) }
 
       // --- 3. Android Specific (Mic, Bluetooth) ---
       if (Capacitor.getPlatform() === 'android') {
         try {
           await new Promise<void>((resolve, reject) => {
-            const executeRequest = () => {
+            const req = () => {
               if (window.cordova?.plugins?.permissions) {
                 const p = window.cordova.plugins.permissions;
-                p.requestPermissions( ['android.permission.RECORD_AUDIO', 'android.permission.BLUETOOTH_SCAN', 'android.permission.BLUETOOTH_CONNECT'], (st: any) => { if (!st.hasPermission) console.warn("Mic/BT permissions not granted."); resolve(); }, reject);
+                p.requestPermissions(['android.permission.RECORD_AUDIO', 'android.permission.BLUETOOTH_SCAN', 'android.permission.BLUETOOTH_CONNECT'], (st: any) => { if (!st.hasPermission) console.warn("Mic/BT permissions not granted."); resolve(); }, reject);
               } else { reject(new Error("Cordova permissions plugin not available.")); }
             };
-            if (window.cordova) executeRequest(); else document.addEventListener('deviceready', executeRequest, { once: true });
+            if (window.cordova) req(); else document.addEventListener('deviceready', req, { once: true });
           });
-        } catch(error) {
-          toast({ title: 'Erreur Permissions Android', description: "Impossible d'obtenir les permissions pour le micro/bluetooth." });
-        }
+        } catch(e) { console.error(e); }
       }
     };
 
     requestAllPermissions();
 
-  }, [toast, setValue, permissionTrigger]); // <-- Added permissionTrigger to dependency array
+  }, [toast, setValue]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -144,6 +127,46 @@ export default function CreateProfilePage() {
     });
     return () => unsubscribe();
   }, [router]);
+  
+  // Manual handler for the retry button
+  const handlePermissionRetry = () => {
+    // We create a new function to call from the button to avoid useEffect dependency complexities
+    const reRequestPermissions = async () => {
+        if (!Capacitor.isNativePlatform()) return;
+        setShowPermissionRetry(false);
+        try {
+            const geoStatus = await Geolocation.requestPermissions();
+            if (geoStatus.location !== 'granted') {
+                toast({ variant: 'destructive', title: 'Activez la Localisation', description: "Le GPS doit être activé. Veuillez l\'activer et réessayer." });
+                setShowPermissionRetry(true);
+                return;
+            }
+            const position = await Geolocation.getCurrentPosition();
+            const coords = `${position.coords.latitude}, ${position.coords.longitude}`;
+            setValue('location', coords, { shouldValidate: true });
+
+            // Continue with other permissions if the first one passes
+            try { await Camera.requestPermissions({ permissions: ['camera', 'photos'] }); } catch (e) { console.error(e) }
+            if (Capacitor.getPlatform() === 'android') {
+                try {
+                    await new Promise<void>((resolve, reject) => {
+                        const req = () => {
+                            if (window.cordova?.plugins?.permissions) {
+                                const p = window.cordova.plugins.permissions;
+                                p.requestPermissions(['android.permission.RECORD_AUDIO', 'android.permission.BLUETOOTH_SCAN', 'android.permission.BLUETOOTH_CONNECT'], (st: any) => { if (!st.hasPermission) console.warn("Mic/BT permissions not granted."); resolve(); }, reject);
+                            } else { reject(new Error("Cordova permissions plugin not available.")); }
+                        };
+                        if (window.cordova) req(); else document.addEventListener('deviceready', req, { once: true });
+                    });
+                } catch(e) { console.error(e); }
+            }
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Activez la Localisation', description: "Le GPS semble toujours désactivé. Veuillez l\'activer et réessayer." });
+            setShowPermissionRetry(true);
+        }
+    };
+    reRequestPermissions();
+  }
 
   const nextStep = async () => {
     const fields = steps[currentStep].fields as (keyof FormData)[];
@@ -188,7 +211,24 @@ export default function CreateProfilePage() {
               <div>
                 {currentStep > 0 ? (<Button type="button" variant="ghost" onClick={prevStep} disabled={isSubmitting}>Précédent</Button>) : (<Button type="button" variant="ghost" onClick={handleCancel} disabled={isSubmitting}>Annuler</Button>)}
               </div>
-              {currentStep < steps.length - 1 ? (<Button type="button" onClick={nextStep}>Suivant</Button>) : (<Button type="button" onClick={handleSubmit(onSubmit)} disabled={isSubmitting}>{isSubmitting ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Création...</>) : ("Terminer l'inscription")}</Button>)}
+
+              <div className="flex items-center gap-x-2">
+                {showPermissionRetry && (
+                    <Button type="button" variant="secondary" onClick={handlePermissionRetry}>
+                        Réessayer
+                    </Button>
+                )}
+                {currentStep < steps.length - 1 ? (
+                  <Button type="button" onClick={nextStep}>
+                    Suivant
+                  </Button>
+                ) : (
+                  <Button type="button" onClick={handleSubmit(onSubmit)} disabled={isSubmitting || showPermissionRetry}>
+                    {isSubmitting ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Création...</>) : ("Terminer l'inscription")}
+                  </Button>
+                )}
+              </div>
+
             </div>
           </form>
         </FormProvider>
