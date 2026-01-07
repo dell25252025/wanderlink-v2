@@ -39,109 +39,9 @@ export default function CreateProfilePage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  // --- PERMISSION REQUEST LOGIC (FINAL & ROBUST) --- //
-  useEffect(() => {
-    const requestAllPermissions = async () => {
-      if (!Capacitor.isNativePlatform()) {
-        console.log("Not a native platform. Skipping permission requests.");
-        return;
-      }
-
-      try {
-        console.log("Starting sequential permission requests...");
-
-        // --- 1. Camera & Photos ---
-        console.log("Requesting Camera/Photos permission...");
-        await Camera.requestPermissions({ permissions: ['camera', 'photos'] });
-        console.log("Camera/Photos permission request finished.");
-
-        // --- 2. Geolocation ---
-        console.log("Requesting Geolocation permission...");
-        await Geolocation.requestPermissions();
-        console.log("Geolocation permission request finished.");
-        
-        // --- 3. Android Specific (Mic, Bluetooth) ---
-        if (Capacitor.getPlatform() === 'android') {
-          console.log("Requesting Android-specific permissions (Mic, Bluetooth)...");
-
-          // Promisify the Cordova callback-based function to use await
-          const requestAndroidPermissions = () => new Promise<void>((resolve, reject) => {
-            const executeRequest = () => {
-              if (window.cordova?.plugins?.permissions) {
-                const androidPermissions = window.cordova.plugins.permissions;
-                const permissionsToRequest = [
-                  'android.permission.RECORD_AUDIO',
-                  'android.permission.BLUETOOTH_SCAN',
-                  'android.permission.BLUETOOTH_CONNECT'
-                ];
-
-                androidPermissions.requestPermissions(
-                  permissionsToRequest,
-                  (status: any) => { // Success Callback
-                    if (status.hasPermission) {
-                      console.log("All Android-specific permissions granted.");
-                    } else {
-                      console.warn("Some Android-specific permissions were NOT granted.");
-                    }
-                    resolve(); // Resolve the promise whether granted or not
-                  },
-                  (error: any) => { // Error Callback
-                    console.error("Error requesting Android-specific permissions:", error);
-                    reject(error); // Reject the promise on a technical error
-                  }
-                );
-              } else {
-                // This case should ideally not be hit if deviceready is handled correctly
-                reject(new Error("Cordova permissions plugin was not available when requested."));
-              }
-            };
-            
-            // This logic prevents the race condition:
-            // If cordova is already available, run immediately.
-            // If not, wait for the 'deviceready' event.
-            if (window.cordova) {
-              executeRequest();
-            } else {
-              document.addEventListener('deviceready', executeRequest, { once: true });
-            }
-          });
-
-          // Await the promisified function
-          await requestAndroidPermissions();
-          console.log("Android-specific permission request finished.");
-        }
-        
-        console.log("All permission requests are completed.");
-
-      } catch (error) {
-        console.error("A fatal error occurred during the permission flow:", error);
-        toast({
-          variant: 'destructive',
-          title: 'Erreur de Permissions',
-          description: "Une erreur critique est survenue lors de la demande d'autorisations."
-        });
-      }
-    };
-
-    requestAllPermissions();
-
-  }, [toast]);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setCurrentUser(user);
-      } else {
-        router.push('/signup');
-      }
-      setAuthLoading(false);
-    });
-    return () => unsubscribe();
-  }, [router]);
-
   const methods = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
+     defaultValues: {
       firstName: '',
       age: undefined,
       gender: undefined,
@@ -164,7 +64,122 @@ export default function CreateProfilePage() {
     mode: 'onChange'
   });
 
-  const { trigger, handleSubmit } = methods;
+  const { trigger, handleSubmit, setValue } = methods;
+
+  // --- PERMISSION REQUEST LOGIC (USER-CENTRIC & ROBUST) --- //
+  useEffect(() => {
+    const requestAllPermissions = async () => {
+      if (!Capacitor.isNativePlatform()) {
+        console.log("Not a native platform. Skipping permission requests.");
+        return;
+      }
+
+      // --- 1. Geolocation First & Auto-fill --- 
+      try {
+        console.log("Requesting Geolocation permission...");
+        const geoStatus = await Geolocation.requestPermissions();
+        
+        if (geoStatus.location === 'granted') {
+          console.log("Geolocation permission granted. Fetching position...");
+          const position = await Geolocation.getCurrentPosition();
+          const coords = `${position.coords.latitude}, ${position.coords.longitude}`;
+          setValue('location', coords, { shouldValidate: true });
+          console.log("Location field set to:", coords);
+        } else {
+          console.warn("Geolocation permission was not granted.");
+           toast({
+            variant: 'destructive',
+            title: 'Permission de Localisation Refusée',
+            description: "La localisation automatique est désactivée. Vous pouvez la renseigner manuellement.",
+          });
+          // Do not stop the flow, user can input manually
+        }
+
+      } catch (error: any) {
+         if (error.message === "Location services are not enabled") {
+          console.error("Specific Error: Location services are disabled on the device.");
+          toast({
+            variant: 'destructive',
+            title: 'Activez la Localisation',
+            description: "Pour continuer, veuillez activer les services de localisation de votre téléphone dans les paramètres.",
+          });
+        } else {
+          console.error("An error occurred during Geolocation permission request:", error);
+          toast({
+            variant: 'destructive',
+            title: 'Erreur de Géolocalisation',
+            description: "Impossible de demander la permission de localisation.",
+          });
+        }
+        return; // Stop the flow if geolocation fails for any reason
+      }
+
+      // --- 2. Camera & Photos ---
+      try {
+        console.log("Requesting Camera/Photos permission...");
+        await Camera.requestPermissions({ permissions: ['camera', 'photos'] });
+        console.log("Camera/Photos permission request finished.");
+      } catch (error) {
+        console.error("Error requesting camera permissions:", error);
+        // Non-fatal, just inform the user
+        toast({ title: 'Erreur de Caméra', description: "Impossible d'obtenir la permission pour la caméra." });
+      }
+
+      // --- 3. Android Specific (Mic, Bluetooth) ---
+      if (Capacitor.getPlatform() === 'android') {
+        try {
+          console.log("Requesting Android-specific permissions (Mic, Bluetooth)...");
+          await new Promise<void>((resolve, reject) => {
+            const executeRequest = () => {
+              if (window.cordova?.plugins?.permissions) {
+                const androidPermissions = window.cordova.plugins.permissions;
+                const permissionsToRequest = [
+                  'android.permission.RECORD_AUDIO',
+                  'android.permission.BLUETOOTH_SCAN',
+                  'android.permission.BLUETOOTH_CONNECT'
+                ];
+
+                androidPermissions.requestPermissions(
+                  permissionsToRequest,
+                  (status: any) => {
+                    if (!status.hasPermission) console.warn("Some Android-specific permissions were NOT granted.");
+                    resolve();
+                  },
+                  (err: any) => reject(err)
+                );
+              } else {
+                reject(new Error("Cordova permissions plugin not available."));
+              }
+            };
+            
+            if (window.cordova) executeRequest();
+            else document.addEventListener('deviceready', executeRequest, { once: true });
+          });
+          console.log("Android-specific permission request finished.");
+        } catch(error) {
+          console.error("Error requesting Android specific permissions:", error);
+          toast({ title: 'Erreur de Permissions Android', description: "Impossible d'obtenir les permissions pour le micro/bluetooth." });
+        }
+      }
+
+      console.log("All permission requests are completed.");
+    };
+
+    requestAllPermissions();
+
+  }, [toast, setValue]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setCurrentUser(user);
+      } else {
+        router.push('/signup');
+      }
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, [router]);
 
   const nextStep = async () => {
     const fields = steps[currentStep].fields as (keyof FormData)[];
