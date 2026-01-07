@@ -21,14 +21,14 @@ import { Capacitor } from '@capacitor/core';
 import { Camera } from '@capacitor/camera';
 import { Geolocation } from '@capacitor/geolocation';
 
-// Import for Android-specific permissions
-declare var cordova: any; 
+// Declare cordova for the permissions plugin
+declare var cordova: any;
 
 const steps = [
   { id: 1, title: 'Qui êtes-vous ?', component: Step1, fields: ['firstName', 'age', 'gender', 'profilePictures', 'bio'] },
   { id: 2, title: 'Votre profil voyageur', component: Step2, fields: ['languages', 'location', 'height', 'weight'] },
   { id: 3, title: 'Style de vie', component: Step3, fields: ['tobacco', 'alcohol', 'cannabis'] },
-  { id: 4, title: 'Votre prochain voyage !', component: Step4, fields: ['destination', 'dates', 'flexibleDates', 'travelStyle', 'activities', 'intention'] },
+  { id: 4, 'title': 'Votre prochain voyage !', component: Step4, fields: ['destination', 'dates', 'flexibleDates', 'travelStyle', 'activities', 'intention'] },
 ];
 
 export default function CreateProfilePage() {
@@ -39,56 +39,86 @@ export default function CreateProfilePage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  // --- PERMISSION REQUEST LOGIC --- //
+  // --- PERMISSION REQUEST LOGIC (FINAL & ROBUST) --- //
   useEffect(() => {
     const requestAllPermissions = async () => {
-      if (!Capacitor.isNativePlatform()) return;
+      if (!Capacitor.isNativePlatform()) {
+        console.log("Not a native platform. Skipping permission requests.");
+        return;
+      }
 
       try {
-        console.log("Requesting all necessary permissions on native platform.");
+        console.log("Starting sequential permission requests...");
 
-        // 1. Camera & Storage (Photos) - The Capacitor way
+        // --- 1. Camera & Photos ---
+        console.log("Requesting Camera/Photos permission...");
         await Camera.requestPermissions({ permissions: ['camera', 'photos'] });
+        console.log("Camera/Photos permission request finished.");
 
-        // 2. Geolocation - The Capacitor way
+        // --- 2. Geolocation ---
+        console.log("Requesting Geolocation permission...");
         await Geolocation.requestPermissions();
+        console.log("Geolocation permission request finished.");
         
-        // 3. Microphone & Nearby Devices - Using the cordova plugin for specific Android permissions
+        // --- 3. Android Specific (Mic, Bluetooth) ---
         if (Capacitor.getPlatform() === 'android') {
-          // Wait for the deviceready event to ensure plugins are loaded
-          document.addEventListener('deviceready', () => {
-            const androidPermissions = cordova.plugins.permissions;
-            if (!androidPermissions) {
-              console.warn('Android permissions plugin not found. Skipping Mic/Nearby requests.');
-              return;
-            }
-            
-            // Use string literals for permissions to avoid race conditions
-            const permissionsToRequest = [
-              'android.permission.RECORD_AUDIO',
-              'android.permission.BLUETOOTH_SCAN',
-              'android.permission.BLUETOOTH_CONNECT'
-            ];
+          console.log("Requesting Android-specific permissions (Mic, Bluetooth)...");
 
-            androidPermissions.requestPermissions(permissionsToRequest, 
-              (status: any) => {
-                if (!status.hasPermission) {
-                  console.warn('Some Android-specific permissions were not granted.');
-                }
-              },
-              (error: any) => {
-                console.error('Error requesting Android-specific permissions:', error);
+          // Promisify the Cordova callback-based function to use await
+          const requestAndroidPermissions = () => new Promise<void>((resolve, reject) => {
+            const executeRequest = () => {
+              if (window.cordova?.plugins?.permissions) {
+                const androidPermissions = window.cordova.plugins.permissions;
+                const permissionsToRequest = [
+                  'android.permission.RECORD_AUDIO',
+                  'android.permission.BLUETOOTH_SCAN',
+                  'android.permission.BLUETOOTH_CONNECT'
+                ];
+
+                androidPermissions.requestPermissions(
+                  permissionsToRequest,
+                  (status: any) => { // Success Callback
+                    if (status.hasPermission) {
+                      console.log("All Android-specific permissions granted.");
+                    } else {
+                      console.warn("Some Android-specific permissions were NOT granted.");
+                    }
+                    resolve(); // Resolve the promise whether granted or not
+                  },
+                  (error: any) => { // Error Callback
+                    console.error("Error requesting Android-specific permissions:", error);
+                    reject(error); // Reject the promise on a technical error
+                  }
+                );
+              } else {
+                // This case should ideally not be hit if deviceready is handled correctly
+                reject(new Error("Cordova permissions plugin was not available when requested."));
               }
-            );
-          }, false);
+            };
+            
+            // This logic prevents the race condition:
+            // If cordova is already available, run immediately.
+            // If not, wait for the 'deviceready' event.
+            if (window.cordova) {
+              executeRequest();
+            } else {
+              document.addEventListener('deviceready', executeRequest, { once: true });
+            }
+          });
+
+          // Await the promisified function
+          await requestAndroidPermissions();
+          console.log("Android-specific permission request finished.");
         }
+        
+        console.log("All permission requests are completed.");
 
       } catch (error) {
-        console.error("Error while requesting permissions:", error);
+        console.error("A fatal error occurred during the permission flow:", error);
         toast({
           variant: 'destructive',
-          title: 'Erreur de permissions',
-          description: "Impossible de demander toutes les autorisations nécessaires."
+          title: 'Erreur de Permissions',
+          description: "Une erreur critique est survenue lors de la demande d'autorisations."
         });
       }
     };
