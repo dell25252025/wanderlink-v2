@@ -46,9 +46,6 @@ export async function signInWithGoogle() {
   // 📱 Si on est sur mobile (Android/iOS)
   if (Capacitor.isNativePlatform()) {
     try {
-      // On initialise le plugin SANS le spinner par défaut
-      await GoogleAuth.initialize({ showSpinner: false });
-
       // On utilise le plugin natif pour obtenir le "idToken" de Google
       const googleUser = await GoogleAuth.signIn();
       const idToken = googleUser.authentication.idToken;
