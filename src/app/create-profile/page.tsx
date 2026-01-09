@@ -20,6 +20,7 @@ import { formSchema, type FormData } from '@/lib/schema';
 import { Capacitor } from '@capacitor/core';
 import { Camera } from '@capacitor/camera';
 import { Geolocation } from '@capacitor/geolocation';
+import { countries } from '@/lib/countries'; // Import the countries list
 
 // Declare cordova for the permissions plugin
 declare var cordova: any;
@@ -36,7 +37,6 @@ export default function CreateProfilePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  // State to show the manual retry button
   const [showPermissionRetry, setShowPermissionRetry] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
@@ -68,19 +68,34 @@ export default function CreateProfilePage() {
 
   const { trigger, handleSubmit, setValue } = methods;
 
-  // --- PERMISSION REQUEST LOGIC (MODIFIED - Geolocation part commented out) --- //
+  // --- PERMISSION REQUEST LOGIC (RESTORED & ENHANCED) --- //
   useEffect(() => {
     const requestAllPermissions = async () => {
       if (!Capacitor.isNativePlatform()) return;
       
       setShowPermissionRetry(false);
 
-      /*
-      // --- 1. Geolocation First & Auto-fill --- 
+      // --- 1. Geolocation, Reverse Geocoding, and Auto-fill --- 
       try {
         const geoStatus = await Geolocation.requestPermissions();
         if (geoStatus.location === 'granted') {
-          // This part is now handled in Step2 to avoid conflicts
+          const position = await Geolocation.getCurrentPosition();
+          const { latitude, longitude } = position.coords;
+          
+          // Reverse geocode the coordinates
+          const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=fr&zoom=3`;
+          const response = await fetch(url, { headers: { 'User-Agent': 'WanderLink/1.0 (tech.wanderlink.app)' } });
+          if (!response.ok) throw new Error('Reverse geocoding failed');
+
+          const data = await response.json();
+          const countryCode = data?.address?.country_code;
+
+          if (countryCode) {
+            const foundCountry = countries.find(c => c.code.toLowerCase() === countryCode.toLowerCase());
+            if (foundCountry) {
+              setValue('location', foundCountry.name, { shouldValidate: true });
+            }
+          }
         } else {
            toast({ variant: 'destructive', title: 'Permission de Localisation Refusée', description: "La localisation est désactivée. Vous pouvez la renseigner manuellement." });
         }
@@ -88,15 +103,15 @@ export default function CreateProfilePage() {
          if (error.message === "Location services are not enabled") {
           toast({ variant: 'destructive', title: 'Activez la Localisation', description: "Veuillez activer le GPS, puis appuyez sur Réessayer." });
           setShowPermissionRetry(true);
+          return; // Stop the flow
         } else {
-          toast({ variant: 'destructive', title: 'Erreur de Géolocalisation', description: "Impossible de demander la permission de localisation." });
+          console.error("Initial geolocation error:", error);
+          toast({ variant: 'destructive', title: 'Erreur de Géolocalisation', description: "Impossible de déterminer la position." });
         }
-        return; // Stop the flow if geolocation fails
       }
-      */
 
-      // --- 2. Camera & Photos ---
-      try { await Camera.requestPermissions({ permissions: ['camera', 'photos'] }); } catch (e) { console.error(e) }
+      // --- 2. Camera & Photos (continues after geolocation attempt) ---
+      try { await Camera.requestPermissions({ permissions: ['camera', 'photos'] }); } catch (e) { console.error("Camera permission error:", e) }
 
       // --- 3. Android Specific (Mic, Bluetooth) ---
       if (Capacitor.getPlatform() === 'android') {
@@ -106,17 +121,18 @@ export default function CreateProfilePage() {
               if (window.cordova?.plugins?.permissions) {
                 const p = window.cordova.plugins.permissions;
                 p.requestPermissions(['android.permission.RECORD_AUDIO', 'android.permission.BLUETOOTH_SCAN', 'android.permission.BLUETOOTH_CONNECT'], (st: any) => { if (!st.hasPermission) console.warn("Mic/BT permissions not granted."); resolve(); }, reject);
-              } else { reject(new Error("Cordova permissions plugin not available.")); }
+              } else { console.warn("Cordova permissions plugin not available at this time."); resolve(); }
             };
             if (window.cordova) req(); else document.addEventListener('deviceready', req, { once: true });
           });
-        } catch(e) { console.error(e); }
+        } catch(e) { console.error("Android specific permissions error:", e); }
       }
     };
 
     requestAllPermissions();
 
-  }, [toast, setValue]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -126,40 +142,37 @@ export default function CreateProfilePage() {
     return () => unsubscribe();
   }, [router]);
   
-  const handlePermissionRetry = () => {
-    const reRequestPermissions = async () => {
-        if (!Capacitor.isNativePlatform()) return;
-        setShowPermissionRetry(false);
-        try {
-            const geoStatus = await Geolocation.requestPermissions();
-            if (geoStatus.location !== 'granted') {
-                toast({ variant: 'destructive', title: 'Activez la Localisation', description: "Le GPS doit être activé. Veuillez l\'activer et réessayer." });
-                setShowPermissionRetry(true);
-                return;
-            }
-            // Logic to set value is removed from here to avoid conflict
-
-            try { await Camera.requestPermissions({ permissions: ['camera', 'photos'] }); } catch (e) { console.error(e) }
-            if (Capacitor.getPlatform() === 'android') {
-                try {
-                    await new Promise<void>((resolve, reject) => {
-                        const req = () => {
-                            if (window.cordova?.plugins?.permissions) {
-                                const p = window.cordova.plugins.permissions;
-                                p.requestPermissions(['android.permission.RECORD_AUDIO', 'android.permission.BLUETOOTH_SCAN', 'android.permission.BLUETOOTH_CONNECT'], (st: any) => { if (!st.hasPermission) console.warn("Mic/BT permissions not granted."); resolve(); }, reject);
-                            } else { reject(new Error("Cordova permissions plugin not available.")); }
-                        };
-                        if (window.cordova) req(); else document.addEventListener('deviceready', req, { once: true });
-                    });
-                } catch(e) { console.error(e); }
-            }
-        } catch (error: any) {
-            toast({ variant: 'destructive', title: 'Activez la Localisation', description: "Le GPS semble toujours désactivé. Veuillez l\'activer et réessayer." });
-            setShowPermissionRetry(true);
-        }
-    };
-    reRequestPermissions();
-  }
+  // This function is for the manual retry button only
+  const handlePermissionRetry = async () => {
+      if (!Capacitor.isNativePlatform()) return;
+      setShowPermissionRetry(false);
+      try {
+          // Only re-request geolocation, as it's the most likely to fail if GPS is off
+          const geoStatus = await Geolocation.requestPermissions();
+          if (geoStatus.location !== 'granted') {
+              toast({ variant: 'destructive', title: 'Activez la Localisation', description: "Le GPS doit être activé. Veuillez l\'activer et réessayer." });
+              setShowPermissionRetry(true);
+              return;
+          }
+          const position = await Geolocation.getCurrentPosition();
+          const { latitude, longitude } = position.coords;
+          const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=fr&zoom=3`;
+          const response = await fetch(url, { headers: { 'User-Agent': 'WanderLink/1.0 (tech.wanderlink.app)' } });
+          if (!response.ok) throw new Error('Reverse geocoding failed');
+          const data = await response.json();
+          const countryCode = data?.address?.country_code;
+          if (countryCode) {
+              const foundCountry = countries.find(c => c.code.toLowerCase() === countryCode.toLowerCase());
+              if (foundCountry) {
+                  setValue('location', foundCountry.name, { shouldValidate: true });
+                  toast({ title: "Position trouvée !", description: `Pays défini sur : ${foundCountry.name}` });
+              } else { throw new Error('Country code not found'); }
+          } else { throw new Error('Country code not in response'); }
+      } catch (error: any) {
+          toast({ variant: 'destructive', title: 'Activez la Localisation', description: "Le GPS semble toujours désactivé. Veuillez l\'activer et réessayer." });
+          setShowPermissionRetry(true);
+      }
+  };
 
   const nextStep = async () => {
     const fields = steps[currentStep].fields as (keyof FormData)[];
