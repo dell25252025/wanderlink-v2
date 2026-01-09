@@ -68,34 +68,32 @@ export default function CreateProfilePage() {
 
   const { trigger, handleSubmit, setValue } = methods;
 
-  // --- PERMISSION REQUEST LOGIC (FINAL - WITH MANUAL RETRY) --- //
+  // --- PERMISSION REQUEST LOGIC (MODIFIED - Geolocation part commented out) --- //
   useEffect(() => {
     const requestAllPermissions = async () => {
       if (!Capacitor.isNativePlatform()) return;
       
-      // Hide retry button at the start of a request attempt
       setShowPermissionRetry(false);
 
+      /*
       // --- 1. Geolocation First & Auto-fill --- 
       try {
         const geoStatus = await Geolocation.requestPermissions();
         if (geoStatus.location === 'granted') {
-          const position = await Geolocation.getCurrentPosition();
-          const coords = `${position.coords.latitude}, ${position.coords.longitude}`;
-          setValue('location', coords, { shouldValidate: true });
+          // This part is now handled in Step2 to avoid conflicts
         } else {
            toast({ variant: 'destructive', title: 'Permission de Localisation Refusée', description: "La localisation est désactivée. Vous pouvez la renseigner manuellement." });
         }
       } catch (error: any) {
          if (error.message === "Location services are not enabled") {
           toast({ variant: 'destructive', title: 'Activez la Localisation', description: "Veuillez activer le GPS, puis appuyez sur Réessayer." });
-          // Show the manual retry button and stop
           setShowPermissionRetry(true);
         } else {
           toast({ variant: 'destructive', title: 'Erreur de Géolocalisation', description: "Impossible de demander la permission de localisation." });
         }
         return; // Stop the flow if geolocation fails
       }
+      */
 
       // --- 2. Camera & Photos ---
       try { await Camera.requestPermissions({ permissions: ['camera', 'photos'] }); } catch (e) { console.error(e) }
@@ -128,9 +126,7 @@ export default function CreateProfilePage() {
     return () => unsubscribe();
   }, [router]);
   
-  // Manual handler for the retry button
   const handlePermissionRetry = () => {
-    // We create a new function to call from the button to avoid useEffect dependency complexities
     const reRequestPermissions = async () => {
         if (!Capacitor.isNativePlatform()) return;
         setShowPermissionRetry(false);
@@ -141,11 +137,8 @@ export default function CreateProfilePage() {
                 setShowPermissionRetry(true);
                 return;
             }
-            const position = await Geolocation.getCurrentPosition();
-            const coords = `${position.coords.latitude}, ${position.coords.longitude}`;
-            setValue('location', coords, { shouldValidate: true });
+            // Logic to set value is removed from here to avoid conflict
 
-            // Continue with other permissions if the first one passes
             try { await Camera.requestPermissions({ permissions: ['camera', 'photos'] }); } catch (e) { console.error(e) }
             if (Capacitor.getPlatform() === 'android') {
                 try {
