@@ -15,10 +15,21 @@ import { CountrySelect } from '@/components/country-select';
 import { GenericSelect } from '@/components/generic-select';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { travelIntentions, travelStyles, travelActivities } from '@/lib/options';
+import { useEffect, useState } from 'react';
 
 const Step4 = () => {
   const { control, watch } = useFormContext();
   const flexibleDates = watch('flexibleDates');
+  const [isFirstRender, setIsFirstRender] = useState(true);
+
+  useEffect(() => {
+    // Set a timeout to ensure the UI is ready before triggering the sheet
+    const timer = setTimeout(() => {
+      setIsFirstRender(false);
+    }, 100); // A small delay might be needed for the UI to be fully interactive
+
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -108,6 +119,7 @@ const Step4 = () => {
                                     onValueChange={field.onChange} 
                                     options={travelIntentions} 
                                     placeholder="Sélectionnez une intention"
+                                    defaultOpen={isFirstRender} // <-- Ouvre automatiquement au premier rendu
                                 />
                              </FormControl>
                             <FormMessage />

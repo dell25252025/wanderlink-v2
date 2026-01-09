@@ -22,6 +22,7 @@ interface GenericSelectProps {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  defaultOpen?: boolean; // <-- Nouvelle prop
 }
 
 // --- Sous-composant : La liste des options --- //
@@ -61,7 +62,7 @@ function OptionList({
         ) : (
           filteredOptions.map((option) => (
             <button
-              type="button" // Correction: Ajout de type="button"
+              type="button"
               key={option.value}
               onClick={() => {
                 onValueChange(option.value === value ? '' : option.value);
@@ -90,8 +91,9 @@ export function GenericSelect({
   placeholder = 'Sélectionner une option',
   disabled,
   className,
+  defaultOpen = false, // <-- Utilisation de la nouvelle prop
 }: GenericSelectProps) {
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = React.useState(defaultOpen);
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const selectedOption = options.find((option) => option.value === value);
 
