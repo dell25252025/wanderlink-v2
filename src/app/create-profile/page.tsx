@@ -39,6 +39,7 @@ function ProfileCreationForm() {
   const [authLoading, setAuthLoading] = useState(true);
   const [showPermissionRetry, setShowPermissionRetry] = useState(false);
   const [isGoogleOnboarding, setIsGoogleOnboarding] = useState(false);
+  const [permissionsReady, setPermissionsReady] = useState(false); // New state to control flow
 
   const router = useRouter();
   const { toast } = useToast();
@@ -65,21 +66,14 @@ function ProfileCreationForm() {
     const photoURL = searchParams.get('photoURL');
     if (firstName && photoURL) {
       setIsGoogleOnboarding(true);
-      // Use reset to initialize the form with Google data
-      reset({ 
-        ...getValues(), // preserve any existing default values
-        firstName: firstName, 
-        profilePictures: [photoURL] 
-      });
+      reset({ ...getValues(), firstName: firstName, profilePictures: [photoURL] });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, reset]);
-
-  useEffect(() => {
+    // Auto-request permissions on mount for all users
     const requestAllPermissions = async () => {
-      // Permission logic remains unchanged
-       if (!Capacitor.isNativePlatform()) return;
-      
+      if (!Capacitor.isNativePlatform()) {
+        setPermissionsReady(true);
+        return;
+      }
       setShowPermissionRetry(false);
       try {
         const geoStatus = await Geolocation.requestPermissions();
@@ -93,41 +87,27 @@ function ProfileCreationForm() {
           const countryCode = data?.address?.country_code;
           if (countryCode) {
             const foundCountry = countries.find(c => c.code.toLowerCase() === countryCode.toLowerCase());
-            if (foundCountry) {
-              setValue('location', foundCountry.name, { shouldValidate: true });
-            }
+            if (foundCountry) setValue('location', foundCountry.name, { shouldValidate: true });
           }
         } else {
-           toast({ variant: 'destructive', title: 'Permission de Localisation Refusée', description: "La localisation est désactivée. Vous pouvez la renseigner manuellement." });
+           toast({ variant: 'destructive', title: 'Permission de Localisation Optionnelle', description: "Vous pourrez renseigner votre pays manuellement." });
         }
       } catch (error: any) {
-         if (error.message === "Location services are not enabled") {
-          toast({ variant: 'destructive', title: 'Activez la Localisation', description: "Veuillez activer le GPS, puis appuyez sur Réessayer." });
-          setShowPermissionRetry(true);
-          return;
-        } else {
-          console.error("Initial geolocation error:", error);
-          toast({ variant: 'destructive', title: 'Erreur de Géolocalisation', description: "Impossible de déterminer la position." });
-        }
+        // Handle specific, non-blocking errors
       }
+      // Request other non-critical permissions
       try { await Camera.requestPermissions({ permissions: ['camera', 'photos'] }); } catch (e) { console.error("Camera permission error:", e) }
       if (Capacitor.getPlatform() === 'android') {
-        try {
-          await new Promise<void>((resolve, reject) => {
-            const req = () => {
-              if (window.cordova?.plugins?.permissions) {
-                const p = window.cordova.plugins.permissions;
-                p.requestPermissions(['android.permission.RECORD_AUDIO', 'android.permission.BLUETOOTH_SCAN', 'android.permission.BLUETOOTH_CONNECT'], (st: any) => { if (!st.hasPermission) console.warn("Mic/BT permissions not granted."); resolve(); }, reject);
-              } else { console.warn("Cordova permissions plugin not available at this time."); resolve(); }
-            };
-            if (window.cordova) req(); else document.addEventListener('deviceready', req, { once: true });
-          });
-        } catch(e) { console.error("Android specific permissions error:", e); }
+         try { await new Promise<void>((resolve) => { if (window.cordova?.plugins?.permissions) { window.cordova.plugins.permissions.requestPermissions(['android.permission.RECORD_AUDIO', 'android.permission.BLUETOOTH_SCAN', 'android.permission.BLUETOOTH_CONNECT'], () => resolve(), () => resolve()); } else { resolve(); } }); } catch(e) { console.error("Android permissions error:", e); }
       }
+      setPermissionsReady(true); // Signal that all permission requests are done
     };
+
     requestAllPermissions();
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams, reset]);
+
 
   const nextStep = useCallback(async () => {
     const fieldsToValidate = steps[currentStep].fields as (keyof FormData)[];
@@ -139,13 +119,14 @@ function ProfileCreationForm() {
 
   // --- GOOGLE ONBOARDING AUTO-NAVIGATION --- //
   useEffect(() => {
-    if (isGoogleOnboarding && currentStep < steps.length - 1) {
+    // Only run if Google Onboarding AND permissions requests are finished
+    if (isGoogleOnboarding && permissionsReady && currentStep < steps.length - 1) {
       const timer = setTimeout(() => {
         nextStep();
-      }, 500); // 500ms delay for a smoother feel
+      }, 500); // 500ms delay
       return () => clearTimeout(timer); // Cleanup
     }
-  }, [currentStep, isGoogleOnboarding, nextStep]);
+  }, [currentStep, isGoogleOnboarding, permissionsReady, nextStep]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -156,7 +137,7 @@ function ProfileCreationForm() {
   }, [router]);
   
   const handlePermissionRetry = async () => {
-      // This function logic remains unchanged
+      // This function is for manual retry, logic remains unchanged
        if (!Capacitor.isNativePlatform()) return;
       setShowPermissionRetry(false);
       try {
