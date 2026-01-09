@@ -175,9 +175,14 @@ export default function CreateProfilePage() {
   };
 
   const nextStep = async () => {
-    const fields = steps[currentStep].fields as (keyof FormData)[];
-    const isValid = await trigger(fields);
-    if (isValid && currentStep < steps.length - 1) { setCurrentStep(currentStep + 1); }
+    const fieldsToValidate = steps[currentStep].fields as (keyof FormData)[];
+    // Specifically trigger validation for the fields of the current step.
+    const isValid = await trigger(fieldsToValidate);
+
+    // If the step is valid, proceed to the next one.
+    if (isValid && currentStep < steps.length - 1) {
+      setCurrentStep(currentStep + 1);
+    }
   };
 
   const prevStep = () => { if (currentStep > 0) { setCurrentStep(currentStep - 1); } }; 
