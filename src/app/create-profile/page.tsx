@@ -1,7 +1,8 @@
 
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Progress } from '@/components/ui/progress';
@@ -32,7 +33,7 @@ const steps = [
   { id: 4, 'title': 'Votre prochain voyage !', component: Step4, fields: ['destination', 'dates', 'flexibleDates', 'travelStyle', 'activities', 'intention'] },
 ];
 
-export default function CreateProfilePage() {
+function ProfileCreationForm() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -40,6 +41,7 @@ export default function CreateProfilePage() {
   const [showPermissionRetry, setShowPermissionRetry] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
 
   const methods = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -66,7 +68,20 @@ export default function CreateProfilePage() {
     mode: 'onChange'
   });
 
-  const { trigger, handleSubmit, setValue } = methods;
+  const { trigger, handleSubmit, setValue, reset } = methods;
+
+  // --- GOOGLE ONBOARDING PRE-FILL --- //
+  useEffect(() => {
+    const firstName = searchParams.get('firstName');
+    const photoURL = searchParams.get('photoURL');
+    
+    const defaultValues: Partial<FormData> = {};
+    if (firstName) defaultValues.firstName = firstName;
+    if (photoURL) defaultValues.profilePictures = [photoURL];
+
+    reset(defaultValues); // reset a la place de setValue pour initialiser
+
+  }, [searchParams, reset]);
 
   // --- PERMISSION REQUEST LOGIC (RESTORED & ENHANCED) --- //
   useEffect(() => {
@@ -176,10 +191,7 @@ export default function CreateProfilePage() {
 
   const nextStep = async () => {
     const fieldsToValidate = steps[currentStep].fields as (keyof FormData)[];
-    // Specifically trigger validation for the fields of the current step.
     const isValid = await trigger(fieldsToValidate);
-
-    // If the step is valid, proceed to the next one.
     if (isValid && currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
     }
@@ -245,5 +257,13 @@ export default function CreateProfilePage() {
         </FormProvider>
       </div>
     </div>
+  );
+}
+
+export default function CreateProfilePage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ProfileCreationForm />
+    </Suspense>
   );
 }

@@ -8,19 +8,21 @@ import { Capacitor } from '@capacitor/core';
 // On importe le plugin natif que nous allons utiliser
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 
-// --- LOGIQUE DE GESTION D'UTILISATEUR (INCHANGÉE) ---
+// --- LOGIQUE DE GESTION D'UTILISATEUR (MODIFIÉE) ---
 async function handleUser(user: any) {
   const userRef = doc(db, "users", user.uid);
   const userDoc = await getDoc(userRef);
 
   if (!userDoc.exists()) {
     const [firstName] = user.displayName?.split(' ') || [''];
+    const photoURL = user.photoURL || null;
+    
     const newProfileData = {
       uid: user.uid,
       email: user.email,
       firstName: firstName,
       name: user.displayName,
-      profilePictures: user.photoURL ? [user.photoURL] : [],
+      profilePictures: photoURL ? [photoURL] : [],
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       friends: [],
@@ -30,47 +32,45 @@ async function handleUser(user: any) {
       profileComplete: false
     };
     await setDoc(userRef, sanitizeData(newProfileData));
-    return { success: true, id: user.uid, isNewUser: true, profileComplete: false };
+
+    // On retourne les données pour le pré-remplissage
+    return { 
+      success: true, 
+      id: user.uid, 
+      isNewUser: true, 
+      profileComplete: false, 
+      userData: { 
+        firstName: firstName, 
+        photoURL: photoURL 
+      } 
+    };
   } else {
     const data = userDoc.data();
-    // Un utilisateur est considéré "nouveau" si son profil n'est pas complet.
     const isComplete = !!data.intention && !!data.age;
     return { success: true, id: user.uid, isNewUser: !isComplete, profileComplete: isComplete };
   }
 }
 
-// --- NOUVELLE STRATÉGIE D'AUTHENTIFICATION HYBRIDE ---
+// --- NOUVELLE STRATÉGIE D'AUTHENTIFICATION HYBRIDE (INCHANGÉE) ---
 export async function signInWithGoogle() {
   const auth = getAuth();
 
-  // 📱 Si on est sur mobile (Android/iOS)
   if (Capacitor.isNativePlatform()) {
     try {
-      // On utilise le plugin natif pour obtenir le "idToken" de Google
       const googleUser = await GoogleAuth.signIn();
       const idToken = googleUser.authentication.idToken;
-
-      // On crée une "crédential" Firebase avec ce token
       const credential = GoogleAuthProvider.credential(idToken);
-      
-      // On connecte l'utilisateur à Firebase avec cette crédential
       const result = await signInWithCredential(auth, credential);
-      
-      // On gère le profil de l'utilisateur (création ou mise à jour)
       return await handleUser(result.user);
-
     } catch (error) {
       console.error("Erreur avec le plugin natif Google Sign-In :", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred on mobile.";
       return { success: false, error: errorMessage };
     }
   } 
-  
-  // 🌐 Sinon, sur le web
   else {
     try {
       const provider = new GoogleAuthProvider();
-      // On utilise la popup standard du SDK web
       const result = await signInWithPopup(auth, provider);
       return await handleUser(result.user);
     } catch (error) {
@@ -81,8 +81,7 @@ export async function signInWithGoogle() {
   }
 }
 
-
-// --- Fonctions utilitaires et autres actions (INCHANGÉES) ---
+// ... reste du fichier inchangé ...
 
 // handleGoogleRedirect n'est plus nécessaire avec cette approche
 export async function handleGoogleRedirect() {

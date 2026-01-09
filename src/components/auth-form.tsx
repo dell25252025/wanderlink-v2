@@ -88,12 +88,17 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
       if (result?.success) {
         toast({ title: 'Connexion réussie !', description: 'Bienvenue sur WanderLink.' });
         if (result.isNewUser) {
-          router.push('/create-profile');
+          // Construction de l'URL avec les données de pré-remplissage
+          const { userData } = result;
+          const query = new URLSearchParams();
+          if (userData?.firstName) query.append('firstName', userData.firstName);
+          if (userData?.photoURL) query.append('photoURL', userData.photoURL);
+
+          router.push(`/create-profile?${query.toString()}`);
         } else {
           if (onSuccess) onSuccess(); else router.push('/');
         }
       } else if (result?.error) {
-        // Gère le cas où l'utilisateur ferme la pop-up sur mobile
         if (result.error.includes('popup-closed') || result.error.includes('12501')) {
              console.log('Connexion Google annulée par l\'utilisateur.');
         } else {
