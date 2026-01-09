@@ -19,7 +19,7 @@ import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { formSchema, type FormData } from '@/lib/schema';
 import { Capacitor } from '@capacitor/core';
-import { Camera } from '@capacitor/camera';
+import { Camera, CameraSource, CameraResultType } from '@capacitor/camera';
 import { Geolocation } from '@capacitor/geolocation';
 import { countries } from '@/lib/countries';
 
@@ -60,8 +60,6 @@ function ProfileCreationForm() {
   });
 
   const { trigger, handleSubmit, setValue, getValues, reset, watch } = methods;
-
-  // Watch the intention field for auto-submission
   const watchedIntention = watch('intention');
 
   useEffect(() => {
@@ -71,14 +69,57 @@ function ProfileCreationForm() {
       setIsGoogleOnboarding(true);
       reset({ ...getValues(), firstName: firstName, profilePictures: [photoURL] });
     }
-    
+
+    // --- SEQUENTIAL PERMISSION REQUESTS --- //
     const requestAllPermissions = async () => {
       if (!Capacitor.isNativePlatform()) {
         setPermissionsReady(true);
         return;
       }
-      // ... (permission logic is unchanged)
-      setPermissionsReady(true);
+      
+      // 1. Geolocation
+      try {
+        const geoStatus = await Geolocation.requestPermissions();
+        if (geoStatus.location === 'granted') {
+          const position = await Geolocation.getCurrentPosition();
+          const { latitude, longitude } = position.coords;
+          const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=fr&zoom=3`;
+          const response = await fetch(url, { headers: { 'User-Agent': 'WanderLink/1.0 (tech.wanderlink.app)' } });
+          if (!response.ok) throw new Error('Reverse geocoding failed');
+          const data = await response.json();
+          const countryCode = data?.address?.country_code;
+          if (countryCode) {
+            const foundCountry = countries.find(c => c.code.toLowerCase() === countryCode.toLowerCase());
+            if (foundCountry) setValue('location', foundCountry.name, { shouldValidate: true });
+          }
+        }
+      } catch (e) { 
+        console.warn("Geolocation permission or request failed", e); 
+        toast({ variant: 'default', title: 'Localisation optionnelle', description: "Le pays peut être ajouté manuellement." });
+      }
+
+      // 2. Camera & 3. Photo/Storage (handled by one request)
+      try {
+        await Camera.requestPermissions({ permissions: ['camera', 'photos'] });
+      } catch (e) { 
+        console.warn("Camera/Photos permission failed", e);
+      }
+
+      // 4. Microphone (Android only)
+      if (Capacitor.getPlatform() === 'android') {
+         try {
+            await new Promise<void>((resolve) => {
+              if (window.cordova?.plugins?.permissions) {
+                window.cordova.plugins.permissions.requestPermissions(['android.permission.RECORD_AUDIO'], () => resolve(), () => resolve());
+              } else {
+                console.warn('Cordova permissions plugin not available.');
+                resolve();
+              }
+            });
+         } catch(e) { console.error("Android RECORD_AUDIO permission error:", e); }
+      }
+
+      setPermissionsReady(true); // Signal that all permission requests are done
     };
 
     requestAllPermissions();
@@ -103,7 +144,8 @@ function ProfileCreationForm() {
     }
   }, [currentStep, isGoogleOnboarding, permissionsReady, nextStep]);
 
-  const onSubmit = useCallback(async (data: FormData) => {
+ const onSubmit = useCallback(async (data: FormData) => {
+    if (isSubmitting) return; // Prevent double submission
     if (!currentUser) { toast({ variant: 'destructive', title: 'Erreur d\'authentification' }); return; }
     setIsSubmitting(true);
     try {
@@ -116,15 +158,16 @@ function ProfileCreationForm() {
       toast({ variant: 'destructive', title: 'Erreur lors de la création du profil', description: msg });
       setIsSubmitting(false); // Re-enable submission on error
     }
-  }, [currentUser, router, toast]);
+  }, [currentUser, router, toast, isSubmitting]);
 
   // AUTO-SUBMIT on intention selection
   useEffect(() => {
     if ( isGoogleOnboarding && currentStep === steps.length - 1 && watchedIntention && !isSubmitting ) {
-      const timer = setTimeout(() => { handleSubmit(onSubmit)(); }, 300);
-      return () => clearTimeout(timer);
+      // Use a function reference to avoid stale closures
+      handleSubmit(onSubmit)();
     }
   }, [watchedIntention, isGoogleOnboarding, currentStep, isSubmitting, handleSubmit, onSubmit]);
+
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
