@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -21,9 +21,8 @@ import { formSchema, type FormData } from '@/lib/schema';
 import { Capacitor } from '@capacitor/core';
 import { Camera } from '@capacitor/camera';
 import { Geolocation } from '@capacitor/geolocation';
-import { countries } from '@/lib/countries'; // Import the countries list
+import { countries } from '@/lib/countries';
 
-// Declare cordova for the permissions plugin
 declare var cordova: any;
 
 const steps = [
@@ -39,73 +38,59 @@ function ProfileCreationForm() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [showPermissionRetry, setShowPermissionRetry] = useState(false);
+  const [isGoogleOnboarding, setIsGoogleOnboarding] = useState(false);
+
   const router = useRouter();
   const { toast } = useToast();
   const searchParams = useSearchParams();
 
   const methods = useForm<FormData>({
     resolver: zodResolver(formSchema),
-     defaultValues: {
+    defaultValues: {
       firstName: '',
-      age: undefined,
-      gender: undefined,
       profilePictures: [],
-      bio: '',
       languages: [],
-      location: '',
-      height: undefined,
-      weight: undefined,
-      tobacco: undefined,
-      alcohol: undefined,
-      cannabis: undefined,
       destination: 'Toutes',
-      dates: { from: undefined, to: undefined },
       activities: 'Toutes',
-      flexibleDates: false,
       travelStyle: 'Tous',
-      intention: undefined,
+      flexibleDates: false,
     },
     mode: 'onChange'
   });
 
-  const { trigger, handleSubmit, setValue } = methods;
+  const { trigger, handleSubmit, setValue, getValues, reset } = methods;
 
-  // --- GOOGLE ONBOARDING PRE-FILL (CORRECTED) --- //
   useEffect(() => {
     const firstName = searchParams.get('firstName');
     const photoURL = searchParams.get('photoURL');
-    
-    if (firstName) {
-      setValue('firstName', firstName, { shouldValidate: true });
+    if (firstName && photoURL) {
+      setIsGoogleOnboarding(true);
+      // Use reset to initialize the form with Google data
+      reset({ 
+        ...getValues(), // preserve any existing default values
+        firstName: firstName, 
+        profilePictures: [photoURL] 
+      });
     }
-    if (photoURL) {
-      setValue('profilePictures', [photoURL], { shouldValidate: true });
-    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, reset]);
 
-  }, [searchParams, setValue]);
-
-  // --- PERMISSION REQUEST LOGIC (RESTORED & ENHANCED) --- //
   useEffect(() => {
     const requestAllPermissions = async () => {
-      if (!Capacitor.isNativePlatform()) return;
+      // Permission logic remains unchanged
+       if (!Capacitor.isNativePlatform()) return;
       
       setShowPermissionRetry(false);
-
-      // --- 1. Geolocation, Reverse Geocoding, and Auto-fill --- 
       try {
         const geoStatus = await Geolocation.requestPermissions();
         if (geoStatus.location === 'granted') {
           const position = await Geolocation.getCurrentPosition();
           const { latitude, longitude } = position.coords;
-          
-          // Reverse geocode the coordinates
           const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=fr&zoom=3`;
           const response = await fetch(url, { headers: { 'User-Agent': 'WanderLink/1.0 (tech.wanderlink.app)' } });
           if (!response.ok) throw new Error('Reverse geocoding failed');
-
           const data = await response.json();
           const countryCode = data?.address?.country_code;
-
           if (countryCode) {
             const foundCountry = countries.find(c => c.code.toLowerCase() === countryCode.toLowerCase());
             if (foundCountry) {
@@ -119,17 +104,13 @@ function ProfileCreationForm() {
          if (error.message === "Location services are not enabled") {
           toast({ variant: 'destructive', title: 'Activez la Localisation', description: "Veuillez activer le GPS, puis appuyez sur Réessayer." });
           setShowPermissionRetry(true);
-          return; // Stop the flow
+          return;
         } else {
           console.error("Initial geolocation error:", error);
           toast({ variant: 'destructive', title: 'Erreur de Géolocalisation', description: "Impossible de déterminer la position." });
         }
       }
-
-      // --- 2. Camera & Photos (continues after geolocation attempt) ---
       try { await Camera.requestPermissions({ permissions: ['camera', 'photos'] }); } catch (e) { console.error("Camera permission error:", e) }
-
-      // --- 3. Android Specific (Mic, Bluetooth) ---
       if (Capacitor.getPlatform() === 'android') {
         try {
           await new Promise<void>((resolve, reject) => {
@@ -144,11 +125,27 @@ function ProfileCreationForm() {
         } catch(e) { console.error("Android specific permissions error:", e); }
       }
     };
-
     requestAllPermissions();
-
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const nextStep = useCallback(async () => {
+    const fieldsToValidate = steps[currentStep].fields as (keyof FormData)[];
+    const isValid = await trigger(fieldsToValidate);
+    if (isValid && currentStep < steps.length - 1) {
+      setCurrentStep(currentStep + 1);
+    }
+  }, [currentStep, trigger]);
+
+  // --- GOOGLE ONBOARDING AUTO-NAVIGATION --- //
+  useEffect(() => {
+    if (isGoogleOnboarding && currentStep < steps.length - 1) {
+      const timer = setTimeout(() => {
+        nextStep();
+      }, 500); // 500ms delay for a smoother feel
+      return () => clearTimeout(timer); // Cleanup
+    }
+  }, [currentStep, isGoogleOnboarding, nextStep]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -158,12 +155,11 @@ function ProfileCreationForm() {
     return () => unsubscribe();
   }, [router]);
   
-  // This function is for the manual retry button only
   const handlePermissionRetry = async () => {
-      if (!Capacitor.isNativePlatform()) return;
+      // This function logic remains unchanged
+       if (!Capacitor.isNativePlatform()) return;
       setShowPermissionRetry(false);
       try {
-          // Only re-request geolocation, as it's the most likely to fail if GPS is off
           const geoStatus = await Geolocation.requestPermissions();
           if (geoStatus.location !== 'granted') {
               toast({ variant: 'destructive', title: 'Activez la Localisation', description: "Le GPS doit être activé. Veuillez l\'activer et réessayer." });
@@ -188,14 +184,6 @@ function ProfileCreationForm() {
           toast({ variant: 'destructive', title: 'Activez la Localisation', description: "Le GPS semble toujours désactivé. Veuillez l\'activer et réessayer." });
           setShowPermissionRetry(true);
       }
-  };
-
-  const nextStep = async () => {
-    const fieldsToValidate = steps[currentStep].fields as (keyof FormData)[];
-    const isValid = await trigger(fieldsToValidate);
-    if (isValid && currentStep < steps.length - 1) {
-      setCurrentStep(currentStep + 1);
-    }
   };
 
   const prevStep = () => { if (currentStep > 0) { setCurrentStep(currentStep - 1); } }; 
@@ -223,9 +211,7 @@ function ProfileCreationForm() {
     <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-4">
        <div className="w-full max-w-2xl relative">
          <div className="flex items-center gap-2 mb-4 justify-center">
-          <div className="flex items-center gap-2">
             <h1 className="text-3xl font-bold font-logo"><span className="text-foreground">Wander</span><span className="text-accent">Link</span></h1>
-          </div>
         </div>
         <Progress value={((currentStep + 1) / steps.length) * 100} className="mb-8" />
         <FormProvider {...methods}>
@@ -233,7 +219,11 @@ function ProfileCreationForm() {
             <CurrentStepComponent />
             <div className="mt-8 flex justify-between items-center">
               <div>
-                {currentStep > 0 ? (<Button type="button" variant="ghost" onClick={prevStep} disabled={isSubmitting}>Précédent</Button>) : (<Button type="button" variant="ghost" onClick={handleCancel} disabled={isSubmitting}>Annuler</Button>)}
+                {currentStep > 0 && !isGoogleOnboarding ? (
+                  <Button type="button" variant="ghost" onClick={prevStep} disabled={isSubmitting}>Précédent</Button>
+                ) : (
+                  <Button type="button" variant="ghost" onClick={handleCancel} disabled={isSubmitting}>Annuler</Button>
+                )}
               </div>
 
               <div className="flex items-center gap-x-2">
