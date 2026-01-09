@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useFormContext } from 'react-hook-form';
+import { useFormContext, useWatch } from 'react-hook-form';
 import {
   FormControl,
   FormField,
@@ -25,6 +25,9 @@ const Step1 = () => {
   const { control, setValue, getValues } = useFormContext();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
+
+  // This now reactively watches for changes in the profilePictures field
+  const pictures = useWatch({ control, name: 'profilePictures' }) || [];
 
   // Web-only file selection handler
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -109,8 +112,6 @@ const Step1 = () => {
     setValue('profilePictures', newPictures, { shouldValidate: true });
   };
   
-  const pictures = getValues('profilePictures') || [];
-
   return (
     <div className="space-y-8">
       <div>

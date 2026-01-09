@@ -68,20 +68,21 @@ function ProfileCreationForm() {
     mode: 'onChange'
   });
 
-  const { trigger, handleSubmit, setValue, reset } = methods;
+  const { trigger, handleSubmit, setValue } = methods;
 
-  // --- GOOGLE ONBOARDING PRE-FILL --- //
+  // --- GOOGLE ONBOARDING PRE-FILL (CORRECTED) --- //
   useEffect(() => {
     const firstName = searchParams.get('firstName');
     const photoURL = searchParams.get('photoURL');
     
-    const defaultValues: Partial<FormData> = {};
-    if (firstName) defaultValues.firstName = firstName;
-    if (photoURL) defaultValues.profilePictures = [photoURL];
+    if (firstName) {
+      setValue('firstName', firstName, { shouldValidate: true });
+    }
+    if (photoURL) {
+      setValue('profilePictures', [photoURL], { shouldValidate: true });
+    }
 
-    reset(defaultValues); // reset a la place de setValue pour initialiser
-
-  }, [searchParams, reset]);
+  }, [searchParams, setValue]);
 
   // --- PERMISSION REQUEST LOGIC (RESTORED & ENHANCED) --- //
   useEffect(() => {
