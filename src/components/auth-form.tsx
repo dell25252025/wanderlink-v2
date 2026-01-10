@@ -15,6 +15,7 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'fire
 import { FirebaseError } from 'firebase/app';
 import { useRouter } from 'next/navigation';
 import { signInWithGoogle } from '@/lib/firebase-actions';
+import { useOnboarding } from '@/context/OnboardingContext'; // Import the hook
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Adresse e-mail invalide.' }),
@@ -45,6 +46,7 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
+  const { setMode, setOverlayActive } = useOnboarding(); // Use the context
 
   const form = useForm({
     resolver: zodResolver(isLogin ? loginSchema : signupSchema),
@@ -53,6 +55,8 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
 
   async function onSubmit(values: z.infer<typeof loginSchema | typeof signupSchema>) {
     setIsLoading(true);
+    setMode('email'); // Set mode for email flow
+    setOverlayActive(false);
     try {
       if (isLogin) {
         const loginValues = values as z.infer<typeof loginSchema>;
@@ -82,34 +86,45 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
 
   async function handleGoogleSignIn() {
     setIsGoogleLoading(true);
+    setMode('google'); // Set mode for Google flow
+    setOverlayActive(true); // Activate the overlay
+
     try {
       const result = await signInWithGoogle();
 
       if (result?.success) {
-        toast({ title: 'Connexion réussie !', description: 'Bienvenue sur WanderLink.' });
-        if (result.isNewUser) {
-          // Construction de l'URL avec les données de pré-remplissage
-          const { userData } = result;
-          const query = new URLSearchParams();
-          if (userData?.firstName) query.append('firstName', userData.firstName);
-          if (userData?.photoURL) query.append('photoURL', userData.photoURL);
-
-          router.push(`/create-profile?${query.toString()}`);
+        // The user is signed in. The overlay is active.
+        // Now, we navigate to the profile creation page, which will be hidden by the overlay.
+        const { userData, isNewUser } = result;
+        if (isNewUser) {
+            const query = new URLSearchParams();
+            if (userData?.firstName) query.append('firstName', userData.firstName);
+            if (userData?.photoURL) query.append('photoURL', userData.photoURL);
+            router.push(`/create-profile?${query.toString()}`);
         } else {
-          if (onSuccess) onSuccess(); else router.push('/');
+           // If the user already exists, we don't need the onboarding flow.
+           setOverlayActive(false); 
+           setMode(null);
+           router.push('/');
         }
       } else if (result?.error) {
-        if (result.error.includes('popup-closed') || result.error.includes('12501')) {
-             console.log('Connexion Google annulée par l\'utilisateur.');
+         if (result.error.includes('popup-closed') || result.error.includes('12501')) {
+             console.log('Google Sign-In canceled by user.');
         } else {
              throw new Error(result.error);
         }
+        // Deactivate overlay if there was an error or cancellation
+        setOverlayActive(false);
+        setMode(null);
       }
 
     } catch (error) {
-      console.error("Erreur de connexion Google:", error);
-      const errorMessage = error instanceof Error ? error.message : "Une erreur inattendue s'est produite.";
-      toast({ variant: 'destructive', title: 'Erreur de connexion Google', description: errorMessage });
+      console.error("Google Sign-In Error:", error);
+      const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
+      toast({ variant: 'destructive', title: 'Google Sign-In Error', description: errorMessage });
+      // Deactivate overlay on error
+      setOverlayActive(false);
+      setMode(null);
     } finally {
       setIsGoogleLoading(false);
     }

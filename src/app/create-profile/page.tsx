@@ -19,9 +19,10 @@ import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { formSchema, type FormData } from '@/lib/schema';
 import { Capacitor } from '@capacitor/core';
-import { Camera, CameraSource, CameraResultType } from '@capacitor/camera';
+import { Camera } from '@capacitor/camera';
 import { Geolocation } from '@capacitor/geolocation';
 import { countries } from '@/lib/countries';
+import { useOnboarding } from '@/context/OnboardingContext'; // Import the hook
 
 declare var cordova: any;
 
@@ -44,6 +45,7 @@ function ProfileCreationForm() {
   const router = useRouter();
   const { toast } = useToast();
   const searchParams = useSearchParams();
+  const { mode, setMode, setOverlayActive } = useOnboarding(); // Use the context
 
   const methods = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -61,6 +63,15 @@ function ProfileCreationForm() {
 
   const { trigger, handleSubmit, setValue, getValues, reset, watch } = methods;
   const watchedIntention = watch('intention');
+  
+    // --- POINT DE SORTIE --- //
+  useEffect(() => {
+    if (currentStep === steps.length - 1 && mode === 'google') {
+      setOverlayActive(false);
+      setMode(null);
+    }
+  }, [currentStep, mode, setOverlayActive, setMode]);
+
 
   useEffect(() => {
     const firstName = searchParams.get('firstName');
@@ -70,14 +81,12 @@ function ProfileCreationForm() {
       reset({ ...getValues(), firstName: firstName, profilePictures: [photoURL] });
     }
 
-    // --- SEQUENTIAL PERMISSION REQUESTS --- //
     const requestAllPermissions = async () => {
       if (!Capacitor.isNativePlatform()) {
         setPermissionsReady(true);
         return;
       }
       
-      // 1. Geolocation
       try {
         const geoStatus = await Geolocation.requestPermissions();
         if (geoStatus.location === 'granted') {
@@ -98,14 +107,12 @@ function ProfileCreationForm() {
         toast({ variant: 'default', title: 'Localisation optionnelle', description: "Le pays peut être ajouté manuellement." });
       }
 
-      // 2. Camera & 3. Photo/Storage (handled by one request)
       try {
         await Camera.requestPermissions({ permissions: ['camera', 'photos'] });
       } catch (e) { 
         console.warn("Camera/Photos permission failed", e);
       }
 
-      // 4. Microphone (Android only)
       if (Capacitor.getPlatform() === 'android') {
          try {
             await new Promise<void>((resolve) => {
@@ -119,7 +126,7 @@ function ProfileCreationForm() {
          } catch(e) { console.error("Android RECORD_AUDIO permission error:", e); }
       }
 
-      setPermissionsReady(true); // Signal that all permission requests are done
+      setPermissionsReady(true);
     };
 
     requestAllPermissions();
@@ -136,7 +143,6 @@ function ProfileCreationForm() {
     }
   }, [currentStep, trigger]);
 
-  // AUTO-NAVIGATION for Google Onboarding
   useEffect(() => {
     if (isGoogleOnboarding && permissionsReady && currentStep < steps.length - 1) {
       const timer = setTimeout(() => { nextStep(); }, 500);
@@ -145,7 +151,7 @@ function ProfileCreationForm() {
   }, [currentStep, isGoogleOnboarding, permissionsReady, nextStep]);
 
  const onSubmit = useCallback(async (data: FormData) => {
-    if (isSubmitting) return; // Prevent double submission
+    if (isSubmitting) return;
     if (!currentUser) { toast({ variant: 'destructive', title: 'Erreur d\'authentification' }); return; }
     setIsSubmitting(true);
     try {
@@ -156,18 +162,15 @@ function ProfileCreationForm() {
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Une erreur inconnue est survenue.';
       toast({ variant: 'destructive', title: 'Erreur lors de la création du profil', description: msg });
-      setIsSubmitting(false); // Re-enable submission on error
+      setIsSubmitting(false);
     }
   }, [currentUser, router, toast, isSubmitting]);
 
-  // AUTO-SUBMIT on intention selection
   useEffect(() => {
     if ( isGoogleOnboarding && currentStep === steps.length - 1 && watchedIntention && !isSubmitting ) {
-      // Use a function reference to avoid stale closures
       handleSubmit(onSubmit)();
     }
   }, [watchedIntention, isGoogleOnboarding, currentStep, isSubmitting, handleSubmit, onSubmit]);
-
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -209,7 +212,6 @@ function ProfileCreationForm() {
                     <Button type="button" variant="secondary" onClick={handlePermissionRetry}>Réessayer</Button>
                 )}
                 
-                {/* Hide buttons during google auto-submit phase */}
                 {!(isGoogleOnboarding && watchedIntention) && (
                    currentStep < steps.length - 1 ? (
                     <Button type="button" onClick={nextStep}>
@@ -222,7 +224,6 @@ function ProfileCreationForm() {
                   )
                 )}
 
-                {/* Show a loader when auto-submitting */}
                 {isGoogleOnboarding && isSubmitting && currentStep === steps.length - 1 && (
                    <Button type="button" disabled={true}>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />Finalisation...
