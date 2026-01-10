@@ -1,8 +1,9 @@
+
 export const travelIntentions = [
-  { value: '50/50', label: '50/50', icon: '⚖️', color: 'bg-blue-500' },
-  { value: 'Sponsor', label: 'Sponsor', icon: '💰', color: 'bg-green-500' },
-  { value: 'Sponsorisé', label: 'Sponsorisé', icon: '🙏', color: 'bg-yellow-500' },
-  { value: 'Groupe', label: 'Groupe', icon: '👥', color: 'bg-red-500' },
+  { value: '50/50', label: '50/50', emoji: '⚖️', description: 'Chacun paie sa part, les dépenses sont partagées.' },
+  { value: 'Sponsor', label: 'Je sponsorise', emoji: '💰', description: 'Vous invitez et prenez en charge les frais du voyage.' },
+  { value: 'Sponsorisé', label: 'Je suis sponsorisé(e)', emoji: '🎁', description: 'Vous êtes invité(e) et vos frais sont pris en charge.' },
+  { value: 'Groupe', label: 'Voyage en groupe', emoji: '👥', description: 'Rejoignez ou créez un voyage avec plusieurs personnes.' },
 ];
 
 export const travelStyles = [

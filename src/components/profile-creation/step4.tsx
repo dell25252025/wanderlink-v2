@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useFormContext } from 'react-hook-form';
@@ -16,29 +17,47 @@ import { GenericSelect } from '@/components/generic-select';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { travelIntentions, travelStyles, travelActivities } from '@/lib/options';
 import { useEffect, useState } from 'react';
+import { AnimatePresence } from 'framer-motion';
+import IntentionPicker from './IntentionPicker';
+import { Button } from '@/components/ui/button';
+import { ChevronRight } from 'lucide-react';
 
 const Step4 = () => {
-  const { control, watch } = useFormContext();
+  const { control, watch, setValue } = useFormContext();
   const flexibleDates = watch('flexibleDates');
+  const selectedIntentionValue = watch('intention');
+  const [isIntentionPickerOpen, setIsIntentionPickerOpen] = useState(false);
   const [isFirstRender, setIsFirstRender] = useState(true);
 
-  useEffect(() => {
-    // Set a timeout to ensure the UI is ready before triggering the sheet
-    const timer = setTimeout(() => {
-      setIsFirstRender(false);
-    }, 100); // A small delay might be needed for the UI to be fully interactive
+  const selectedIntention = travelIntentions.find(i => i.value === selectedIntentionValue);
 
-    return () => clearTimeout(timer);
-  }, []);
+  useEffect(() => {
+    if (isFirstRender) {
+        setTimeout(() => setIsIntentionPickerOpen(true), 200);
+        setIsFirstRender(false);
+    }
+  }, [isFirstRender]);
 
   return (
-    <div className="space-y-6">
-        <div>
-            <h2 className="text-2xl font-bold font-headline">Votre prochain voyage</h2>
-            <p className="text-muted-foreground">Décrivez votre projet pour trouver les meilleurs partenaires.</p>
-        </div>
+    <>
+      <AnimatePresence>
+        {isIntentionPickerOpen && (
+          <IntentionPicker
+            onSelect={(value) => {
+              setValue('intention', value, { shouldValidate: true, shouldDirty: true });
+            }}
+            onClose={() => setIsIntentionPickerOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
-        {/* Dates de voyage Section */}
+      <div className="space-y-6">
+          <div>
+              <h2 className="text-2xl font-bold font-headline">Votre prochain voyage</h2>
+              <p className="text-muted-foreground">Décrivez votre projet pour trouver les meilleurs partenaires.</p>
+          </div>
+
+          {/* Dates de voyage Section */}
         <div className="space-y-2">
           <h3 className="text-lg font-semibold">Dates de voyage</h3>
             <div className="rounded-lg border bg-card p-4 space-y-4">
@@ -77,7 +96,7 @@ const Step4 = () => {
             </div>
         </div>
 
-        {/* Position Section */}
+          {/* Position Section */}
         <div className="space-y-2">
             <h3 className="text-lg font-semibold">Destination</h3>
             <div className="rounded-lg border bg-card p-4">
@@ -102,26 +121,30 @@ const Step4 = () => {
             </div>
         </div>
 
-        {/* Voyage Section */}
+
+          {/* Voyage Section */}
         <div className="space-y-2">
             <h3 className="text-lg font-semibold">Détails du voyage</h3>
             <div className="rounded-lg border bg-card p-4 space-y-2">
                 <FormField
                     control={control}
                     name="intention"
-                    render={({ field }) => (
-                        <FormItem className="flex items-center justify-between text-sm">
-                            <FormLabel className="text-muted-foreground">Intention</FormLabel>
-                            <FormControl>
-                                <GenericSelect 
-                                    className="w-auto md:w-[250px]"
-                                    value={field.value} 
-                                    onValueChange={field.onChange} 
-                                    options={travelIntentions} 
-                                    placeholder="Sélectionnez une intention"
-                                    defaultOpen={isFirstRender} // <-- Ouvre automatiquement au premier rendu
-                                />
-                             </FormControl>
+                    render={() => (
+                         <FormItem>
+                            <Button variant="outline" className="w-full justify-between items-center h-12" onClick={() => setIsIntentionPickerOpen(true)}>
+                                <div className="flex flex-col items-start">
+                                     <span className="text-xs text-muted-foreground">Intention</span>
+                                     {selectedIntention ? (
+                                        <div className="flex items-center gap-2 font-semibold">
+                                            <span>{selectedIntention.emoji}</span>
+                                            <span>{selectedIntention.label}</span>
+                                        </div>
+                                     ) : (
+                                        <span className="text-foreground/80">Sélectionnez...</span>
+                                     )}
+                                </div>
+                                <ChevronRight className="h-5 w-5 text-muted-foreground"/>
+                            </Button>
                             <FormMessage />
                         </FormItem>
                     )}
@@ -168,7 +191,8 @@ const Step4 = () => {
                 />
             </div>
         </div>
-    </div>
+      </div>
+    </>
   );
 };
 
