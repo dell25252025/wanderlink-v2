@@ -2,7 +2,6 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { travelIntentions } from '@/lib/options';
 
@@ -50,14 +49,7 @@ export default function IntentionPicker({ onSelect, onClose }: IntentionPickerPr
           ))}
         </div>
       </div>
-       <Button
-        variant="ghost"
-        size="icon"
-        className="absolute top-4 right-4 rounded-full"
-        onClick={onClose}
-      >
-        <X className="h-6 w-6" />
-      </Button>
+      {/* Le bouton avec la croix X a été retiré ici */}
     </motion.div>
   );
 }
