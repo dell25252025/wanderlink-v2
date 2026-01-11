@@ -5,15 +5,15 @@ import { getAuth, signInWithPopup, GoogleAuthProvider, OAuthProvider, signInWith
 import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 import { v4 as uuidv4 } from 'uuid';
 import { Capacitor } from '@capacitor/core';
-// On importe le plugin natif que nous allons utiliser
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 
-// --- LOGIQUE DE GESTION D'UTILISATEUR (MODIFIÉE) ---
+// --- LOGIQUE DE GESTION D'UTILISATEUR (CORRIGÉE) ---
 async function handleUser(user: any) {
   const userRef = doc(db, "users", user.uid);
   const userDoc = await getDoc(userRef);
 
   if (!userDoc.exists()) {
+    // L'utilisateur n'existe pas, c'est sa première connexion.
     const [firstName] = user.displayName?.split(' ') || [''];
     const photoURL = user.photoURL || null;
     
@@ -29,11 +29,11 @@ async function handleUser(user: any) {
       isPremium: false,
       subscriptionEndDate: null,
       isVerified: false,
-      profileComplete: false
+      profileComplete: false // Le profil est initialement incomplet
     };
     await setDoc(userRef, sanitizeData(newProfileData));
 
-    // On retourne les données pour le pré-remplissage
+    // On le traite comme un nouvel utilisateur.
     return { 
       success: true, 
       id: user.uid, 
@@ -45,13 +45,24 @@ async function handleUser(user: any) {
       } 
     };
   } else {
+    // L'utilisateur existe déjà.
     const data = userDoc.data();
-    const isComplete = !!data.intention && !!data.age;
-    return { success: true, id: user.uid, isNewUser: !isComplete, profileComplete: isComplete };
+    // **LA CORRECTION :** On vérifie directement le champ `profileComplete`.
+    const isProfileComplete = data.profileComplete === true;
+    
+    // `isNewUser` est le contraire de `isProfileComplete`.
+    // Si le profil est complet, ce n'est PAS un nouvel utilisateur.
+    // Si le profil est incomplet, on le traite comme un nouvel utilisateur pour qu'il finisse son inscription.
+    return { 
+        success: true, 
+        id: user.uid, 
+        isNewUser: !isProfileComplete, 
+        profileComplete: isProfileComplete 
+    };
   }
 }
 
-// --- NOUVELLE STRATÉGIE D'AUTHENTIFICATION HYBRIDE (INCHANGÉE) ---
+// --- STRATÉGIE D'AUTHENTIFICATION HYBRIDE (INCHANGÉE) ---
 export async function signInWithGoogle() {
   const auth = getAuth();
 
@@ -80,8 +91,6 @@ export async function signInWithGoogle() {
     }
   }
 }
-
-// ... reste du fichier inchangé ...
 
 // handleGoogleRedirect n'est plus nécessaire avec cette approche
 export async function handleGoogleRedirect() {
