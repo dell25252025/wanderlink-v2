@@ -13,7 +13,7 @@ const config: CapacitorConfig = {
     // On ajoute la configuration pour le Splash Screen
     SplashScreen: {
       launchShowDuration: 3000, // Le splash screen reste affiché 3 secondes
-      launchAutoHide: false, // On le masquera manuellement
+      launchAutoHide: true, // On force le masquage automatique pour éviter le blocage
       backgroundColor: "#ffffff", // Mettez la couleur de fond de votre splash
       androidSplashResourceName: "splash", // Le nom de votre fichier de splash screen
       androidScaleType: "CENTER_CROP",
