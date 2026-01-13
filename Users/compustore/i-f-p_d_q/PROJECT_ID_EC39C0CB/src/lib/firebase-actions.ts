@@ -13,14 +13,16 @@ import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 export async function signOutFromGoogle() {
   try {
     if (Capacitor.isNativePlatform()) {
+      // Force la déconnexion du compte Google natif sur l'appareil
       await GoogleAuth.signOut();
     }
+    // Déconnecte l'utilisateur de la session Firebase
     await firebaseSignOut(auth);
     return { success: true };
   } catch (error) {
     console.error("Erreur lors de la déconnexion :", error);
     const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
-    // Même en cas d'erreur, on tente de déconnecter Firebase
+    // Tenter de déconnecter Firebase même si la déconnexion Google native échoue
     await firebaseSignOut(auth).catch(e => console.error("Erreur lors de la déconnexion Firebase de secours :", e));
     return { success: false, error: errorMessage };
   }
@@ -52,7 +54,6 @@ async function handleUser(user: any) {
     };
     await setDoc(userRef, sanitizeData(newProfileData));
 
-    // On le traite comme un nouvel utilisateur.
     return { 
       success: true, 
       id: user.uid, 
@@ -82,7 +83,7 @@ export async function signInWithGoogle() {
   if (Capacitor.isNativePlatform()) {
     try {
       // Déconnexion préalable pour forcer le choix du compte
-      await GoogleAuth.signOut().catch(e => console.log("Déconnexion préalable (native) ignorée ou échouée, continuant..."));
+      await GoogleAuth.signOut().catch(e => console.log("Déconnexion préalable (native) ignorée, continuant..."));
       const googleUser = await GoogleAuth.signIn();
       const idToken = googleUser.authentication.idToken;
       const credential = GoogleAuthProvider.credential(idToken);
@@ -90,7 +91,6 @@ export async function signInWithGoogle() {
       return await handleUser(result.user);
     } catch (error: any) {
       console.error("Erreur avec le plugin natif Google Sign-In :", error);
-      // Ignorer l'erreur si l'utilisateur a annulé
       if (error.message && (error.message.includes('12501') || error.message.includes('canceled'))) {
          return { success: false, error: 'Connexion annulée par l\'utilisateur.' };
       }
@@ -112,11 +112,11 @@ export async function signInWithGoogle() {
   }
 }
 
-// handleGoogleRedirect n'est plus nécessaire avec cette approche
 export async function handleGoogleRedirect() {
-    console.log("handleGoogleRedirect is deprecated with the native plugin approach.");
+    console.log("handleGoogleRedirect is deprecated with the current authentication approach.");
     return null;
 }
+
 
 function sanitizeData(obj: any): any {
   if (obj === undefined) {

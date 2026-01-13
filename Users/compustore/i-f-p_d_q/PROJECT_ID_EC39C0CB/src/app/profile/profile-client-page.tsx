@@ -350,11 +350,8 @@ export default function ProfileClientPage() {
   }
 
   const handleSignOut = async () => {
-    // Ferme d'abord le menu pour éviter les conflits d'UI
     setIsDrawerOpen(false);
-    
-    // Attends un court instant pour laisser le temps à l'UI de se fermer
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 150));
 
     try {
       const result = await signOutFromGoogle();
@@ -363,6 +360,7 @@ export default function ProfileClientPage() {
           title: "Déconnexion réussie",
           description: "À bientôt !",
         });
+        router.push('/');
       } else {
         throw new Error(result.error || "Une erreur inconnue est survenue.");
       }
@@ -374,9 +372,7 @@ export default function ProfileClientPage() {
         title: "Erreur de déconnexion",
         description: errorMessage,
       });
-    } finally {
-       // Redirige vers l'accueil quoi qu'il arrive
-       router.push('/');
+      router.push('/');
     }
   };
   
@@ -410,7 +406,6 @@ export default function ProfileClientPage() {
         toast({ variant: 'destructive', title: 'Erreur', description: result.error });
       }
     }
-    // Ferme le Drawer après l'action
     setIsDrawerOpen(false);
   };
 
@@ -605,9 +600,7 @@ export default function ProfileClientPage() {
                                                     </div>
                                                 </div>
                                                 <div className="p-4">
-                                                    <DrawerClose asChild>
-                                                        <Button variant="secondary" className="w-full h-12 text-base">Annuler</Button>
-                                                    </DrawerClose>
+                                                    <Button variant="secondary" className="w-full h-12 text-base" onClick={() => setIsDrawerOpen(false)}>Annuler</Button>
                                                 </div>
                                             </div>
                                         </DrawerContent>
