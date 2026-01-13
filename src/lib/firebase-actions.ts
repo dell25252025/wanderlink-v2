@@ -1,11 +1,37 @@
 
-import { db, storage } from "@/lib/firebase";
+'use client';
+
+import { db, storage, auth } from "@/lib/firebase";
 import { collection, doc, getDoc, DocumentData, setDoc, updateDoc, getDocs, arrayUnion, arrayRemove, addDoc, serverTimestamp, limit, query as firestoreQuery } from "firebase/firestore";
-import { getAuth, signInWithPopup, GoogleAuthProvider, OAuthProvider, signInWithCredential } from "firebase/auth";
+import { getAuth, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut, signInWithCredential } from "firebase/auth";
 import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 import { v4 as uuidv4 } from 'uuid';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
+
+
+// --- NOUVELLE FONCTION DE DECONNEXION ---
+export async function signOutFromGoogle() {
+  try {
+    if (Capacitor.isNativePlatform()) {
+      // Force la déconnexion du compte Google natif sur l'appareil
+      await GoogleAuth.signOut();
+    }
+    // Déconnecte l'utilisateur de la session Firebase
+    await firebaseSignOut(auth);
+    return { success: true };
+  } catch (error) {
+    console.error("Erreur lors de la déconnexion :", error);
+    // Tenter de déconnecter Firebase même si la déconnexion Google native échoue
+    try {
+      await firebaseSignOut(auth);
+    } catch (firebaseError) {
+      console.error("Erreur lors de la déconnexion Firebase de secours :", firebaseError);
+    }
+    const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
+    return { success: false, error: errorMessage };
+  }
+}
 
 // --- LOGIQUE DE GESTION D'UTILISATEUR (CORRIGÉE) ---
 async function handleUser(user: any) {
@@ -33,7 +59,6 @@ async function handleUser(user: any) {
     };
     await setDoc(userRef, sanitizeData(newProfileData));
 
-    // On le traite comme un nouvel utilisateur.
     return { 
       success: true, 
       id: user.uid, 
@@ -45,14 +70,9 @@ async function handleUser(user: any) {
       } 
     };
   } else {
-    // L'utilisateur existe déjà.
     const data = userDoc.data();
-    // **LA CORRECTION :** On vérifie directement le champ `profileComplete`.
     const isProfileComplete = data.profileComplete === true;
     
-    // `isNewUser` est le contraire de `isProfileComplete`.
-    // Si le profil est complet, ce n'est PAS un nouvel utilisateur.
-    // Si le profil est incomplet, on le traite comme un nouvel utilisateur pour qu'il finisse son inscription.
     return { 
         success: true, 
         id: user.uid, 
@@ -62,21 +82,24 @@ async function handleUser(user: any) {
   }
 }
 
-// --- STRATÉGIE D'AUTHENTIFICATION HYBRIDE (INCHANGÉE) ---
 export async function signInWithGoogle() {
   const auth = getAuth();
 
   if (Capacitor.isNativePlatform()) {
     try {
+      // Déconnexion préalable pour forcer le choix du compte
+      await GoogleAuth.signOut().catch(e => console.log("Déconnexion préalable (native) ignorée, continuant..."));
       const googleUser = await GoogleAuth.signIn();
       const idToken = googleUser.authentication.idToken;
       const credential = GoogleAuthProvider.credential(idToken);
       const result = await signInWithCredential(auth, credential);
       return await handleUser(result.user);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erreur avec le plugin natif Google Sign-In :", error);
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred on mobile.";
-      return { success: false, error: errorMessage };
+      if (error.message && (error.message.includes('12501') || error.message.includes('canceled'))) {
+         return { success: false, error: 'Connexion annulée par l\'utilisateur.' };
+      }
+      return { success: false, error: error.message || "Une erreur inconnue est survenue sur mobile." };
     }
   } 
   else {
@@ -84,19 +107,21 @@ export async function signInWithGoogle() {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       return await handleUser(result.user);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erreur Google Sign-In (Web) :", error);
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred on web.";
-      return { success: false, error: errorMessage };
+      if (error.code === 'auth/popup-closed-by-user') {
+        return { success: false, error: 'Connexion annulée par l\'utilisateur.' };
+      }
+      return { success: false, error: error.message || "Une erreur inconnue est survenue sur le web." };
     }
   }
 }
 
-// handleGoogleRedirect n'est plus nécessaire avec cette approche
 export async function handleGoogleRedirect() {
-    console.log("handleGoogleRedirect is deprecated with the native plugin approach.");
+    console.log("handleGoogleRedirect is deprecated with the current authentication approach.");
     return null;
 }
+
 
 function sanitizeData(obj: any): any {
   if (obj === undefined) {

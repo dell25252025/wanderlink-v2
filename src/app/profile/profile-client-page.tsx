@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { getUserProfile, addProfilePicture, removeProfilePicture, addFriend, removeFriend } from '@/lib/firebase-actions';
+import { getUserProfile, addProfilePicture, removeProfilePicture, addFriend, removeFriend, signOutFromGoogle } from '@/lib/firebase-actions';
 import type { DocumentData } from 'firestore';
 import { Loader2, Plane, MapPin, Languages, Backpack, Cigarette, Wine, Calendar, Camera, Trash2, PlusCircle, LogOut, Edit, Ruler, Scale, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, X, Sparkles, BriefcaseBusiness, Coins, Users, MoreVertical, ShieldAlert, Ban, Send, UserPlus, Heart, UserCheck, UserX, CheckCircle, ShieldCheck } from 'lucide-react';
 import Image from 'next/image';
@@ -14,7 +14,6 @@ import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase';
-import { signOut } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -213,6 +212,7 @@ export default function ProfileClientPage() {
   const { toast } = useToast();
   const [isClient, setIsClient] = useState(false);
   const [isFriend, setIsFriend] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -233,7 +233,6 @@ export default function ProfileClientPage() {
             setIsOwner(true);
           } else {
             setIsOwner(false);
-            // Check friendship status
             if (userProfileData?.friends?.includes(profileId)) {
               setIsFriend(true);
             } else {
@@ -351,31 +350,39 @@ export default function ProfileClientPage() {
   }
 
   const handleSignOut = async () => {
+    setIsDrawerOpen(false); // Close the drawer immediately
     try {
-      await signOut(auth);
-      toast({
-        title: "Déconnexion réussie",
-        description: "À bientôt !",
-      });
-      router.push('/');
+        const result = await signOutFromGoogle();
+        if (result.success) {
+            toast({
+                title: "Déconnexion réussie",
+                description: "À bientôt !",
+            });
+             // Force a full page reload to clear all states
+            window.location.replace('/');
+        } else {
+            throw new Error(result.error || "Une erreur inconnue est survenue.");
+        }
     } catch (error) {
-      console.error("Sign out error", error);
-      const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
-      toast({
-        variant: "destructive",
-        title: "Erreur de déconnexion",
-        description: errorMessage,
-      });
+        console.error("Sign out error", error);
+        const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
+        toast({
+            variant: "destructive",
+            title: "Erreur de déconnexion",
+            description: errorMessage,
+        });
+        // Failsafe redirection
+        window.location.replace('/');
     }
   };
   
   const handleBlockUser = () => {
-    // Logic to block user
+    setIsDrawerOpen(false);
     toast({ title: `${profile?.firstName} a été bloqué(e).` });
   };
 
   const handleReportUser = () => {
-    // Logic to report user
+    setIsDrawerOpen(false);
     toast({ title: `Le profil de ${profile?.firstName} a été signalé.` });
   };
   
@@ -383,7 +390,6 @@ export default function ProfileClientPage() {
     if (!currentUser || !profileId) return;
 
     if (isFriend) {
-      // Remove friend
       const result = await removeFriend(currentUser.uid, profileId);
       if (result.success) {
         setIsFriend(false);
@@ -392,7 +398,6 @@ export default function ProfileClientPage() {
         toast({ variant: 'destructive', title: 'Erreur', description: result.error });
       }
     } else {
-      // Add friend
       const result = await addFriend(currentUser.uid, profileId);
       if (result.success) {
         setIsFriend(true);
@@ -401,6 +406,7 @@ export default function ProfileClientPage() {
         toast({ variant: 'destructive', title: 'Erreur', description: result.error });
       }
     }
+    setIsDrawerOpen(false);
   };
 
 
@@ -440,14 +446,13 @@ export default function ProfileClientPage() {
   const travelActivityOption = travelActivities.find(a => a.value === profile.activities);
   const intention = profile.intention ? intentionMap[profile.intention] : null;
 
-  const FriendButton = () => {
+  const FriendButtonContent = () => {
     if (isFriend) {
       return (
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="outline" size="sm">
-              <UserCheck className="mr-2 h-4 w-4" />
-              Amis
+            <Button variant="outline" className="w-full justify-start p-4 h-auto text-base">
+              <UserCheck className="mr-2 h-5 w-5" /> Amis
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
@@ -457,8 +462,7 @@ export default function ProfileClientPage() {
             <AlertDialogFooter>
               <AlertDialogCancel>Annuler</AlertDialogCancel>
               <AlertDialogAction onClick={handleFriendAction} className="bg-destructive hover:bg-destructive/90">
-                <UserX className="mr-2 h-4 w-4" />
-                Retirer
+                <UserX className="mr-2 h-4 w-4" /> Retirer
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -466,9 +470,8 @@ export default function ProfileClientPage() {
       );
     }
     return (
-      <Button variant="outline" size="sm" onClick={handleFriendAction}>
-        <UserPlus className="mr-2 h-4 w-4" />
-        Ajouter
+      <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleFriendAction}>
+        <UserPlus className="mr-2 h-5 w-5" /> Ajouter un ami
       </Button>
     );
   };
@@ -550,18 +553,7 @@ export default function ProfileClientPage() {
                         </div>
                         
                         <div className="flex items-center gap-2 pl-2">
-                             {!isOwner && (
-                               <div className="hidden md:flex items-center gap-2">
-                                 <FriendButton />
-                                 <Button asChild size="sm">
-                                  <Link href={`/chat?id=${profileId}`}>
-                                    <Send className="mr-2 h-4 w-4" />
-                                    Message
-                                  </Link>
-                                </Button>
-                               </div>
-                            )}
-                             {isOwner && (
+                            {isOwner && (
                                 <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
                                     <Link href={`/profile/edit?id=${profileId}`}>
                                         <Edit className="h-4 w-4" />
@@ -571,41 +563,49 @@ export default function ProfileClientPage() {
                             )}
                             
                             {!isOwner && (
-                                <Drawer>
-                                    <DrawerTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                                            <MoreVertical className="h-4 w-4 md:h-5 md:w-5" />
+                                <>
+                                    <div className="hidden md:flex items-center gap-2">
+                                        <FriendButtonContent />
+                                        <Button asChild size="sm">
+                                            <Link href={`/chat?id=${profileId}`}>
+                                                <Send className="mr-2 h-4 w-4" />
+                                                Message
+                                            </Link>
                                         </Button>
-                                    </DrawerTrigger>
-                                    <DrawerContent>
-                                        <div className="mx-auto w-full max-w-sm">
-                                            <DrawerHeaderComponent>
-                                                <DrawerTitle>Options</DrawerTitle>
-                                                <DrawerDescriptionComponent>Gérez votre interaction avec ce profil.</DrawerDescriptionComponent>
-                                            </DrawerHeaderComponent>
-                                            <div className="p-4 pb-0">
-                                                <div className="mt-3 h-full">
-                                                    <DrawerClose asChild>
+                                    </div>
+                                    <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+                                        <DrawerTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                <MoreVertical className="h-4 w-4 md:h-5 md:w-5" />
+                                            </Button>
+                                        </DrawerTrigger>
+                                        <DrawerContent>
+                                            <div className="mx-auto w-full max-w-sm">
+                                                <DrawerHeaderComponent>
+                                                    <DrawerTitle>Options</DrawerTitle>
+                                                    <DrawerDescriptionComponent>Gérez votre interaction avec ce profil.</DrawerDescriptionComponent>
+                                                </DrawerHeaderComponent>
+                                                <div className="p-4 pb-0">
+                                                    <div className="mt-3 h-full space-y-2">
+                                                        <div className="md:hidden">
+                                                            <FriendButtonContent />
+                                                        </div>
+                                                        <div className="border-t md:hidden my-2"></div>
                                                         <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleBlockUser}>
                                                             <Ban className="mr-2 h-5 w-5" /> Bloquer
                                                         </Button>
-                                                    </DrawerClose>
-                                                    <div className="my-2 border-t"></div>
-                                                    <DrawerClose asChild>
                                                         <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleReportUser}>
                                                             <ShieldAlert className="mr-2 h-5 w-5" /> Signaler un abus
                                                         </Button>
-                                                    </DrawerClose>
+                                                    </div>
+                                                </div>
+                                                <div className="p-4">
+                                                    <Button variant="secondary" className="w-full h-12 text-base" onClick={() => setIsDrawerOpen(false)}>Annuler</Button>
                                                 </div>
                                             </div>
-                                            <div className="p-4">
-                                                <DrawerClose asChild>
-                                                    <Button variant="secondary" className="w-full h-12 text-base">Annuler</Button>
-                                                </DrawerClose>
-                                            </div>
-                                        </div>
-                                    </DrawerContent>
-                                </Drawer>
+                                        </DrawerContent>
+                                    </Drawer>
+                                </>
                             )}
                         </div>
                         
