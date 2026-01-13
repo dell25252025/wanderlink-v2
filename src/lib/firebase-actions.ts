@@ -87,8 +87,6 @@ export async function signInWithGoogle() {
 
   if (Capacitor.isNativePlatform()) {
     try {
-      // Déconnexion préalable pour forcer le choix du compte
-      await GoogleAuth.signOut().catch(e => console.log("Déconnexion préalable (native) ignorée, continuant..."));
       const googleUser = await GoogleAuth.signIn();
       const idToken = googleUser.authentication.idToken;
       const credential = GoogleAuthProvider.credential(idToken);
