@@ -14,32 +14,23 @@ import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 export async function signOutFromGoogle() {
   try {
     if (Capacitor.isNativePlatform()) {
-      // Force la déconnexion du compte Google natif sur l'appareil
       await GoogleAuth.signOut();
     }
-    // Déconnecte l'utilisateur de la session Firebase
     await firebaseSignOut(auth);
     return { success: true };
   } catch (error) {
     console.error("Erreur lors de la déconnexion :", error);
-    // Tenter de déconnecter Firebase même si la déconnexion Google native échoue
-    try {
-      await firebaseSignOut(auth);
-    } catch (firebaseError) {
-      console.error("Erreur lors de la déconnexion Firebase de secours :", firebaseError);
-    }
+    await firebaseSignOut(auth).catch(e => console.error("Erreur lors de la déconnexion Firebase de secours :", e));
     const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
     return { success: false, error: errorMessage };
   }
 }
 
-// --- LOGIQUE DE GESTION D'UTILISATEUR (CORRIGÉE) ---
 async function handleUser(user: any) {
   const userRef = doc(db, "users", user.uid);
   const userDoc = await getDoc(userRef);
 
   if (!userDoc.exists()) {
-    // L'utilisateur n'existe pas, c'est sa première connexion.
     const [firstName] = user.displayName?.split(' ') || [''];
     const photoURL = user.photoURL || null;
     
@@ -55,14 +46,14 @@ async function handleUser(user: any) {
       isPremium: false,
       subscriptionEndDate: null,
       isVerified: false,
-      profileComplete: false // Le profil est initialement incomplet
+      profileComplete: false 
     };
     await setDoc(userRef, sanitizeData(newProfileData));
 
     return { 
       success: true, 
       id: user.uid, 
-      isNewUser: true, 
+      isNewUser: true,
       profileComplete: false, 
       userData: { 
         firstName: firstName, 
@@ -71,49 +62,54 @@ async function handleUser(user: any) {
     };
   } else {
     const data = userDoc.data();
-    const isProfileComplete = data.profileComplete === true;
-    
     return { 
         success: true, 
         id: user.uid, 
-        isNewUser: !isProfileComplete, 
-        profileComplete: isProfileComplete 
+        isNewUser: !data.profileComplete,
+        profileComplete: data.profileComplete === true 
     };
   }
 }
 
 export async function signInWithGoogle() {
-  const auth = getAuth();
-
-  if (Capacitor.isNativePlatform()) {
-    try {
+  try {
+    let user;
+    if (Capacitor.isNativePlatform()) {
       const googleUser = await GoogleAuth.signIn();
-      const idToken = googleUser.authentication.idToken;
-      const credential = GoogleAuthProvider.credential(idToken);
-      const result = await signInWithCredential(auth, credential);
-      return await handleUser(result.user);
-    } catch (error: any) {
-      console.error("Erreur avec le plugin natif Google Sign-In :", error);
-      if (error.message && (error.message.includes('12501') || error.message.includes('canceled'))) {
-         return { success: false, error: 'Connexion annulée par l\'utilisateur.' };
+      if (!googleUser.authentication?.idToken) {
+        throw new Error('Native Google sign-in failed: idToken is missing.');
       }
-      return { success: false, error: error.message || "Une erreur inconnue est survenue sur mobile." };
-    }
-  } 
-  else {
-    try {
+      // FORCE Firebase authentication with the credential
+      const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
+      const userCredential = await signInWithCredential(auth, credential);
+      user = userCredential.user;
+    } else {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
-      return await handleUser(result.user);
-    } catch (error: any) {
-      console.error("Erreur Google Sign-In (Web) :", error);
-      if (error.code === 'auth/popup-closed-by-user') {
-        return { success: false, error: 'Connexion annulée par l\'utilisateur.' };
-      }
-      return { success: false, error: error.message || "Une erreur inconnue est survenue sur le web." };
+      user = result.user;
     }
+    // Now that the Firebase session is guaranteed, handle the user profile check
+    return await handleUser(user);
+  } catch (error: any) {
+    console.error("signInWithGoogle error:", error);
+    let errorMessage = "Une erreur inconnue est survenue.";
+    if (error.message) {
+        if (error.message.includes('12501') || error.message.includes('canceled') || error.message.includes('popup-closed-by-user')) {
+            errorMessage = 'Connexion annulée par l\'utilisateur.';
+        } else {
+            errorMessage = error.message;
+        }
+    } else if (error.code) {
+        if (error.code === 'auth/popup-closed-by-user') {
+            errorMessage = 'Connexion annulée par l\'utilisateur.';
+        } else {
+            errorMessage = error.code;
+        }
+    }
+    return { success: false, error: errorMessage };
   }
 }
+
 
 export async function handleGoogleRedirect() {
     console.log("handleGoogleRedirect is deprecated with the current authentication approach.");
@@ -415,7 +411,7 @@ export async function removeFriend(currentUserId: string, friendId: string) {
     const currentUserRef = doc(db, 'users', currentUserId);
     const friendRef = doc(db, 'users', friendId);
     await updateDoc(currentUserRef, {
-      friends: arrayRemove(currentUserId),
+      friends: arrayRemove(friendId),
     });
     await updateDoc(friendRef, {
       friends: arrayRemove(currentUserId),
@@ -449,3 +445,5 @@ export async function getFriends(userId: string) {
     throw new Error("Failed to retrieve friends list.");
   }
 }
+
+    
