@@ -13,7 +13,6 @@ import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 // --- NOUVELLE FONCTION DE DECONNEXION ---
 export async function signOutFromGoogle() {
   try {
-    // La déconnexion doit aussi être gérée différemment si le plugin natif est utilisé
     if (Capacitor.isNativePlatform()) {
       await GoogleAuth.signOut();
     }
@@ -21,7 +20,6 @@ export async function signOutFromGoogle() {
     return { success: true };
   } catch (error) {
     console.error("Erreur lors de la déconnexion :", error);
-    // Tenter de déconnecter Firebase même si la déconnexion Google native échoue
     await firebaseSignOut(auth).catch(e => console.error("Erreur lors de la déconnexion Firebase de secours :", e));
     const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
     return { success: false, error: errorMessage };
@@ -54,7 +52,9 @@ async function handleUser(user: any) {
 
     return { 
       success: true, 
+      id: user.uid, 
       isNewUser: true,
+      profileComplete: false, 
       userData: { 
         firstName: firstName, 
         photoURL: photoURL 
@@ -64,7 +64,8 @@ async function handleUser(user: any) {
     const data = userDoc.data();
     return { 
         success: true, 
-        isNewUser: false,
+        id: user.uid, 
+        isNewUser: !data.profileComplete,
         profileComplete: data.profileComplete === true 
     };
   }
@@ -74,24 +75,37 @@ export async function signInWithGoogle() {
   try {
     let user;
     if (Capacitor.isNativePlatform()) {
+      // Force a native sign-out to ensure the account picker always shows
+      // This helps prevent issues with stale tokens on Android
+      await GoogleAuth.signOut().catch(e => console.warn("Pre-emptive sign out failed, continuing...", e));
       const googleUser = await GoogleAuth.signIn();
+
       if (!googleUser.authentication?.idToken) {
         throw new Error('Native Google sign-in failed: idToken is missing.');
       }
+      
+      // CRITICAL STEP: Always force sign-in with credential to establish a Firebase session
       const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
       const userCredential = await signInWithCredential(auth, credential);
       user = userCredential.user;
+      
+      // Force a reload of the user state to ensure it's fresh on Android
+      await user.reload();
+      
     } else {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       user = result.user;
     }
+    
+    // With a guaranteed Firebase user session, now check the Firestore profile
     return await handleUser(user);
+
   } catch (error: any) {
     console.error("signInWithGoogle error:", error);
     let errorMessage = "Une erreur inconnue est survenue.";
     if (error.message) {
-        if (error.message.includes('12501') || error.message.includes('canceled')) {
+        if (error.message.includes('12501') || error.message.includes('canceled') || error.message.includes('popup-closed-by-user')) {
             errorMessage = 'Connexion annulée par l\'utilisateur.';
         } else {
             errorMessage = error.message;
@@ -106,6 +120,7 @@ export async function signInWithGoogle() {
     return { success: false, error: errorMessage };
   }
 }
+
 
 export async function handleGoogleRedirect() {
     console.log("handleGoogleRedirect is deprecated with the current authentication approach.");
@@ -441,3 +456,5 @@ export async function getFriends(userId: string) {
     throw new Error("Failed to retrieve friends list.");
   }
 }
+
+    
