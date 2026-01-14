@@ -73,25 +73,22 @@ async function handleUser(user: any) {
 
 export async function signInWithGoogle() {
   try {
-    let user;
     if (Capacitor.isNativePlatform()) {
-      // FIX: Force sign out to prevent stale sessions on native.
       await firebaseSignOut(auth).catch(e => console.warn("Le nettoyage préventif de Firebase a échoué, continuant...", e));
       const googleUser = await GoogleAuth.signIn();
       if (!googleUser.authentication?.idToken) {
         throw new Error('Native Google sign-in failed: idToken is missing.');
       }
-      // FORCE Firebase authentication with the credential
       const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
       const userCredential = await signInWithCredential(auth, credential);
-      user = userCredential.user;
+      // FIX: Directly return the result of handleUser to maintain the promise chain.
+      return await handleUser(userCredential.user);
     } else {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
-      user = result.user;
+      // FIX: Directly return the result of handleUser to maintain the promise chain.
+      return await handleUser(result.user);
     }
-    // Now that the Firebase session is guaranteed, handle the user profile check
-    return await handleUser(user);
   } catch (error: any) {
     console.error("signInWithGoogle error:", error);
     let errorMessage = "Une erreur inconnue est survenue.";
@@ -447,5 +444,3 @@ export async function getFriends(userId: string) {
     throw new Error("Failed to retrieve friends list.");
   }
 }
-
-    
