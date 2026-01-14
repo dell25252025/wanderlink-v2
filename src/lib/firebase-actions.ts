@@ -75,6 +75,8 @@ export async function signInWithGoogle() {
   try {
     let user;
     if (Capacitor.isNativePlatform()) {
+      // FIX: Force sign out to prevent stale sessions on native.
+      await firebaseSignOut(auth).catch(e => console.warn("Le nettoyage préventif de Firebase a échoué, continuant...", e));
       const googleUser = await GoogleAuth.signIn();
       if (!googleUser.authentication?.idToken) {
         throw new Error('Native Google sign-in failed: idToken is missing.');
