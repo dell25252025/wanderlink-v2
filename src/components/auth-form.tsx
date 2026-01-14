@@ -10,12 +10,13 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Loader2, Mail, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
 import { useRouter } from 'next/navigation';
 import { signInWithGoogle } from '@/lib/firebase-actions';
-import { useOnboarding } from '@/context/OnboardingContext'; // Import the hook
+import { useOnboarding } from '@/context/OnboardingContext';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Adresse e-mail invalide.' }),
@@ -42,11 +43,12 @@ type AuthFormProps = {
 export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setIsEmailFormVisible, onSuccess }: AuthFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isGoogleLoginLoading, setGoogleLoginLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
-  const { setMode, setOverlayActive } = useOnboarding(); // Use the context
+  const { setMode, setOverlayActive } = useOnboarding();
 
   const form = useForm({
     resolver: zodResolver(isLogin ? loginSchema : signupSchema),
@@ -55,7 +57,7 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
 
   async function onSubmit(values: z.infer<typeof loginSchema | typeof signupSchema>) {
     setIsLoading(true);
-    setMode('email'); // Set mode for email flow
+    setMode('email');
     setOverlayActive(false);
     try {
       if (isLogin) {
@@ -86,15 +88,11 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
 
   async function handleGoogleSignIn() {
     setIsGoogleLoading(true);
-    setMode('google'); // Set mode for Google flow
-    setOverlayActive(true); // Activate the overlay
-
+    setMode('google');
+    setOverlayActive(true);
     try {
       const result = await signInWithGoogle();
-
       if (result?.success) {
-        // The user is signed in. The overlay is active.
-        // Now, we navigate to the profile creation page, which will be hidden by the overlay.
         const { userData, isNewUser } = result;
         if (isNewUser) {
             const query = new URLSearchParams();
@@ -102,7 +100,6 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
             if (userData?.photoURL) query.append('photoURL', userData.photoURL);
             router.push(`/create-profile?${query.toString()}`);
         } else {
-           // If the user already exists, we don't need the onboarding flow.
            setOverlayActive(false); 
            setMode(null);
            router.push('/');
@@ -113,16 +110,13 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
         } else {
              throw new Error(result.error);
         }
-        // Deactivate overlay if there was an error or cancellation
         setOverlayActive(false);
         setMode(null);
       }
-
     } catch (error) {
       console.error("Google Sign-In Error:", error);
       const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
       toast({ variant: 'destructive', title: 'Google Sign-In Error', description: errorMessage });
-      // Deactivate overlay on error
       setOverlayActive(false);
       setMode(null);
     } finally {
@@ -145,8 +139,9 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
       </div>
 
       <div className={`flex flex-col gap-4 ${isEmailFormVisible ? 'hidden' : 'block'} mb-4 md:mt-0 mt-8`}>
-        <div className="text-center">
-          <Button variant="outline" className="w-full bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-800" onClick={handleGoogleSignIn} disabled={isGoogleLoading || isLoading}>
+        <div className="text-center flex flex-col gap-3">
+          {/* BOUTON EXISTANT - INCHANGÉ */}
+          <Button variant="outline" className="w-full bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-800" onClick={handleGoogleSignIn} disabled={isGoogleLoading || isLoading || isGoogleLoginLoading}>
             {isGoogleLoading ? (<Loader2 className="mr-2 h-4 w-4 animate-spin" />) : (
               <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="mr-2 h-5 w-5">
                 <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
@@ -158,6 +153,41 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
             )}
             Continuer avec Google
           </Button>
+          
+          {/* NOUVEAU BOUTON AJOUTÉ */}
+          <Button
+            onClick={async () => {
+              console.log('🔑 [GOOGLE LOGIN] Bouton Connexion');
+              setGoogleLoginLoading(true);
+              try {
+                const user = await signInWithGoogle();
+                if (user && user.id) {
+                    const docRef = doc(db, 'users', user.id);
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) {
+                      console.log('✅ [LOGIN] → /profile');
+                      router.push('/profile');
+                    } else {
+                      console.log('➕ [LOGIN] → /create-profile');
+                      router.push('/create-profile');
+                    }
+                } else {
+                    throw new Error('User ID not returned from signInWithGoogle');
+                }
+              } catch (error) {
+                console.error('❌ Connexion échouée:', error);
+                toast({variant: 'destructive', title: 'Erreur connexion Google'});
+              } finally {
+                setGoogleLoginLoading(false);
+              }
+            }}
+            disabled={isGoogleLoading || isLoading || isGoogleLoginLoading}
+            className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white py-4 px-8 rounded-2xl font-bold text-lg shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-200 flex items-center justify-center gap-3 border-2 border-blue-200 hover:border-blue-300"
+          >
+            {isGoogleLoginLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>}
+            Se connecter avec Google
+          </Button>
+
           <p className="mt-0.5 text-[9px] text-white md:hidden">
             Nous ne publions jamais rien sur vos comptes de réseaux sociaux
           </p>
@@ -240,7 +270,7 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
               />
             )}
 
-            <Button type="submit" className="w-full !mt-10" disabled={isLoading || isGoogleLoading}>
+            <Button type="submit" className="w-full !mt-10" disabled={isLoading || isGoogleLoading || isGoogleLoginLoading}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isLogin ? 'Se connecter' : "Créer un compte"}
             </Button>
