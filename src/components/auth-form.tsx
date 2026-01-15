@@ -158,7 +158,7 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
       </div>
 
       <div className={`flex flex-col gap-4 ${isEmailFormVisible ? 'hidden' : 'block'} mb-4 md:mt-0 mt-8`}>
-        <div className="text-center flex flex-col gap-3">
+        <div className="text-center flex flex-col gap-1">
           {/* --- THE ONE, UNIFIED BUTTON --- */}
           <Button 
             variant="outline" 
@@ -178,7 +178,7 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
             Continuer avec Google
           </Button>
 
-          <p className="mt-0.5 text-[9px] text-white md:hidden">
+          <p className="text-[9px] text-white md:hidden">
             Nous ne publions jamais rien sur vos comptes de réseaux sociaux
           </p>
         </div>
