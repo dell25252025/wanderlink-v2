@@ -86,41 +86,60 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
     }
   }
 
-  async function handleGoogleSignIn() {
+  // Stable flow for NEW users
+  async function handleGoogleCreateAccount() {
     setIsGoogleLoading(true);
     setMode('google');
     setOverlayActive(true);
     try {
       const result = await signInWithGoogle();
       if (result?.success) {
-        const { userData, isNewUser } = result;
-        if (isNewUser) {
-            const query = new URLSearchParams();
-            if (userData?.firstName) query.append('firstName', userData.firstName);
-            if (userData?.photoURL) query.append('photoURL', userData.photoURL);
-            router.push(`/create-profile?${query.toString()}`);
-        } else {
-           setOverlayActive(false); 
-           setMode(null);
-           router.push('/');
-        }
+        const { userData } = result;
+        const query = new URLSearchParams();
+        if (userData?.firstName) query.append('firstName', userData.firstName);
+        if (userData?.photoURL) query.append('photoURL', userData.photoURL);
+        // This flow is trusted and works
+        router.push(`/create-profile?${query.toString()}`);
       } else if (result?.error) {
-         if (result.error.includes('popup-closed') || result.error.includes('12501')) {
-             console.log('Google Sign-In canceled by user.');
+        if (result.error.includes('popup-closed') || result.error.includes('12501')) {
+          console.log('Google Sign-In canceled by user.');
         } else {
-             throw new Error(result.error);
+          throw new Error(result.error);
         }
         setOverlayActive(false);
         setMode(null);
       }
     } catch (error) {
-      console.error("Google Sign-In Error:", error);
+      console.error("Google Create Account Error:", error);
       const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
-      toast({ variant: 'destructive', title: 'Google Sign-In Error', description: errorMessage });
+      toast({ variant: 'destructive', title: 'Erreur création de compte', description: errorMessage });
       setOverlayActive(false);
       setMode(null);
     } finally {
       setIsGoogleLoading(false);
+    }
+  }
+  
+  // Stable flow for EXISTING users
+  async function handleGoogleLogin() {
+    setGoogleLoginLoading(true);
+    try {
+      const result = await signInWithGoogle();
+      if (result?.success) {
+        console.log('✅ [LOGIN] Authenticated. Redirecting to profile...');
+        // Android-safe redirect
+        setTimeout(() => {
+          if (typeof window !== 'undefined') {
+            window.location.href = '/profile';
+          }
+        }, 500);
+      } else {
+        throw new Error(result?.error || 'Unknown Google sign-in error');
+      }
+    } catch (error) {
+      console.error('❌ Google Login Error:', error);
+      toast({variant: 'destructive', title: 'Erreur de connexion Google'});
+      setGoogleLoginLoading(false);
     }
   }
 
@@ -140,8 +159,8 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
 
       <div className={`flex flex-col gap-4 ${isEmailFormVisible ? 'hidden' : 'block'} mb-4 md:mt-0 mt-8`}>
         <div className="text-center flex flex-col gap-3">
-          {/* BOUTON EXISTANT - INCHANGÉ */}
-          <Button variant="outline" className="w-full bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-800" onClick={handleGoogleSignIn} disabled={isGoogleLoading || isLoading || isGoogleLoginLoading}>
+          {/* Button for NEW users */}
+          <Button variant="outline" className="w-full bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-800" onClick={handleGoogleCreateAccount} disabled={isGoogleLoading || isLoading || isGoogleLoginLoading}>
             {isGoogleLoading ? (<Loader2 className="mr-2 h-4 w-4 animate-spin" />) : (
               <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="mr-2 h-5 w-5">
                 <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
@@ -154,33 +173,9 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
             Continuer avec Google
           </Button>
           
-          {/* NOUVEAU BOUTON AJOUTÉ */}
+          {/* Button for EXISTING users */}
           <Button
-            onClick={async () => {
-              console.log('🔑 [GOOGLE LOGIN] Bouton Connexion');
-              setGoogleLoginLoading(true);
-              try {
-                const user = await signInWithGoogle();
-                if (user && user.id) {
-                    const docRef = doc(db, 'users', user.id);
-                    const docSnap = await getDoc(docRef);
-                    if (docSnap.exists()) {
-                      console.log('✅ [LOGIN] → /profile');
-                      router.push('/profile');
-                    } else {
-                      console.log('➕ [LOGIN] → /create-profile');
-                      router.push('/create-profile');
-                    }
-                } else {
-                    throw new Error('User ID not returned from signInWithGoogle');
-                }
-              } catch (error) {
-                console.error('❌ Connexion échouée:', error);
-                toast({variant: 'destructive', title: 'Erreur connexion Google'});
-              } finally {
-                setGoogleLoginLoading(false);
-              }
-            }}
+            onClick={handleGoogleLogin}
             disabled={isGoogleLoading || isLoading || isGoogleLoginLoading}
             className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white py-4 px-8 rounded-2xl font-bold text-lg shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-200 flex items-center justify-center gap-3 border-2 border-blue-200 hover:border-blue-300"
           >
