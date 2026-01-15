@@ -46,7 +46,7 @@ async function handleUser(user: any) {
       isPremium: false,
       subscriptionEndDate: null,
       isVerified: false,
-      profileComplete: false 
+      onboardingCompleted: false // ETAPE 1: Initialisation du champ
     };
     await setDoc(userRef, sanitizeData(newProfileData));
 
@@ -54,7 +54,7 @@ async function handleUser(user: any) {
       success: true, 
       id: user.uid, 
       isNewUser: true,
-      profileComplete: false, 
+      onboardingCompleted: false, 
       userData: { 
         firstName: firstName, 
         photoURL: photoURL 
@@ -65,8 +65,8 @@ async function handleUser(user: any) {
     return { 
         success: true, 
         id: user.uid, 
-        isNewUser: !data.profileComplete,
-        profileComplete: data.profileComplete === true 
+        isNewUser: !data.onboardingCompleted, // La decision est maintenant basée sur ce champ
+        onboardingCompleted: data.onboardingCompleted === true 
     };
   }
 }
@@ -81,12 +81,10 @@ export async function signInWithGoogle() {
       }
       const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
       const userCredential = await signInWithCredential(auth, credential);
-      // FIX: Directly return the result of handleUser to maintain the promise chain.
       return await handleUser(userCredential.user);
     } else {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
-      // FIX: Directly return the result of handleUser to maintain the promise chain.
       return await handleUser(result.user);
     }
   } catch (error: any) {
@@ -200,6 +198,7 @@ export async function createUserProfile(userId: string, profileData: any) {
             ...restOfProfileData,
             profilePictures: uploadedPhotoUrls,
             updatedAt: new Date().toISOString(),
+            onboardingCompleted: true // ETAPE 3: Finalisation du champ
         };
         if (finalProfileData.dates?.from) {
           finalProfileData.dates.from = new Date(finalProfileData.dates.from);
@@ -376,7 +375,7 @@ export async function submitVerificationRequest(userId: string, selfieDataUrl: s
         return { success: true };
     } catch (error) {
         console.error("Error submitting verification request:", error);
-        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+        const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
         return { success: false, error: errorMessage };
     }
 }

@@ -86,59 +86,59 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
     }
   }
 
-  // Stable flow for NEW users
-  async function handleGoogleCreateAccount() {
+  // --- STABLE FLOWS (UNCHANGED, but now only called by the unified function) ---
+
+  async function handleGoogleCreateAccount(result: any) {
+    const { userData } = result;
+    const query = new URLSearchParams();
+    if (userData?.firstName) query.append('firstName', userData.firstName);
+    if (userData?.photoURL) query.append('photoURL', userData.photoURL);
+    router.push(`/create-profile?${query.toString()}`);
+  }
+  
+  async function handleGoogleLogin() {
+    console.log('✅ [LOGIN] Authenticated. Redirecting to profile...');
+    if (typeof window !== 'undefined') { window.location.href = '/profile'; }
+  }
+
+  // --- UNIFIED FUNCTION (NOW IN USE) ---
+  async function signInWithGoogleUnified() {
     setIsGoogleLoading(true);
-    setMode('google');
+    setGoogleLoginLoading(true);
     setOverlayActive(true);
+    setMode('google');
     try {
       const result = await signInWithGoogle();
-      if (result?.success) {
-        const { userData } = result;
-        const query = new URLSearchParams();
-        if (userData?.firstName) query.append('firstName', userData.firstName);
-        if (userData?.photoURL) query.append('photoURL', userData.photoURL);
-        // This flow is trusted and works
-        router.push(`/create-profile?${query.toString()}`);
-      } else if (result?.error) {
-        if (result.error.includes('popup-closed') || result.error.includes('12501')) {
+      if (!result?.success) {
+         if (result?.error?.includes('popup-closed') || result?.error?.includes('12501') || result?.error?.includes('annulée')) {
           console.log('Google Sign-In canceled by user.');
         } else {
-          throw new Error(result.error);
+          throw new Error(result?.error || 'Authentication failed');
         }
         setOverlayActive(false);
         setMode(null);
+        setIsGoogleLoading(false);
+        setGoogleLoginLoading(false);
+        return;
       }
+
+      const userDocRef = doc(db, 'users', result.id);
+      const userDocSnap = await getDoc(userDocRef);
+
+      // THE CRUCIAL CHECK
+      if (userDocSnap.exists() && userDocSnap.data().onboardingCompleted === true) {
+        await handleGoogleLogin();
+      } else {
+        await handleGoogleCreateAccount(result);
+      }
+
     } catch (error) {
-      console.error("Google Create Account Error:", error);
+      console.error("Unified Google Sign-In Error:", error);
       const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
-      toast({ variant: 'destructive', title: 'Erreur création de compte', description: errorMessage });
+      toast({ variant: 'destructive', title: 'Erreur de connexion Google', description: errorMessage });
       setOverlayActive(false);
       setMode(null);
-    } finally {
       setIsGoogleLoading(false);
-    }
-  }
-  
-  // Stable flow for EXISTING users
-  async function handleGoogleLogin() {
-    setGoogleLoginLoading(true);
-    try {
-      const result = await signInWithGoogle();
-      if (result?.success) {
-        console.log('✅ [LOGIN] Authenticated. Redirecting to profile...');
-        // Android-safe redirect
-        setTimeout(() => {
-          if (typeof window !== 'undefined') {
-            window.location.href = '/profile';
-          }
-        }, 500);
-      } else {
-        throw new Error(result?.error || 'Unknown Google sign-in error');
-      }
-    } catch (error) {
-      console.error('❌ Google Login Error:', error);
-      toast({variant: 'destructive', title: 'Erreur de connexion Google'});
       setGoogleLoginLoading(false);
     }
   }
@@ -159,9 +159,14 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
 
       <div className={`flex flex-col gap-4 ${isEmailFormVisible ? 'hidden' : 'block'} mb-4 md:mt-0 mt-8`}>
         <div className="text-center flex flex-col gap-3">
-          {/* Button for NEW users */}
-          <Button variant="outline" className="w-full bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-800" onClick={handleGoogleCreateAccount} disabled={isGoogleLoading || isLoading || isGoogleLoginLoading}>
-            {isGoogleLoading ? (<Loader2 className="mr-2 h-4 w-4 animate-spin" />) : (
+          {/* --- THE ONE, UNIFIED BUTTON --- */}
+          <Button 
+            variant="outline" 
+            className="w-full bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-800" 
+            onClick={signInWithGoogleUnified} 
+            disabled={isLoading || isGoogleLoading || isGoogleLoginLoading}
+          >
+            {isGoogleLoading || isGoogleLoginLoading ? (<Loader2 className="mr-2 h-4 w-4 animate-spin" />) : (
               <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="mr-2 h-5 w-5">
                 <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
                 <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
@@ -171,16 +176,6 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
               </svg>
             )}
             Continuer avec Google
-          </Button>
-          
-          {/* Button for EXISTING users */}
-          <Button
-            onClick={handleGoogleLogin}
-            disabled={isGoogleLoading || isLoading || isGoogleLoginLoading}
-            className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white py-4 px-8 rounded-2xl font-bold text-lg shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-200 flex items-center justify-center gap-3 border-2 border-blue-200 hover:border-blue-300"
-          >
-            {isGoogleLoginLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>}
-            Se connecter avec Google
           </Button>
 
           <p className="mt-0.5 text-[9px] text-white md:hidden">
