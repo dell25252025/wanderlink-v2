@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, memo, useCallback, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Video, Loader2, CheckCircle, PlusCircle, Trash2, Download, Camera as CameraIcon, Mic, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Video, Loader2, CheckCircle, PlusCircle, Trash2, Download, Camera as CameraIcon, Mic, Image as ImageIcon, Copy } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getUserProfile, initiateCall } from '@/lib/firebase-actions';
@@ -20,12 +20,13 @@ import { ReportAbuseDialog } from '@/components/report-abuse-dialog';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDocs, limit, deleteField } from 'firebase/firestore';
 import type { DocumentData, Timestamp } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject, uploadString } from "firebase/storage";
 import { Camera, CameraResultType, CameraSource, PermissionState } from '@capacitor/camera';
 import { AndroidPermissions } from '@awesome-cordova-plugins/android-permissions';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { AudioPlayer, VoiceRecorder } from './voice-message';
+
 
 // --- Interfaces ---
 interface Message {
@@ -34,8 +35,8 @@ interface Message {
   senderId: string;
   timestamp: Timestamp;
   imageUrl?: string | null;
-  audioUrl?: string | null; // For voice messages
-  audioDuration?: number; // Duration in seconds
+  audioUrl?: string | null;
+  audioDuration?: number;
   reactions?: { [userId: string]: string };
 }
 
@@ -49,6 +50,7 @@ interface MessageItemProps {
   onLongPressEnd: () => void;
   onReact: (message: Message, emoji: string) => void;
   onSetupDelete: (message: Message) => void;
+  onCopy: (text: string) => void;
   onZoomImage: (imageUrl: string) => void;
   showReactionPopoverFor: string | null;
   setShowReactionPopoverFor: (id: string | null) => void;
@@ -58,10 +60,114 @@ interface MessageItemProps {
 const availableReactions = ['❤️', '😂', '👍', '😢', '😮', '😡'];
 const getChatId = (uid1: string, uid2: string) => [uid1, uid2].sort().join('_');
 
+// --- Photo Viewer Component for Zooming ---
+const PhotoViewer = ({ imageUrl, onClose }: { imageUrl: string; onClose: () => void; }) => {
+    const [scale, setScale] = useState(1);
+    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const imageRef = useRef<HTMLImageElement>(null);
+    const lastDist = useRef(0);
+
+    const resetZoom = () => {
+        setScale(1);
+        setPosition({ x: 0, y: 0 });
+        lastDist.current = 0;
+    };
+
+    useEffect(() => {
+        const handleWheel = (e: WheelEvent) => {
+            e.preventDefault();
+            if (e.ctrlKey) {
+                setScale(s => Math.max(1, Math.min(3, s - e.deltaY * 0.01)));
+            } else {
+                setPosition(p => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
+            }
+        };
+
+        const handleTouchStart = (e: TouchEvent) => {
+            if (e.touches.length === 2) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                lastDist.current = Math.sqrt(dx * dx + dy * dy);
+            }
+        };
+
+        const handleTouchMove = (e: TouchEvent) => {
+            if (e.touches.length === 2) {
+                e.preventDefault();
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const change = dist - lastDist.current;
+                setScale(s => Math.max(1, Math.min(3, s + change * 0.01)));
+                lastDist.current = dist;
+            }
+        };
+
+        const imageEl = imageRef.current;
+        imageEl?.addEventListener('wheel', handleWheel, { passive: false });
+        imageEl?.addEventListener('touchstart', handleTouchStart, { passive: true });
+        imageEl?.addEventListener('touchmove', handleTouchMove, { passive: false });
+        
+        return () => {
+            imageEl?.removeEventListener('wheel', handleWheel);
+            imageEl?.removeEventListener('touchstart', handleTouchStart);
+            imageEl?.removeEventListener('touchmove', handleTouchMove);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (scale === 1) {
+            setPosition({ x: 0, y: 0 });
+        }
+    }, [scale]);
+
+    return (
+        <DialogContent className="p-0 m-0 w-full h-full max-w-full max-h-screen bg-black/80 backdrop-blur-sm border-0 flex flex-col items-center justify-center">
+            <DialogHeader>
+                <DialogTitle>
+                    <VisuallyHidden>Image en plein écran</VisuallyHidden>
+                </DialogTitle>
+            </DialogHeader>
+            <DialogClose asChild className="absolute top-2 right-2 z-50">
+                <Button variant="ghost" size="icon" className="h-9 w-9 text-white bg-black/30 hover:bg-black/50 hover:text-white" onClick={onClose}>
+                    <X className="h-5 w-5" />
+                </Button>
+            </DialogClose>
+            <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+                <Image
+                    ref={imageRef}
+                    src={imageUrl}
+                    alt="Image zoomée"
+                    fill
+                    className="object-contain transition-transform duration-200 touch-none"
+                    style={{
+                        transform: `scale(${scale}) translate(${position.x}px, ${position.y}px)`,
+                        cursor: scale > 1 ? 'grab' : 'auto',
+                    }}
+                     onMouseDown={(e) => {
+                        if (scale <= 1) return;
+                        const startPos = { x: e.clientX - position.x, y: e.clientY - position.y };
+                        const handleMouseMove = (me: MouseEvent) => {
+                            setPosition({ x: me.clientX - startPos.x, y: me.clientY - startPos.y });
+                        };
+                        const handleMouseUp = () => {
+                            window.removeEventListener('mousemove', handleMouseMove);
+                            window.removeEventListener('mouseup', handleMouseUp);
+                        };
+                        window.addEventListener('mousemove', handleMouseMove);
+                        window.addEventListener('mouseup', handleMouseUp);
+                    }}
+                />
+            </div>
+        </DialogContent>
+    );
+};
+
+
 // --- Memoized Message Component ---
 const MessageItem = memo<MessageItemProps>(({ 
     message, isSender, isLastRead, otherUserImage, otherUserName, 
-    onLongPressStart, onLongPressEnd, onReact, onSetupDelete, onZoomImage,
+    onLongPressStart, onLongPressEnd, onReact, onSetupDelete, onCopy, onZoomImage,
     showReactionPopoverFor, setShowReactionPopoverFor
 }) => {
     const reactions = message.reactions ? Object.entries(message.reactions) : [];
@@ -97,6 +203,7 @@ const MessageItem = memo<MessageItemProps>(({
                 <PopoverContent className="w-auto p-1 rounded-full">
                     <div className="flex items-center gap-1">
                         {availableReactions.map(emoji => <Button key={emoji} onClick={() => onReact(message, emoji)} variant="ghost" size="icon" className="rounded-full h-8 w-8 text-lg">{emoji}</Button>)}
+                        {message.text && <Button onClick={() => onCopy(message.text)} variant="ghost" size="icon" className="rounded-full h-8 w-8"><Copy className="h-4 w-4" /></Button>}
                         {isSender && <Button onClick={() => onSetupDelete(message)} variant="ghost" size="icon" className="rounded-full h-8 w-8"><Trash2 className="h-4 w-4" /></Button>}
                     </div>
                 </PopoverContent>
@@ -267,47 +374,34 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
   }, [messages, loadingMessages]);
 
-  const handleSendMessage = useCallback(async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, messageData: Partial<Message> = {}) => {
-    if (e) e.preventDefault();
+  const handleSendMessage = useCallback(async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, messageData: Partial<Omit<Message, 'id' | 'senderId' | 'timestamp' | 'reactions'>> = {}) => {
+    if(e) e.preventDefault();
     const text = newMessage.trim();
-
     if ((!text && !messageData.imageUrl && !messageData.audioUrl) || !currentUser || !otherUser) return;
-  
+
     const chatId = getChatId(currentUser.uid, otherUserId);
     const chatDocRef = doc(db, 'chats', chatId);
     const messagesColRef = collection(chatDocRef, 'messages');
-  
+    
     setNewMessage('');
-  
+
     try {
-      const finalMessageData = {
-        text: text,
-        senderId: currentUser.uid,
-        timestamp: serverTimestamp(),
-        imageUrl: messageData.imageUrl || null,
-        audioUrl: messageData.audioUrl || null,
-        audioDuration: messageData.audioDuration || null,
-      };
-  
+        const finalMessageData = {
+            text: text,
+            senderId: currentUser.uid,
+            timestamp: serverTimestamp(),
+            imageUrl: messageData.imageUrl || null,
+            audioUrl: messageData.audioUrl || null,
+            audioDuration: messageData.audioDuration || null,
+        };
+
       const newDocRef = await addDoc(messagesColRef, finalMessageData);
       
-      let lastMessageText = text;
-      if (finalMessageData.imageUrl) {
-        lastMessageText = '📷 Photo';
-      } else if (finalMessageData.audioUrl) {
-        lastMessageText = '🎤 Message vocal';
-      }
-  
-      await setDoc(chatDocRef, { 
-        participants: [currentUser.uid, otherUserId], 
-        lastMessage: { 
-          id: newDocRef.id, 
-          text: lastMessageText, 
-          senderId: currentUser.uid, 
-          timestamp: serverTimestamp(), 
-          read: false 
-        } 
-      }, { merge: true });
+      let lastMessageText = '📷 Photo';
+      if(finalMessageData.audioUrl) lastMessageText = '🎤 Message vocal';
+      else if(text) lastMessageText = text;
+
+      await setDoc(chatDocRef, { participants: [currentUser.uid, otherUserId], lastMessage: { id: newDocRef.id, text: lastMessageText, senderId: currentUser.uid, timestamp: serverTimestamp(), read: false } }, { merge: true });
     } catch (error) {
       console.error("Erreur lors de l'envoi du message:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
@@ -356,62 +450,59 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
     setShowReactionPopoverFor(null);
   }, [currentUser, otherUser, toast]);
-  
-  const handleDownloadImage = useCallback(async () => {
-    const urlToDownload = zoomedImageUrl;
-    if (!urlToDownload) return;
-    setZoomedImageUrl(null);
-    try {
-        const hasPermission = await requestStoragePermission();
-        if (!hasPermission) return;
-        const fileName = `WanderLink_${new Date().getTime()}.jpeg`;
-        await Filesystem.downloadFile({
-            url: urlToDownload,
-            path: fileName,
-            directory: Directory.Downloads,
-        });
-        toast({ title: 'Image téléchargée', description: `Enregistrée dans vos téléchargements.`, action: <CheckCircle className="h-5 w-5 text-green-500" /> });
-    } catch (e: any) {
-        console.error('Error downloading image', e);
-        toast({ variant: 'destructive', title: 'Erreur de téléchargement', description: e.message || 'Impossible d\'enregistrer l\'image.' });
-    }
-}, [zoomedImageUrl, toast, requestStoragePermission]);
 
-  const takePicture = useCallback(async (source: CameraSource) => {
+  const handleCopy = useCallback(async (text: string) => {
+    if (!text) return;
+    try {
+        await navigator.clipboard.writeText(text);
+        toast({ description: "Message copié !" });
+    } catch (error) {
+        console.error('Failed to copy text: ', error);
+        toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de copier le message.' });
+    }
+    setShowReactionPopoverFor(null);
+  }, [toast]);
+
+const takePicture = useCallback(async (source: CameraSource) => {
     let hasPermission = false;
     if (source === CameraSource.Camera) {
-        hasPermission = await requestCameraPermission();
+      hasPermission = await requestCameraPermission();
     } else {
-        hasPermission = await requestStoragePermission();
+      hasPermission = await requestStoragePermission();
     }
     if (!hasPermission || !currentUser || !otherUser) return;
 
     try {
-      const image = await Camera.getPhoto({ quality: 90, allowEditing: false, resultType: CameraResultType.DataUrl, source });
-      if (!image.dataUrl) return;
-      setIsUploading(true);
+      const image = await Camera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl,
+        source,
+      });
 
-      const blob = await (await fetch(image.dataUrl)).blob();
+      if (!image.dataUrl) {
+        console.error("No data URL returned from camera.");
+        return;
+      }
+      setIsUploading(true);
+      
       const fileName = `${new Date().getTime()}.jpeg`;
       const chatId = getChatId(currentUser.uid, otherUserId);
       const storageRef = ref(storage, `chat_images/${chatId}/${fileName}`);
-      
-      const uploadTask = uploadBytesResumable(storageRef, blob);
-      
-      uploadTask.on('state_changed', 
-        () => {}, // progress
-        (error) => {
-            console.error("Upload failed:", error);
-            toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer l\'image.' });
-            setIsUploading(false);
-        },
-        async () => { 
-            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            await handleSendMessage(undefined, { imageUrl: downloadURL, text: '' }); 
-            setIsUploading(false);
-        }
-      );
-    } catch (error) { console.info("Photo selection/capture cancelled."); setIsUploading(false); }
+
+      // Upload the data URL string
+      const uploadTask = await uploadString(storageRef, image.dataUrl, 'data_url');
+      const downloadUrl = await getDownloadURL(uploadTask.ref);
+
+      // Send message with the final URL
+      await handleSendMessage(undefined, { imageUrl: downloadUrl, text: '' });
+
+    } catch (error) {
+      console.error("Photo capture or processing failed:", error);
+      toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer l\'image.' });
+    } finally {
+      setIsUploading(false);
+    }
   }, [currentUser, otherUser, handleSendMessage, toast, requestCameraPermission, requestStoragePermission]);
 
   const handleSendVoiceMessage = useCallback(async (blob: Blob, duration: number) => {
@@ -422,26 +513,35 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         const fileName = `${new Date().getTime()}.webm`;
         const storageRef = ref(storage, `chat_audio/${chatId}/${fileName}`);
         const uploadTask = uploadBytesResumable(storageRef, blob);
-        uploadTask.on('state_changed', () => {},
-            (error) => {
-                console.error("Voice message upload failed:", error);
-                toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer le message vocal.' });
-                setIsUploading(false);
-            },
-            async () => {
-                const url = await getDownloadURL(uploadTask.snapshot.ref);
-                await handleSendMessage(undefined, { audioUrl: url, audioDuration: duration });
-                setIsUploading(false);
-            }
-        );
+        
+        await new Promise((resolve, reject) => {
+            uploadTask.on('state_changed', 
+                () => {}, // progress
+                (error) => {
+                    console.error("Voice message upload failed:", error);
+                    toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer le message vocal.' });
+                    setIsUploading(false);
+                    reject(error);
+                },
+                async () => {
+                    const url = await getDownloadURL(uploadTask.snapshot.ref);
+                    await handleSendMessage(undefined, { audioUrl: url, audioDuration: duration });
+                    setIsUploading(false);
+                    resolve(url);
+                }
+            );
+        });
+
     } catch (error) {
         console.error("Failed to send voice message", error);
-        toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible d\'envoyer le message vocal.' });
-        setIsUploading(false);
+        if (!isUploading) { // Avoid duplicate toasts if error handled in listener
+             toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible d\'envoyer le message vocal.' });
+        }
     } finally {
         setIsRecording(false);
     }
-  }, [currentUser, otherUser, handleSendMessage, toast]);
+  }, [currentUser, otherUser, handleSendMessage, toast, isUploading]);
+
 
   const handleStartCall = useCallback(async (isVideo: boolean) => {
     if (!currentUser) return;
@@ -455,7 +555,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
     const result = await initiateCall(currentUser.uid, otherUserId, isVideo);
 
-    if (result.success && result.channelId) {
+    if (result.success) {
         router.push(`/call/${result.channelId}`);
     } else {
         toast({
@@ -511,6 +611,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
                     onLongPressEnd={handleLongPressEnd}
                     onReact={handleReact}
                     onSetupDelete={handleSetupDelete}
+                    onCopy={handleCopy}
                     onZoomImage={handleZoomImage}
                     showReactionPopoverFor={showReactionPopoverFor}
                     setShowReactionPopoverFor={setShowReactionPopoverFor}
@@ -584,21 +685,9 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         </DialogContent>
       </Dialog>
 
-      {zoomedImageUrl && (
-        <Dialog open={!!zoomedImageUrl} onOpenChange={(isOpen) => !isOpen && setZoomedImageUrl(null)}>
-          <DialogContent className="p-0 m-0 w-full h-full max-w-full max-h-screen bg-black/80 backdrop-blur-sm border-0 flex flex-col items-center justify-center">
-                <DialogHeader>
-                    <DialogTitle>
-                        <VisuallyHidden>Image en plein écran</VisuallyHidden>
-                    </DialogTitle>
-                </DialogHeader>
-                <DialogClose asChild className="absolute top-2 right-2 z-50"><Button variant="ghost" size="icon" className="h-9 w-9 text-white bg-black/30 hover:bg-black/50 hover:text-white"><X className="h-5 w-5" /></Button></DialogClose>
-                <div className="relative w-full h-full flex items-center justify-center p-4">
-                    <Image src={zoomedImageUrl} alt="Image zoomée" fill className="object-contain" />
-                </div>
-            </DialogContent>
-        </Dialog>
-      )}
+      <Dialog open={!!zoomedImageUrl} onOpenChange={(isOpen) => !isOpen && setZoomedImageUrl(null)}>
+        {zoomedImageUrl && <PhotoViewer imageUrl={zoomedImageUrl} onClose={() => setZoomedImageUrl(null)} />}
+      </Dialog>
       <ReportAbuseDialog isOpen={isReportModalOpen} onOpenChange={setIsReportModalOpen} reportedUser={otherUser} />
     </div>
   );
