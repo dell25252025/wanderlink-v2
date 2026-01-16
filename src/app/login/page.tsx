@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -13,12 +13,21 @@ const { desktopVideoUrl, mobileVideoUrl } = placeholderContent.loginVideos;
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [isEmailFormVisible, setIsEmailFormVisible] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const isMobile = useIsMobile();
   const router = useRouter();
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const resetAuthState = () => {
     setIsEmailFormVisible(false);
   };
+
+  if (!isMounted) {
+    return null; // Render nothing until the component is mounted on the client
+  }
 
   if (isMobile && isEmailFormVisible) {
     return (
