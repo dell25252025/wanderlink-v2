@@ -213,6 +213,8 @@ export default function ProfileClientPage() {
   const { toast } = useToast();
   const [isClient, setIsClient] = useState(false);
   const [isFriend, setIsFriend] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isFriendActionLoading, setIsFriendActionLoading] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -233,7 +235,6 @@ export default function ProfileClientPage() {
             setIsOwner(true);
           } else {
             setIsOwner(false);
-            // Check friendship status
             if (userProfileData?.friends?.includes(profileId)) {
               setIsFriend(true);
             } else {
@@ -380,10 +381,10 @@ export default function ProfileClientPage() {
   };
   
   const handleFriendAction = async () => {
-    if (!currentUser || !profileId) return;
+    if (!currentUser || !profileId || isFriendActionLoading) return;
+    setIsFriendActionLoading(true);
 
     if (isFriend) {
-      // Remove friend
       const result = await removeFriend(currentUser.uid, profileId);
       if (result.success) {
         setIsFriend(false);
@@ -392,7 +393,6 @@ export default function ProfileClientPage() {
         toast({ variant: 'destructive', title: 'Erreur', description: result.error });
       }
     } else {
-      // Add friend
       const result = await addFriend(currentUser.uid, profileId);
       if (result.success) {
         setIsFriend(true);
@@ -401,6 +401,7 @@ export default function ProfileClientPage() {
         toast({ variant: 'destructive', title: 'Erreur', description: result.error });
       }
     }
+    setIsFriendActionLoading(false);
   };
 
 
@@ -440,39 +441,6 @@ export default function ProfileClientPage() {
   const travelActivityOption = travelActivities.find(a => a.value === profile.activities);
   const intention = profile.intention ? intentionMap[profile.intention] : null;
 
-  const FriendButtonContent = () => {
-    if (isFriend) {
-      return (
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="outline" className="w-full justify-start p-4 h-auto text-base">
-              <UserCheck className="mr-2 h-5 w-5" /> Amis
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Retirer {profile.firstName} de vos amis ?</AlertDialogTitle>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Annuler</AlertDialogCancel>
-              <AlertDialogAction onClick={handleFriendAction} className="bg-destructive hover:bg-destructive/90">
-                <UserX className="mr-2 h-4 w-4" /> Retirer
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      );
-    }
-    return (
-      <DrawerClose asChild>
-        <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleFriendAction}>
-          <UserPlus className="mr-2 h-5 w-5" /> Ajouter un ami
-        </Button>
-      </DrawerClose>
-    );
-  };
-
-
   return (
     <div className="flex min-h-screen w-full flex-col bg-secondary/30">
         <header className="fixed top-0 left-0 z-30 w-full p-2">
@@ -480,7 +448,7 @@ export default function ProfileClientPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
         </header>
-        <main className={cn("flex-1", !isOwner && "pb-24 md:pb-0")}>
+        <main className="flex-1">
              <div className="w-full bg-background md:py-4">
                 {profilePictures.length > 0 ? (
                     <Dialog>
@@ -559,55 +527,34 @@ export default function ProfileClientPage() {
                             )}
                             
                             {!isOwner && (
-                                <>
-                                    <div className="hidden md:flex items-center gap-2">
-                                        <FriendButtonContent />
-                                        <Button asChild size="sm">
-                                            <Link href={`/chat?id=${profileId}`}>
-                                                <Send className="mr-2 h-4 w-4" />
-                                                Message
-                                            </Link>
+                                <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+                                    <DrawerTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                                            <MoreVertical className="h-4 w-4 md:h-5 md:w-5" />
                                         </Button>
-                                    </div>
-                                    <Drawer>
-                                        <DrawerTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                <MoreVertical className="h-4 w-4 md:h-5 md:w-5" />
-                                            </Button>
-                                        </DrawerTrigger>
-                                        <DrawerContent>
-                                            <div className="mx-auto w-full max-w-sm">
-                                                <DrawerHeaderComponent>
-                                                    <DrawerTitle>Options</DrawerTitle>
-                                                    <DrawerDescriptionComponent>Gérez votre interaction avec ce profil.</DrawerDescriptionComponent>
-                                                </DrawerHeaderComponent>
-                                                <div className="p-4 pb-0">
-                                                    <div className="mt-3 h-full space-y-2">
-                                                        <div className="md:hidden">
-                                                            <FriendButtonContent />
-                                                        </div>
-                                                        <div className="border-t md:hidden"></div>
-                                                        <DrawerClose asChild>
-                                                            <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleBlockUser}>
-                                                                <Ban className="mr-2 h-5 w-5" /> Bloquer
-                                                            </Button>
-                                                        </DrawerClose>
-                                                        <DrawerClose asChild>
-                                                            <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleReportUser}>
-                                                                <ShieldAlert className="mr-2 h-5 w-5" /> Signaler un abus
-                                                            </Button>
-                                                        </DrawerClose>
-                                                    </div>
-                                                </div>
-                                                <div className="p-4">
-                                                    <DrawerClose asChild>
-                                                        <Button variant="secondary" className="w-full h-12 text-base">Annuler</Button>
-                                                    </DrawerClose>
+                                    </DrawerTrigger>
+                                    <DrawerContent>
+                                        <div className="mx-auto w-full max-w-sm">
+                                            <DrawerHeaderComponent>
+                                                <DrawerTitle>Options</DrawerTitle>
+                                                <DrawerDescriptionComponent>Gérez votre interaction avec ce profil.</DrawerDescriptionComponent>
+                                            </DrawerHeaderComponent>
+                                            <div className="p-4 pb-0">
+                                                <div className="mt-3 h-full space-y-2">
+                                                    <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleBlockUser}>
+                                                        <Ban className="mr-2 h-5 w-5" /> Bloquer
+                                                    </Button>
+                                                    <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleReportUser}>
+                                                        <ShieldAlert className="mr-2 h-5 w-5" /> Signaler un abus
+                                                    </Button>
                                                 </div>
                                             </div>
-                                        </DrawerContent>
-                                    </Drawer>
-                                </>
+                                            <div className="p-4">
+                                                <Button variant="secondary" className="w-full h-12 text-base" onClick={() => setIsDrawerOpen(false)}>Annuler</Button>
+                                            </div>
+                                        </div>
+                                    </DrawerContent>
+                                </Drawer>
                             )}
                         </div>
                         
@@ -620,6 +567,44 @@ export default function ProfileClientPage() {
                             disabled={isUploading || profilePictures.length >= MAX_PHOTOS}
                         />
                     </div>
+
+                    {!isOwner && (
+                        <div className="flex items-center gap-2 mt-4">
+                            {isFriend ? (
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="secondary" className="flex-1 text-sm">
+                                            <UserCheck className="mr-2 h-4 w-4" /> Amis
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Retirer {profile.firstName} de vos amis ?</AlertDialogTitle>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                            <AlertDialogAction onClick={handleFriendAction} className="bg-destructive hover:bg-destructive/90">
+                                                <UserX className="mr-2 h-4 w-4" /> Retirer
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            ) : (
+                                <Button onClick={handleFriendAction} className="flex-1 text-sm" disabled={isFriendActionLoading}>
+                                    {isFriendActionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
+                                    Ajouter
+                                </Button>
+                            )}
+                            <Button variant="outline" className="flex-1 text-sm" asChild>
+                                <Link href={`/chat?id=${profileId}`}>
+                                    <Send className="mr-2 h-4 w-4" />
+                                    Message
+                                </Link>
+                            </Button>
+                        </div>
+                    )}
+
+
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                         {intention && (
                             <Badge variant="default" className={cn("border-none text-white text-sm px-2.5 py-1 h-auto", intention.color)}>
@@ -767,20 +752,6 @@ export default function ProfileClientPage() {
                 </div>
             </div>
         </main>
-        {!isOwner && profileId && (
-            <div className="fixed bottom-0 left-0 right-0 z-10 p-2 bg-background/80 backdrop-blur-sm border-t md:hidden">
-                <div className="flex">
-                    <Link href={`/chat?id=${profileId}`} passHref className="flex-1">
-                        <Button className="w-full text-sm">
-                            <Send className="mr-2 h-4 w-4" />
-                            Envoyer un message
-                        </Button>
-                    </Link>
-                </div>
-            </div>
-        )}
     </div>
   );
 }
-
-    
