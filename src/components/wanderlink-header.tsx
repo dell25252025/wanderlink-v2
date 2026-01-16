@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Bell, Search } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
@@ -58,9 +58,6 @@ const WanderLinkHeader = () => {
       </Link>
 
       <div className="flex items-center space-x-4">
-        <Link href="/discover?search=true" className={cn('text-muted-foreground transition-colors hover:text-foreground', { 'text-primary': pathname === '/discover' } )}>
-          <Search className="h-6 w-6" />
-        </Link>
         <Link href="/notifications" className={cn('relative text-muted-foreground transition-colors hover:text-foreground', { 'text-primary': pathname === '/notifications' } )}>
           <Bell className="h-6 w-6" />
           {hasUnread && (
