@@ -51,22 +51,6 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, isFriend, onAddFrien
         </div>
       </Link>
 
-      <div className="absolute top-2 right-2 z-10">
-        {currentUserId && profile.id !== currentUserId && (
-          <Button
-            size="icon"
-            className={cn(
-              "rounded-full h-10 w-10",
-              isFriend ? "bg-green-500 hover:bg-green-600" : "bg-primary/80 backdrop-blur-sm hover:bg-primary"
-            )}
-            onClick={handleAddFriendClick}
-            disabled={isFriend || isAddingFriend}
-          >
-            {isAddingFriend ? <Loader2 className="h-5 w-5 animate-spin" /> : (isFriend ? <UserCheck className="h-5 w-5" /> : <UserPlus className="h-5 w-5" />)}
-          </Button>
-        )}
-      </div>
-
       <div className="absolute bottom-0 left-0 right-0 p-2 md:p-3 text-white w-full flex flex-col items-start justify-end text-left">
         {intention && (
           <div>
