@@ -51,6 +51,7 @@ interface MessageItemProps {
   onClick: (message: Message) => void;
   onReact: (message: Message, emoji: string) => void;
   onSetupDelete: (message: Message) => void;
+  onCopy: (text: string) => void;
   onZoomImage: (imageUrl: string) => void;
   showReactionPopoverFor: string | null;
   setShowReactionPopoverFor: (id: string | null) => void;
@@ -167,7 +168,7 @@ const PhotoViewer = ({ imageUrl, onClose }: { imageUrl: string; onClose: () => v
 // --- Memoized Message Component ---
 const MessageItem = memo<MessageItemProps>(({ 
     message, isSender, isLastRead, isSelected, otherUserImage, otherUserName, 
-    onLongPress, onClick, onReact, onSetupDelete, onZoomImage,
+    onLongPress, onClick, onReact, onSetupDelete, onCopy, onZoomImage,
     showReactionPopoverFor, setShowReactionPopoverFor
 }) => {
     const reactions = message.reactions ? Object.entries(message.reactions) : [];
@@ -206,6 +207,7 @@ const MessageItem = memo<MessageItemProps>(({
                 <PopoverContent className="w-auto p-1 rounded-full">
                     <div className="flex items-center gap-1">
                         {availableReactions.map(emoji => <Button key={emoji} onClick={() => onReact(message, emoji)} variant="ghost" size="icon" className="rounded-full h-8 w-8 text-lg">{emoji}</Button>)}
+                        {message.text && <Button onClick={() => onCopy(message.text)} variant="ghost" size="icon" className="rounded-full h-8 w-8"><Copy className="h-4 w-4" /></Button>}
                         {isSender && <Button onClick={() => onSetupDelete(message)} variant="ghost" size="icon" className="rounded-full h-8 w-8"><Trash2 className="h-4 w-4" /></Button>}
                     </div>
                 </PopoverContent>
@@ -386,6 +388,9 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     const messagesColRef = collection(chatDocRef, 'messages');
     
     setNewMessage('');
+    if (textareaRef.current) {
+      textareaRef.current.blur();
+    }
 
     try {
         const finalMessageData = {
@@ -453,9 +458,9 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     setShowReactionPopoverFor(null);
   }, [currentUser, otherUser, toast]);
   
-  const handleCopy = useCallback(() => {
-    if (!selectedMessage?.text) return;
-    navigator.clipboard.writeText(selectedMessage.text)
+  const handleCopy = useCallback((text: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text)
       .then(() => {
         toast({ description: "Message copié !" });
       })
@@ -464,12 +469,9 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de copier le message.' });
       })
       .finally(() => {
-        // Use a timeout to ensure state updates properly
-        setTimeout(() => {
-            setSelectedMessage(null);
-        }, 100);
+        setShowReactionPopoverFor(null);
       });
-  }, [selectedMessage, toast]);
+  }, [toast]);
 
 const takePicture = useCallback(async (source: CameraSource) => {
     let hasPermission = false;
@@ -628,7 +630,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
         
         {selectedMessage ? (
             <>
-              {selectedMessage.text && <Button onClick={handleCopy} variant="ghost" size="icon" className="h-8 w-8"><Copy className="h-4 w-4" /></Button>}
+              {selectedMessage.text && <Button onClick={() => handleCopy(selectedMessage!.text)} variant="ghost" size="icon" className="h-8 w-8"><Copy className="h-4 w-4" /></Button>}
             </>
         ) : (
             <>
@@ -655,6 +657,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                     onClick={handleMessageClick}
                     onReact={handleReact}
                     onSetupDelete={handleSetupDelete}
+                    onCopy={handleCopy}
                     onZoomImage={handleZoomImage}
                     showReactionPopoverFor={showReactionPopoverFor}
                     setShowReactionPopoverFor={setShowReactionPopoverFor}
@@ -735,3 +738,5 @@ const takePicture = useCallback(async (source: CameraSource) => {
     </div>
   );
 }
+
+    
