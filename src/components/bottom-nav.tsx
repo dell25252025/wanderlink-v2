@@ -95,7 +95,8 @@ const BottomNav = () => {
   }, [currentUser]);
 
   // Définition des états actifs en fonction du chemin
-  const isDiscoverActive = pathname.startsWith('/discover') || pathname === '/';
+  const isDiscoverActive = pathname.startsWith('/discover');
+  const isHomeActive = pathname === '/';
   const areMessagesActive = pathname.startsWith('/inbox');
   const areSettingsActive = pathname.startsWith('/settings');
   const areFriendsActive = pathname.startsWith('/friends');
@@ -124,7 +125,7 @@ const BottomNav = () => {
         <nav className="h-14 w-full rounded-full border bg-background/90 p-1 shadow-lg backdrop-blur-md">
           <div className="grid h-full grid-cols-5 items-center justify-around">
             
-            <NavItem href="/" icon={Compass} label="Découvrir" active={isDiscoverActive} />
+            <NavItem href="/discover" icon={Compass} label="Rechercher" active={isDiscoverActive} />
             <NavItem href="/friends" icon={Users} label="Amis" active={areFriendsActive} />
 
             {/* Bouton central de profil */}
