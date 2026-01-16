@@ -595,8 +595,9 @@ export default function ProfileClientPage() {
                             {isFriend ? (
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
-                                        <Button variant="secondary" className="flex-1">
-                                            <UserCheck className="mr-2 h-4 w-4" /> Amis
+                                        <Button variant="secondary" className="flex-1" disabled={isFriendActionLoading}>
+                                            {isFriendActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="mr-2 h-4 w-4" />}
+                                            Amis
                                         </Button>
                                     </AlertDialogTrigger>
                                     <AlertDialogContent>
@@ -758,3 +759,5 @@ export default function ProfileClientPage() {
     </div>
   );
 }
+
+    
