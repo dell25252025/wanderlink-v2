@@ -527,34 +527,61 @@ export default function ProfileClientPage() {
                             )}
                             
                             {!isOwner && (
-                                <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-                                    <DrawerTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                                            <MoreVertical className="h-4 w-4 md:h-5 md:w-5" />
+                                <>
+                                    {isFriend ? (
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isFriendActionLoading}>
+                                                    {isFriendActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4 text-green-500" />}
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Retirer {profile.firstName} de vos amis ?</AlertDialogTitle>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={handleFriendAction} className="bg-destructive hover:bg-destructive/90">
+                                                        <UserX className="mr-2 h-4 w-4" /> Retirer
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    ) : (
+                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleFriendAction} disabled={isFriendActionLoading}>
+                                            {isFriendActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
                                         </Button>
-                                    </DrawerTrigger>
-                                    <DrawerContent>
-                                        <div className="mx-auto w-full max-w-sm">
-                                            <DrawerHeaderComponent>
-                                                <DrawerTitle>Options</DrawerTitle>
-                                                <DrawerDescriptionComponent>Gérez votre interaction avec ce profil.</DrawerDescriptionComponent>
-                                            </DrawerHeaderComponent>
-                                            <div className="p-4 pb-0">
-                                                <div className="mt-3 h-full space-y-2">
-                                                    <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleBlockUser}>
-                                                        <Ban className="mr-2 h-5 w-5" /> Bloquer
-                                                    </Button>
-                                                    <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleReportUser}>
-                                                        <ShieldAlert className="mr-2 h-5 w-5" /> Signaler un abus
-                                                    </Button>
+                                    )}
+
+                                    <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+                                        <DrawerTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                <MoreVertical className="h-4 w-4 md:h-5 md:w-5" />
+                                            </Button>
+                                        </DrawerTrigger>
+                                        <DrawerContent>
+                                            <div className="mx-auto w-full max-w-sm">
+                                                <DrawerHeaderComponent>
+                                                    <DrawerTitle>Options</DrawerTitle>
+                                                    <DrawerDescriptionComponent>Gérez votre interaction avec ce profil.</DrawerDescriptionComponent>
+                                                </DrawerHeaderComponent>
+                                                <div className="p-4 pb-0">
+                                                    <div className="mt-3 h-full space-y-2">
+                                                        <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleBlockUser}>
+                                                            <Ban className="mr-2 h-5 w-5" /> Bloquer
+                                                        </Button>
+                                                        <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleReportUser}>
+                                                            <ShieldAlert className="mr-2 h-5 w-5" /> Signaler un abus
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                                <div className="p-4">
+                                                    <Button variant="secondary" className="w-full h-12 text-base" onClick={() => setIsDrawerOpen(false)}>Annuler</Button>
                                                 </div>
                                             </div>
-                                            <div className="p-4">
-                                                <Button variant="secondary" className="w-full h-12 text-base" onClick={() => setIsDrawerOpen(false)}>Annuler</Button>
-                                            </div>
-                                        </div>
-                                    </DrawerContent>
-                                </Drawer>
+                                        </DrawerContent>
+                                    </Drawer>
+                                </>
                             )}
                         </div>
                         
@@ -567,43 +594,6 @@ export default function ProfileClientPage() {
                             disabled={isUploading || profilePictures.length >= MAX_PHOTOS}
                         />
                     </div>
-
-                    {!isOwner && (
-                        <div className="flex items-center gap-2 mt-4">
-                            {isFriend ? (
-                                <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                        <Button variant="secondary" className="flex-1 text-sm">
-                                            <UserCheck className="mr-2 h-4 w-4" /> Amis
-                                        </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                            <AlertDialogTitle>Retirer {profile.firstName} de vos amis ?</AlertDialogTitle>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                            <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                            <AlertDialogAction onClick={handleFriendAction} className="bg-destructive hover:bg-destructive/90">
-                                                <UserX className="mr-2 h-4 w-4" /> Retirer
-                                            </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                </AlertDialog>
-                            ) : (
-                                <Button onClick={handleFriendAction} className="flex-1 text-sm" disabled={isFriendActionLoading}>
-                                    {isFriendActionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
-                                    Ajouter
-                                </Button>
-                            )}
-                            <Button variant="outline" className="flex-1 text-sm" asChild>
-                                <Link href={`/chat?id=${profileId}`}>
-                                    <Send className="mr-2 h-4 w-4" />
-                                    Message
-                                </Link>
-                            </Button>
-                        </div>
-                    )}
-
 
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                         {intention && (
@@ -755,3 +745,5 @@ export default function ProfileClientPage() {
     </div>
   );
 }
+
+    
