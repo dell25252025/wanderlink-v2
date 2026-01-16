@@ -29,7 +29,7 @@ const NavItem = ({ href, icon: Icon, label, active, hasNotification }: NavItemPr
         <div
           className={cn(
             'relative flex flex-col items-center justify-center rounded-full h-12 w-12 p-1 transition-colors duration-200',
-            active ? 'text-primary' : 'text-muted-foreground'
+            active ? 'text-foreground' : 'text-muted-foreground'
           )}
         >
           <Icon className="h-6 w-6" />
@@ -124,7 +124,7 @@ const BottomNav = () => {
         <nav className="h-14 w-full rounded-full border bg-background/90 p-1 shadow-lg backdrop-blur-md">
           <div className="grid h-full grid-cols-5 items-center justify-around">
             
-            <NavItem href="/discover" icon={Compass} label="Découvrir" active={isDiscoverActive} />
+            <NavItem href="/" icon={Compass} label="Découvrir" active={isDiscoverActive} />
             <NavItem href="/friends" icon={Users} label="Amis" active={areFriendsActive} />
 
             {/* Bouton central de profil */}
