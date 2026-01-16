@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef, memo, useCallback, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Video, Loader2, CheckCircle, PlusCircle, Trash2, Camera as CameraIcon, Mic, Image as ImageIcon, Copy } from 'lucide-react';
+import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Video, Loader2, CheckCircle, PlusCircle, Trash2, CameraIcon, Mic, Image as ImageIcon, Copy } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getUserProfile, initiateCall } from '@/lib/firebase-actions';
@@ -388,9 +388,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     const messagesColRef = collection(chatDocRef, 'messages');
     
     setNewMessage('');
-    if (textareaRef.current) {
-      textareaRef.current.blur();
-    }
 
     try {
         const finalMessageData = {
@@ -671,7 +668,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
         {isRecording ? (
             <VoiceRecorder onSend={handleSendVoiceMessage} onCancel={() => setIsRecording(false)} isSending={isUploading} />
         ) : (
-            <form onSubmit={(e) => handleSendMessage(e)} className="flex items-end gap-1.5 w-full">
+            <form className="flex items-end gap-1.5 w-full">
             <Drawer>
                 <DrawerTrigger asChild>
                     <Button type="button" variant="ghost" size="icon" className="shrink-0 h-8 w-8" disabled={isUploading}><PlusCircle className="h-5 w-5 text-muted-foreground" /></Button>
@@ -717,7 +714,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                 {!newMessage.trim() ? (
                 <Button type="button" onClick={handleStartRecording} variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-primary"><Mic className="h-4 w-4" /></Button>
                 ) : (
-                <Button type="submit" variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-primary" disabled={isUploading}><Send className="h-4 w-4" /></Button>
+                <Button type="button" onClick={(e) => handleSendMessage(e as any)} variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-primary" disabled={isUploading} tabIndex={-1}><Send className="h-4 w-4" /></Button>
                 )}
                 </div>
             </form>
