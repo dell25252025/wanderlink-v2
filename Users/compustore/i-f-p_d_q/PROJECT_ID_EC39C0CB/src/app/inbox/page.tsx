@@ -14,7 +14,7 @@ export default function InboxPage() {
   return (
     <div className="flex min-h-screen w-full flex-col">
       <WanderlinkHeader />
-      <main className="flex-1 pb-24 pt-16">
+      <main className="flex-1 pb-24 pt-20">
         <div className="container mx-auto max-w-7xl px-2">
             <div className="relative mb-4">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
