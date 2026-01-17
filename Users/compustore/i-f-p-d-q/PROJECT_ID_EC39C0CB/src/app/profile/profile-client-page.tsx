@@ -157,7 +157,7 @@ const PhotoViewer = ({ images, startIndex, onClose }: { images: string[], startI
             imageEl?.removeEventListener('touchmove', handleTouchMove);
             imageEl?.removeEventListener('touchend', handleTouchEnd);
         }
-    }, [currentIndex, handleNext, handlePrev]);
+    }, [handleNext, handlePrev]);
     
     useEffect(() => {
         if (scale === 1) {
@@ -486,7 +486,7 @@ export default function ProfileClientPage() {
       ? `${format(fromDate, 'd LLL yyyy', { locale: fr })}${toDate ? ` au ${format(toDate, 'd LLL yyyy', { locale: fr })}` : ''}`
       : 'Non spécifié';
 
-  const profilePictures = profile.profilePictures && profile.profilePictures.length > 0 ? profile.profilePictures : [];
+  const profilePictures = profile.profilePictures && profile.profilePictures.length > 0 ? [...new Set(profile.profilePictures)] : [];
   
   const destinationCountry = countries.find(c => c.name === profile.destination);
   const locationCountry = countries.find(c => c.name === profile.location);
