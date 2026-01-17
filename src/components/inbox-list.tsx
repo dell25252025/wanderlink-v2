@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -42,7 +43,6 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
   const lastMessageTimestamp = chat.lastMessage?.timestamp?.toDate();
   const isUnread = chat.lastMessage && !chat.lastMessage.read && chat.lastMessage.senderId !== auth.currentUser?.uid;
 
-  // --- BUG FIX: Utiliser l'ID de l'autre participant pour le lien --- //
   return (
     <Link href={`/chat?id=${chat.otherParticipant.id}`} className="block w-full">
       <div className="flex items-center space-x-4 p-3 hover:bg-muted/50 transition-colors rounded-lg">
@@ -75,7 +75,7 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
 
 
 // --- Composant principal de la liste des conversations --- //
-const InboxList = () => {
+const InboxList = ({ searchTerm }: { searchTerm: string }) => {
   const [user, loadingAuth] = useAuthState(auth);
   const [chats, setChats] = useState<EnrichedChat[]>([]);
   const [loadingChats, setLoadingChats] = useState(true);
@@ -124,15 +124,18 @@ const InboxList = () => {
       setLoadingChats(false);
     }, (error) => {
       console.error("Error fetching chats:", error);
-      // NOTE: L'erreur d'index composite est maintenant gérée, mais on garde le fallback
       if (error.message.includes("firestore/failed-precondition")) {
-          alert("Erreur de base de données : Un index est manquant pour les conversations.")
+          console.error("Firestore index missing. Please create it.");
       }
       setLoadingChats(false);
     });
 
     return () => unsubscribe();
   }, [user, loadingAuth]);
+
+  const filteredChats = chats.filter(chat => 
+    chat.otherParticipant?.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   if (loadingAuth || loadingChats) {
     return <div className="flex justify-center items-center h-48"><Loader2 className="h-8 w-8 animate-spin" /></div>;
@@ -142,13 +145,13 @@ const InboxList = () => {
     return <p className="text-center text-muted-foreground">Veuillez vous connecter pour voir vos messages.</p>;
   }
 
-  if (chats.length === 0) {
-    return <p className="text-center text-muted-foreground">Aucune conversation pour le moment.</p>;
+  if (filteredChats.length === 0) {
+    return <p className="text-center text-muted-foreground">{searchTerm ? 'Aucune conversation trouvée.' : 'Aucune conversation pour le moment.'}</p>;
   }
 
   return (
     <div className="space-y-2">
-      {chats.map(chat => (
+      {filteredChats.map(chat => (
         <ChatListItem key={chat.id} chat={chat} />
       ))}
     </div>
