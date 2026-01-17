@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getUserProfile, addProfilePicture, removeProfilePicture, addFriend, removeFriend, signOutFromGoogle } from '@/lib/firebase-actions';
 import type { DocumentData } from 'firestore';
@@ -44,7 +44,7 @@ const intentionMap: { [key: string]: { icon: React.ElementType, color: string, t
 
 const MAX_PHOTOS = 6;
 
-const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: number }) => {
+const PhotoViewer = ({ images, startIndex, onClose }: { images: string[], startIndex: number, onClose: () => void }) => {
     const [currentIndex, setCurrentIndex] = useState(startIndex);
     const [scale, setScale] = useState(1);
     const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -52,7 +52,10 @@ const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: num
     const lastDist = useRef(0);
     const { toast } = useToast();
     const [isLiked, setIsLiked] = useState(false);
-
+    
+    // For swipe gestures
+    const touchStartX = useRef(0);
+    const touchStartY = useRef(0);
 
     const resetZoom = () => {
         setScale(1);
@@ -65,20 +68,16 @@ const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: num
         setIsLiked(false);
     }, [currentIndex]);
 
-
-    const handleNext = () => {
+    const handleNext = useCallback(() => {
         setCurrentIndex((prev) => (prev + 1) % images.length);
         resetZoom();
-    };
+    }, [images.length]);
 
-    const handlePrev = () => {
+    const handlePrev = useCallback(() => {
         setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
         resetZoom();
-    };
+    }, [images.length]);
 
-    const handleZoomIn = () => setScale(s => Math.min(s + 0.2, 3));
-    const handleZoomOut = () => setScale(s => Math.max(s - 0.2, 1));
-    
     const handleLike = () => {
         const newLikedState = !isLiked;
         setIsLiked(newLikedState);
@@ -101,14 +100,21 @@ const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: num
         };
 
         const handleTouchStart = (e: TouchEvent) => {
+            // Pinch-to-zoom start
             if (e.touches.length === 2) {
                 const dx = e.touches[0].clientX - e.touches[1].clientX;
                 const dy = e.touches[0].clientY - e.touches[1].clientY;
                 lastDist.current = Math.sqrt(dx * dx + dy * dy);
+            } 
+            // Swipe start
+            else if (e.touches.length === 1) {
+                touchStartX.current = e.touches[0].clientX;
+                touchStartY.current = e.touches[0].clientY;
             }
         };
 
         const handleTouchMove = (e: TouchEvent) => {
+            // Pinch-to-zoom move
             if (e.touches.length === 2) {
                 e.preventDefault();
                 const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -119,17 +125,39 @@ const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: num
                 lastDist.current = dist;
             }
         };
+        
+        const handleTouchEnd = (e: TouchEvent) => {
+            // Swipe end
+            if (e.changedTouches.length === 1 && scale === 1) { // only swipe when not zoomed
+                const touchEndX = e.changedTouches[0].clientX;
+                const touchEndY = e.changedTouches[0].clientY;
+                const deltaX = touchEndX - touchStartX.current;
+                const deltaY = touchEndY - touchStartY.current;
+    
+                // Horizontal swipe detection
+                if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) { 
+                    if (deltaX < 0) {
+                        handleNext();
+                    } else {
+                        handlePrev();
+                    }
+                }
+            }
+        };
 
         const imageEl = imageRef.current;
         imageEl?.addEventListener('wheel', handleWheel, { passive: false });
         imageEl?.addEventListener('touchstart', handleTouchStart, { passive: true });
         imageEl?.addEventListener('touchmove', handleTouchMove, { passive: false });
+        imageEl?.addEventListener('touchend', handleTouchEnd, { passive: true });
+        
         return () => {
             imageEl?.removeEventListener('wheel', handleWheel);
             imageEl?.removeEventListener('touchstart', handleTouchStart);
             imageEl?.removeEventListener('touchmove', handleTouchMove);
+            imageEl?.removeEventListener('touchend', handleTouchEnd);
         }
-    }, [currentIndex]);
+    }, [currentIndex, handleNext, handlePrev]);
     
     useEffect(() => {
         if (scale === 1) {
@@ -142,9 +170,14 @@ const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: num
             <DialogHeader className="sr-only">
                 <DialogTitle>Visionneuse de photos</DialogTitle>
                 <DialogDescription>
-                    Agrandissement de la photo de profil. Utilisez les flèches pour naviguer et les boutons pour zoomer.
+                    Glissez pour naviguer entre les photos et pincez pour zoomer.
                 </DialogDescription>
             </DialogHeader>
+             <DialogClose asChild>
+                <Button variant="ghost" size="icon" className="absolute top-2 right-2 z-50 h-9 w-9 text-white bg-black/30 hover:bg-black/50 hover:text-white" onClick={onClose}>
+                    <X className="h-5 w-5" />
+                </Button>
+            </DialogClose>
              <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
                 <Image
                     ref={imageRef}
@@ -171,13 +204,6 @@ const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: num
                     }}
                 />
             </div>
-
-            {images.length > 1 && (
-                <>
-                    <Button onClick={handlePrev} variant="ghost" size="icon" className="absolute left-2 top-1/2 -translate-y-1/2 text-white bg-black/30 hover:bg-black/50 hover:text-white"><ArrowLeft /></Button>
-                    <Button onClick={handleNext} variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 text-white bg-black/30 hover:bg-black/50 hover:text-white"><ArrowRight /></Button>
-                </>
-            )}
            
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 rounded-full bg-black/30 text-white">
                 <Button 
@@ -213,6 +239,7 @@ export default function ProfileClientPage() {
   const [isFriend, setIsFriend] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isFriendActionLoading, setIsFriendActionLoading] = useState(false);
+  const [photoViewerIndex, setPhotoViewerIndex] = useState<number | null>(null);
 
   useEffect(() => {
     setIsClient(true);
@@ -477,7 +504,7 @@ export default function ProfileClientPage() {
         <main className={cn("flex-1", !isOwner && "pb-24 md:pb-0")}>
              <div className="w-full bg-background md:py-4">
                 {profilePictures.length > 0 ? (
-                    <Dialog>
+                    <>
                         <Carousel
                             className="w-full max-w-4xl mx-auto"
                              opts={{
@@ -494,23 +521,25 @@ export default function ProfileClientPage() {
                             <CarouselContent className="-ml-1 md:-ml-4">
                                 {profilePictures.map((src: string, index: number) => (
                                     <CarouselItem key={index} className="pl-1 md:pl-4 basis-2/5 md:basis-1/5">
-                                        <DialogTrigger asChild>
-                                            <div className="relative aspect-[3/4] w-full overflow-hidden rounded-lg md:rounded-2xl group cursor-pointer">
-                                                <Image 
-                                                    src={src}
-                                                    alt={`Photo de profil de ${profile.firstName} ${index + 1}`}
-                                                    fill
-                                                    className="object-cover"
-                                                    priority={index === 0}
-                                                />
-                                            </div>
-                                        </DialogTrigger>
+                                        <div onClick={() => setPhotoViewerIndex(index)} className="relative aspect-[3/4] w-full overflow-hidden rounded-lg md:rounded-2xl group cursor-pointer">
+                                            <Image 
+                                                src={src}
+                                                alt={`Photo de profil de ${profile.firstName} ${index + 1}`}
+                                                fill
+                                                className="object-cover"
+                                                priority={index === 0}
+                                            />
+                                        </div>
                                     </CarouselItem>
                                 ))}
                             </CarouselContent>
                         </Carousel>
-                        {isClient && <PhotoViewer images={profilePictures} startIndex={0} />}
-                    </Dialog>
+                        <Dialog open={photoViewerIndex !== null} onOpenChange={(open) => !open && setPhotoViewerIndex(null)}>
+                            {isClient && photoViewerIndex !== null && (
+                                <PhotoViewer images={profilePictures} startIndex={photoViewerIndex} onClose={() => setPhotoViewerIndex(null)} />
+                            )}
+                        </Dialog>
+                    </>
                 ) : (
                      <div className="flex h-48 md:h-64 w-full items-center justify-center bg-card">
                          {isOwner ? (
@@ -782,3 +811,5 @@ export default function ProfileClientPage() {
     </div>
   );
 }
+
+    
