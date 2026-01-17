@@ -8,6 +8,7 @@ import * as logger from "firebase-functions/logger";
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onObjectFinalized } from "firebase-functions/v2/storage";
+import { onUserDeleted } from "firebase-functions/v2/auth"; // Added import
 
 // Define parameters for environment variables
 import { defineString } from "firebase-functions/params";
@@ -138,3 +139,29 @@ export const moderateProfilePicture = onObjectFinalized(async (event) => {
 
 // Export the Agora token generation function
 export const generateAgoraToken = agoraTokenGenerator;
+
+// Deletes a user's document and storage files when their auth account is deleted.
+export const onUserDelete = onUserDeleted(async (event) => {
+    const user = event.data;
+    const userId = user.uid;
+    logger.log(`Cleaning up data for user: ${userId}`);
+
+    try {
+        const db = admin.firestore();
+        const bucket = admin.storage().bucket();
+
+        // 1. Delete user document from Firestore.
+        // This will also trigger the 'syncUserToAlgolia' function to remove the user from Algolia.
+        const userDocRef = db.collection('users').doc(userId);
+        await userDocRef.delete();
+        logger.log(`Successfully deleted Firestore document for user: ${userId}`);
+
+        // 2. Delete user profile pictures from Storage.
+        const profilePicturesPath = `profilePictures/${userId}/`;
+        await bucket.deleteFiles({ prefix: profilePicturesPath });
+        logger.log(`Successfully deleted profile pictures for user: ${userId}`);
+
+    } catch (error) {
+        logger.error(`Error cleaning up data for user ${userId}:`, error);
+    }
+});
