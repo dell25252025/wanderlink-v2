@@ -248,10 +248,24 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   useEffect(() => {
+    const blockedUsersRaw = localStorage.getItem('blockedUsers');
+    if (blockedUsersRaw) {
+      const blockedUserIds = JSON.parse(blockedUsersRaw).map((u: any) => u.id);
+      if (blockedUserIds.includes(otherUserId)) {
+        toast({
+          variant: 'destructive',
+          title: 'Utilisateur bloqué',
+          description: 'Vous ne pouvez pas interagir avec cet utilisateur.'
+        });
+        router.push('/inbox');
+        return; 
+      }
+    }
+    
     if (otherUserId) {
       getUserProfile(otherUserId).then(setOtherUser);
     }
-  }, [otherUserId]);
+  }, [otherUserId, router, toast]);
 
   const requestCameraPermission = useCallback(async (): Promise<boolean> => {
     const result = await Camera.checkPermissions();
@@ -563,7 +577,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
 
     const result = await initiateCall(currentUser.uid, otherUserId, isVideo);
 
-    if (result.success) {
+    if (result.success && result.channelId) {
         router.push(`/call/${result.channelId}`);
     } else {
         toast({
@@ -607,7 +621,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
 
   return (
     <div className="flex h-screen flex-col bg-background w-full overflow-x-hidden">
-      <header className="fixed top-0 z-10 flex w-full items-center gap-2 border-b bg-background/95 px-2 py-1 backdrop-blur-sm h-12">
+      <header className="fixed top-0 z-30 flex w-full items-center gap-2 border-b bg-background/95 px-2 py-1 backdrop-blur-sm h-12">
         <Button onClick={handleBack} variant="ghost" size="icon" className="h-8 w-8"><ArrowLeft className="h-4 w-4" /></Button>
         <Link href={`/profile?id=${otherUserId}`} className="flex min-w-0 flex-1 items-center gap-2 truncate"><Avatar className="h-8 w-8"><AvatarImage src={otherUserImage} alt={otherUserName} /><AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback></Avatar><div className="flex-1 truncate"><h1 className="truncate text-sm font-semibold">{otherUserName}</h1></div></Link>
         <>
@@ -643,7 +657,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
         </div>}
       </main>
       
-      <footer className="fixed bottom-0 z-10 w-full border-t bg-background/95 backdrop-blur-sm px-2 py-1.5">
+      <footer className="fixed bottom-0 z-30 w-full border-t bg-background/95 backdrop-blur-sm px-2 py-1.5">
         {isRecording ? (
             <VoiceRecorder onSend={handleSendVoiceMessage} onCancel={() => setIsRecording(false)} isSending={isUploading} />
         ) : (
