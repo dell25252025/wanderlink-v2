@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2, Plane, Trash2, UploadCloud, X, Save, ArrowLeft } from 'lucide-react';
+import { Loader2, Trash2, UploadCloud, Save, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase';
@@ -18,13 +18,15 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import Link from 'next/link';
 import Image from 'next/image';
 import { CountrySelect } from '@/components/country-select';
 import { GenericSelect } from '@/components/generic-select';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { travelIntentions, travelStyles, travelActivities } from '@/lib/options';
 import { Separator } from '@/components/ui/separator';
+import { Capacitor } from '@capacitor/core';
+import { Camera, CameraSource, CameraResultType } from '@capacitor/camera';
+
 
 const MAX_PHOTOS = 6;
 
@@ -41,10 +43,29 @@ export default function EditProfileClientPage() {
 
     const methods = useForm<FormData>({
         resolver: zodResolver(formSchema),
-        defaultValues: { profilePictures: [] },
+        defaultValues: {
+            firstName: '',
+            age: undefined,
+            gender: undefined,
+            profilePictures: [],
+            bio: '',
+            languages: [],
+            location: '',
+            height: undefined,
+            weight: undefined,
+            tobacco: undefined,
+            alcohol: undefined,
+            cannabis: undefined,
+            destination: 'Toutes',
+            dates: { from: undefined, to: undefined },
+            flexibleDates: false,
+            travelStyle: 'Tous',
+            activities: 'Toutes',
+            intention: undefined,
+        },
     });
 
-    const { control, handleSubmit, setValue, getValues, watch } = methods;
+    const { control, handleSubmit, setValue, getValues, watch, reset } = methods;
     const profilePictures = watch('profilePictures') || [];
     const areDatesFlexible = watch('flexibleDates');
 
@@ -56,16 +77,30 @@ export default function EditProfileClientPage() {
                     try {
                         const profileData = await getUserProfile(user.uid);
                         if (profileData) {
-                            Object.entries(profileData).forEach(([key, value]) => {
-                                if (key === 'dates' && value) {
-                                    setValue('dates', {
-                                        from: value.from ? new Date(value.from) : undefined,
-                                        to: value.to ? new Date(value.to) : undefined,
-                                    });
-                                } else {
-                                    setValue(key as keyof FormData, value);
-                                }
-                            });
+                            const defaults = {
+                                firstName: profileData.firstName || '',
+                                age: profileData.age,
+                                gender: profileData.gender,
+                                profilePictures: profileData.profilePictures || [],
+                                bio: profileData.bio || '',
+                                languages: profileData.languages || [],
+                                location: profileData.location || '',
+                                height: profileData.height,
+                                weight: profileData.weight,
+                                tobacco: profileData.tobacco,
+                                alcohol: profileData.alcohol,
+                                cannabis: profileData.cannabis,
+                                destination: profileData.destination || 'Toutes',
+                                dates: {
+                                    from: profileData.dates?.from ? new Date(profileData.dates.from) : undefined,
+                                    to: profileData.dates?.to ? new Date(profileData.dates.to) : undefined,
+                                },
+                                flexibleDates: profileData.flexibleDates || false,
+                                travelStyle: profileData.travelStyle || 'Tous',
+                                activities: profileData.activities || 'Toutes',
+                                intention: profileData.intention,
+                            };
+                            reset(defaults);
                         }
                     } catch (error) {
                        console.error("Failed to fetch profile:", error);
@@ -73,48 +108,76 @@ export default function EditProfileClientPage() {
                 };
                 fetchProfile();
             } else {
-                router.push('/signup');
+                router.push('/login');
             }
             setAuthLoading(false);
         });
         return () => unsubscribe();
-    }, [router, profileId, setValue]);
+    }, [router, profileId, reset]);
 
-    const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const files = event.target.files;
-        if (!files || !currentUser) return;
-        setIsUploading(true);
-
-        const uploadPromises = Array.from(files).slice(0, MAX_PHOTOS - profilePictures.length).map(file => {
-             return new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = async (e) => {
-                    try {
-                        const result = await addProfilePicture(currentUser.uid, e.target?.result as string);
-                        if (result.success && result.url) {
-                            resolve(result.url);
-                        } else {
-                            reject(new Error(result.error || 'Upload failed'));
-                        }
-                    } catch (error) {
-                        reject(error);
-                    }
-                };
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
+    const handleAddPictureFromDataUrl = async (dataUrl: string) => {
+      if (!currentUser) return;
+      setIsUploading(true);
+      try {
+        const result = await addProfilePicture(currentUser.uid, dataUrl);
+        if (result.success && result.url) {
+          const currentPictures = getValues('profilePictures') || [];
+          setValue('profilePictures', [...currentPictures, result.url], { shouldValidate: true });
+        } else {
+          throw new Error(result.error || 'Upload failed');
+        }
+      } catch (error) {
+        toast({ variant: "destructive", title: "Erreur d'upload", description: "Une photo n'a pas pu être ajoutée." });
+      } finally {
+        setIsUploading(false);
+      }
+    };
+    
+    const handleAddClick = async () => {
+        const currentPictures = getValues('profilePictures') || [];
+        if (currentPictures.length >= MAX_PHOTOS) {
+            toast({
+                title: "Limite atteinte",
+                description: `Vous ne pouvez pas ajouter plus de ${MAX_PHOTOS} photos.`,
+                variant: "destructive"
             });
-        });
+            return;
+        }
 
-        try {
-            const uploadedUrls = await Promise.all(uploadPromises);
-            setValue('profilePictures', [...profilePictures, ...uploadedUrls], { shouldValidate: true });
-        } catch (error) {
-            toast({ variant: "destructive", title: "Erreur d'upload", description: "Une photo n'a pas pu être ajoutée." });
-        } finally {
-            setIsUploading(false);
-            if (fileInputRef.current) fileInputRef.current.value = "";
+        if (Capacitor.isNativePlatform()) {
+            try {
+                const image = await Camera.getPhoto({
+                    quality: 90,
+                    allowEditing: false,
+                    resultType: CameraResultType.DataUrl,
+                    source: CameraSource.Prompt,
+                });
+                if (image.dataUrl) {
+                    await handleAddPictureFromDataUrl(image.dataUrl);
+                }
+            } catch (error) {
+                console.info("Photo selection cancelled or failed:", error);
+            }
+        } else {
+            fileInputRef.current?.click();
         }
     };
+
+    const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const dataUrl = e.target?.result as string;
+            if (dataUrl) {
+                await handleAddPictureFromDataUrl(dataUrl);
+            }
+        };
+        reader.readAsDataURL(file);
+         if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+
 
     const removePicture = async (urlToRemove: string) => {
         if (!currentUser) return;
@@ -130,8 +193,18 @@ export default function EditProfileClientPage() {
     const onSubmit = async (data: FormData) => {
         if (!currentUser) return;
         setIsSubmitting(true);
+        
+        // Sanitize date data before submitting
+        const sanitizedData = { ...data };
+        if (sanitizedData.dates?.from && isNaN(new Date(sanitizedData.dates.from).getTime())) {
+            sanitizedData.dates.from = undefined;
+        }
+        if (sanitizedData.dates?.to && isNaN(new Date(sanitizedData.dates.to).getTime())) {
+            sanitizedData.dates.to = undefined;
+        }
+
         try {
-            const result = await updateUserProfile(currentUser.uid, data);
+            const result = await updateUserProfile(currentUser.uid, sanitizedData);
             if (!result.success) throw new Error(result.error);
             toast({ title: 'Profil mis à jour avec succès !' });
             router.push(`/profile?id=${currentUser.uid}`);
@@ -167,10 +240,10 @@ export default function EditProfileClientPage() {
                                 <div className="p-4 md:p-6 border rounded-lg space-y-4">
                                     <h2 className="text-xl font-semibold">Informations Personnelles</h2>
                                     <FormField control={control} name="firstName" render={({ field }) => (<FormItem><FormLabel>Prénom</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
-                                    <FormField control={control} name="age" render={({ field }) => (<FormItem><FormLabel>Âge</FormLabel><FormControl><Input type="number" {...field} onChange={(e) => field.onChange(parseInt(e.target.value, 10))} /></FormControl><FormMessage /></FormItem>)} />
-                                    <FormField control={control} name="gender" render={({ field }) => (<FormItem><FormLabel>Genre</FormLabel><RadioGroup onValueChange={field.onChange} value={field.value} className="flex space-x-4"><FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="Homme" /></FormControl><FormLabel>Homme</FormLabel></FormItem><FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="Femme" /></FormControl><FormLabel>Femme</FormLabel></FormItem><FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="Autre" /></FormControl><FormLabel>Autre</FormLabel></FormItem></RadioGroup><FormMessage /></FormItem>)} />
-                                    <FormField control={control} name="height" render={({ field }) => (<FormItem><FormLabel>Taille (cm)</FormLabel><FormControl><Input type="number" {...field} placeholder="Ex: 175" onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value, 10))} /></FormControl><FormMessage /></FormItem>)} />
-                                    <FormField control={control} name="weight" render={({ field }) => (<FormItem><FormLabel>Poids (kg)</FormLabel><FormControl><Input type="number" {...field} placeholder="Ex: 70" onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value, 10))} /></FormControl><FormMessage /></FormItem>)} />
+                                    <FormField control={control} name="age" render={({ field }) => (<FormItem><FormLabel>Âge</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={(e) => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value, 10))} /></FormControl><FormMessage /></FormItem>)} />
+                                    <FormField control={control} name="gender" render={({ field }) => (<FormItem><FormLabel>Genre</FormLabel><RadioGroup onValueChange={field.onChange} value={field.value} className="flex space-x-4"><FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="Homme" /></FormControl><FormLabel className="font-normal">Homme</FormLabel></FormItem><FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="Femme" /></FormControl><FormLabel className="font-normal">Femme</FormLabel></FormItem><FormItem className="flex items-center space-x-2"><FormControl><RadioGroupItem value="Autre" /></FormControl><FormLabel className="font-normal">Autre</FormLabel></FormItem></RadioGroup><FormMessage /></FormItem>)} />
+                                    <FormField control={control} name="height" render={({ field }) => (<FormItem><FormLabel>Taille (cm)</FormLabel><FormControl><Input type="number" {...field} placeholder="Ex: 175" value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value))} /></FormControl><FormMessage /></FormItem>)} />
+                                    <FormField control={control} name="weight" render={({ field }) => (<FormItem><FormLabel>Poids (kg)</FormLabel><FormControl><Input type="number" {...field} placeholder="Ex: 70" value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value))} /></FormControl><FormMessage /></FormItem>)} />
                                     <FormField control={control} name="bio" render={({ field }) => (<FormItem><FormLabel>Description</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>)} />
                                 </div>
                                 
@@ -185,12 +258,12 @@ export default function EditProfileClientPage() {
                                             </div>
                                         ))}
                                         {profilePictures.length < MAX_PHOTOS && (
-                                            <div className="aspect-square flex items-center justify-center border-2 border-dashed rounded-md cursor-pointer hover:bg-muted" onClick={() => fileInputRef.current?.click()}>
+                                            <div className="aspect-square flex items-center justify-center border-2 border-dashed rounded-md cursor-pointer hover:bg-muted" onClick={handleAddClick}>
                                                 <div className="text-center text-muted-foreground">{isUploading ? <Loader2 className="h-8 w-8 animate-spin mx-auto" /> : <><UploadCloud className="h-8 w-8 mx-auto" /><span className="text-sm mt-2">Ajouter</span></>}</div>
                                             </div>
                                         )}
                                     </div>
-                                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleFileSelect} disabled={isUploading} />
+                                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileSelect} disabled={isUploading} />
                                 </div>
                                 
                                 {/* Section Style de Vie */}
@@ -255,7 +328,7 @@ export default function EditProfileClientPage() {
                                                             onCheckedChange={field.onChange}
                                                         />
                                                     </FormControl>
-                                                    <FormLabel htmlFor="flexible-dates">Mes dates sont flexibles</FormLabel>
+                                                    <FormLabel htmlFor="flexible-dates" className="font-normal">Mes dates sont flexibles</FormLabel>
                                                 </FormItem>
                                             )}
                                         />
@@ -271,7 +344,7 @@ export default function EditProfileClientPage() {
                                                     <FormControl>
                                                         <GenericSelect 
                                                             className="w-auto md:w-[250px]"
-                                                            value={field.value} 
+                                                            value={field.value || ''} 
                                                             onValueChange={field.onChange} 
                                                             options={travelIntentions} 
                                                             placeholder="Toutes"
@@ -291,7 +364,7 @@ export default function EditProfileClientPage() {
                                                     <FormControl>
                                                         <GenericSelect 
                                                             className="w-auto md:w-[250px]"
-                                                            value={field.value} 
+                                                            value={field.value || ''} 
                                                             onValueChange={field.onChange} 
                                                             options={travelStyles} 
                                                             placeholder="Tous"
@@ -311,7 +384,7 @@ export default function EditProfileClientPage() {
                                                     <FormControl>
                                                         <GenericSelect 
                                                             className="w-auto md:w-[250px]"
-                                                            value={field.value} 
+                                                            value={field.value || ''} 
                                                             onValueChange={field.onChange} 
                                                             options={travelActivities} 
                                                             placeholder="Toutes"
@@ -337,3 +410,5 @@ export default function EditProfileClientPage() {
         </FormProvider>
     );
 }
+
+    
