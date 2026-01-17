@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { getUserProfile, addProfilePicture, removeProfilePicture, addFriend, removeFriend } from '@/lib/firebase-actions';
+import { getUserProfile, addProfilePicture, removeProfilePicture, addFriend, removeFriend, signOutFromGoogle } from '@/lib/firebase-actions';
 import type { DocumentData } from 'firestore';
 import { Loader2, Plane, MapPin, Languages, Backpack, Cigarette, Wine, Calendar, Camera, Trash2, PlusCircle, LogOut, Edit, Ruler, Scale, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, X, Sparkles, BriefcaseBusiness, Coins, Users, MoreVertical, ShieldAlert, Ban, Send, UserPlus, Heart, UserCheck, UserX, CheckCircle, ShieldCheck } from 'lucide-react';
 import Image from 'next/image';
@@ -14,7 +14,6 @@ import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase';
-import { signOut } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -206,7 +205,6 @@ export default function ProfileClientPage() {
   const [loading, setLoading] = useState(true);
   const [isOwner, setIsOwner] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [currentUserProfile, setCurrentUserProfile] = useState<DocumentData | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -229,12 +227,11 @@ export default function ProfileClientPage() {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
         setCurrentUser(user);
         if (user) {
-          const userProfileData = await getUserProfile(user.uid);
-          setCurrentUserProfile(userProfileData);
           if (user.uid === profileId) {
             setIsOwner(true);
           } else {
             setIsOwner(false);
+            const userProfileData = await getUserProfile(user.uid);
             if (userProfileData?.friends?.includes(profileId)) {
               setIsFriend(true);
             } else {
@@ -352,13 +349,20 @@ export default function ProfileClientPage() {
   }
 
   const handleSignOut = async () => {
+    setIsDrawerOpen(false);
+    await new Promise(resolve => setTimeout(resolve, 150));
+
     try {
-      await signOut(auth);
-      toast({
-        title: "Déconnexion réussie",
-        description: "À bientôt !",
-      });
-      router.push('/');
+      const result = await signOutFromGoogle();
+      if (result.success) {
+        toast({
+          title: "Déconnexion réussie",
+          description: "À bientôt !",
+        });
+        router.push('/');
+      } else {
+        throw new Error(result.error || "Une erreur inconnue est survenue.");
+      }
     } catch (error) {
       console.error("Sign out error", error);
       const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
@@ -367,16 +371,38 @@ export default function ProfileClientPage() {
         title: "Erreur de déconnexion",
         description: errorMessage,
       });
+      router.push('/');
     }
   };
   
   const handleBlockUser = () => {
-    // Logic to block user
-    toast({ title: `${profile?.firstName} a été bloqué(e).` });
+    setIsDrawerOpen(false);
+    if (!profile) return;
+    try {
+      const blockedUsers = JSON.parse(localStorage.getItem('blockedUsers') || '[]');
+      const isAlreadyBlocked = blockedUsers.some((user: any) => user.id === profile.id);
+      
+      if (!isAlreadyBlocked) {
+        const userToBlock = {
+          id: profile.id,
+          name: profile.firstName,
+          avatarUrl: profile.profilePictures?.[0] || `https://picsum.photos/seed/${profile.id}/200`
+        };
+        blockedUsers.push(userToBlock);
+        localStorage.setItem('blockedUsers', JSON.stringify(blockedUsers));
+        toast({ title: `${profile.firstName} a été bloqué(e).` });
+        router.push('/');
+      } else {
+        toast({ title: 'Déjà bloqué', description: `${profile.firstName} est déjà dans votre liste de blocage.` });
+      }
+    } catch (error) {
+      console.error("Failed to block user:", error);
+      toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de bloquer cet utilisateur.' });
+    }
   };
 
   const handleReportUser = () => {
-    // Logic to report user
+    setIsDrawerOpen(false);
     toast({ title: `Le profil de ${profile?.firstName} a été signalé.` });
   };
   
@@ -448,7 +474,7 @@ export default function ProfileClientPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
         </header>
-        <main className="flex-1">
+        <main className={cn("flex-1", !isOwner && "pb-24 md:pb-0")}>
              <div className="w-full bg-background md:py-4">
                 {profilePictures.length > 0 ? (
                     <Dialog>
@@ -527,61 +553,34 @@ export default function ProfileClientPage() {
                             )}
                             
                             {!isOwner && (
-                                <>
-                                    {isFriend ? (
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isFriendActionLoading}>
-                                                    {isFriendActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4 text-green-500" />}
-                                                </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle>Retirer {profile.firstName} de vos amis ?</AlertDialogTitle>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                                    <AlertDialogAction onClick={handleFriendAction} className="bg-destructive hover:bg-destructive/90">
-                                                        <UserX className="mr-2 h-4 w-4" /> Retirer
-                                                    </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    ) : (
-                                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleFriendAction} disabled={isFriendActionLoading}>
-                                            {isFriendActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                                <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+                                    <DrawerTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                                            <MoreVertical className="h-4 w-4 md:h-5 md:w-5" />
                                         </Button>
-                                    )}
-
-                                    <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-                                        <DrawerTrigger asChild>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                                                <MoreVertical className="h-4 w-4 md:h-5 md:w-5" />
-                                            </Button>
-                                        </DrawerTrigger>
-                                        <DrawerContent>
-                                            <div className="mx-auto w-full max-w-sm">
-                                                <DrawerHeaderComponent>
-                                                    <DrawerTitle>Options</DrawerTitle>
-                                                    <DrawerDescriptionComponent>Gérez votre interaction avec ce profil.</DrawerDescriptionComponent>
-                                                </DrawerHeaderComponent>
-                                                <div className="p-4 pb-0">
-                                                    <div className="mt-3 h-full space-y-2">
-                                                        <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleBlockUser}>
-                                                            <Ban className="mr-2 h-5 w-5" /> Bloquer
-                                                        </Button>
-                                                        <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleReportUser}>
-                                                            <ShieldAlert className="mr-2 h-5 w-5" /> Signaler un abus
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                                <div className="p-4">
-                                                    <Button variant="secondary" className="w-full h-12 text-base" onClick={() => setIsDrawerOpen(false)}>Annuler</Button>
+                                    </DrawerTrigger>
+                                    <DrawerContent>
+                                        <div className="mx-auto w-full max-w-sm">
+                                            <DrawerHeaderComponent>
+                                                <DrawerTitle>Options</DrawerTitle>
+                                                <DrawerDescriptionComponent>Gérez votre interaction avec ce profil.</DrawerDescriptionComponent>
+                                            </DrawerHeaderComponent>
+                                            <div className="p-4 pb-0">
+                                                <div className="mt-3 h-full space-y-2">
+                                                    <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleBlockUser}>
+                                                        <Ban className="mr-2 h-5 w-5" /> Bloquer
+                                                    </Button>
+                                                    <Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={handleReportUser}>
+                                                        <ShieldAlert className="mr-2 h-5 w-5" /> Signaler un abus
+                                                    </Button>
                                                 </div>
                                             </div>
-                                        </DrawerContent>
-                                    </Drawer>
-                                </>
+                                            <div className="p-4">
+                                                <Button variant="secondary" className="w-full h-12 text-base" onClick={() => setIsDrawerOpen(false)}>Annuler</Button>
+                                            </div>
+                                        </div>
+                                    </DrawerContent>
+                                </Drawer>
                             )}
                         </div>
                         
@@ -594,7 +593,7 @@ export default function ProfileClientPage() {
                             disabled={isUploading || profilePictures.length >= MAX_PHOTOS}
                         />
                     </div>
-
+                    
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                         {intention && (
                             <Badge variant="default" className={cn("border-none text-white text-sm px-2.5 py-1 h-auto", intention.color)}>
@@ -602,7 +601,35 @@ export default function ProfileClientPage() {
                                 {intention.text}
                             </Badge>
                         )}
-
+                        {!isOwner && (
+                          <div className="flex items-center gap-2">
+                              {isFriend ? (
+                                  <AlertDialog>
+                                      <AlertDialogTrigger asChild>
+                                          <Button variant="secondary" size="sm" className="h-8">
+                                              <UserCheck className="mr-2 h-4 w-4 text-green-500" /> Amis
+                                          </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                              <AlertDialogTitle>Retirer {profile.firstName} de vos amis ?</AlertDialogTitle>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                              <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                              <AlertDialogAction onClick={handleFriendAction} className="bg-destructive hover:bg-destructive/90">
+                                                  <UserX className="mr-2 h-4 w-4" /> Retirer
+                                              </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                  </AlertDialog>
+                              ) : (
+                                  <Button onClick={handleFriendAction} size="sm" variant="secondary" disabled={isFriendActionLoading}>
+                                      {isFriendActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
+                                      Ajouter
+                                  </Button>
+                              )}
+                          </div>
+                        )}
                         {isOwner && !profile.isVerified && (
                             <Button variant="default" size="icon" className="h-8 w-8 bg-blue-500 hover:bg-blue-600 text-white" asChild>
                                 <Link href="/profile/verify">
@@ -612,6 +639,16 @@ export default function ProfileClientPage() {
                             </Button>
                         )}
                     </div>
+
+                    {!isOwner && (
+                        <div className="fixed bottom-0 left-0 right-0 z-10 p-4 bg-background/80 backdrop-blur-sm border-t md:hidden">
+                            <Button asChild className="w-full" size="lg">
+                                <Link href={`/chat?id=${profileId}`}>
+                                    <Send className="mr-2 h-4 w-4" /> Message
+                                </Link>
+                            </Button>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -745,5 +782,3 @@ export default function ProfileClientPage() {
     </div>
   );
 }
-
-    

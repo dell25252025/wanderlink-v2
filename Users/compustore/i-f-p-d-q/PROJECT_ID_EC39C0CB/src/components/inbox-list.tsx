@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -75,7 +76,7 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
 
 
 // --- Composant principal de la liste des conversations --- //
-const InboxList = () => {
+const InboxList = ({ searchTerm }: { searchTerm: string }) => {
   const [user, loadingAuth] = useAuthState(auth);
   const [chats, setChats] = useState<EnrichedChat[]>([]);
   const [loadingChats, setLoadingChats] = useState(true);
@@ -96,6 +97,9 @@ const InboxList = () => {
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       const chatData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
       
+      const blockedUsersRaw = localStorage.getItem('blockedUsers');
+      const blockedUserIds = blockedUsersRaw ? JSON.parse(blockedUsersRaw).map((u: any) => u.id) : [];
+
       const enrichedChats = await Promise.all(chatData.map(async (chat) => {
         const otherParticipantId = chat.participants.find(p => p !== user.uid);
         let otherParticipant: ParticipantProfile | null = null;
@@ -113,8 +117,12 @@ const InboxList = () => {
         }
         return { ...chat, otherParticipant };
       }));
+      
+      const unblockedChats = enrichedChats.filter(chat => 
+        !chat.otherParticipant || !blockedUserIds.includes(chat.otherParticipant.id)
+      );
 
-      const sortedChats = enrichedChats.sort((a, b) => {
+      const sortedChats = unblockedChats.sort((a, b) => {
         const timeA = a.lastMessage?.timestamp?.toMillis() || 0;
         const timeB = b.lastMessage?.timestamp?.toMillis() || 0;
         return timeB - timeA;
@@ -134,6 +142,10 @@ const InboxList = () => {
     return () => unsubscribe();
   }, [user, loadingAuth]);
 
+  const filteredChats = chats.filter(chat => 
+    chat.otherParticipant?.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   if (loadingAuth || loadingChats) {
     return <div className="flex justify-center items-center h-48"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
@@ -142,13 +154,13 @@ const InboxList = () => {
     return <p className="text-center text-muted-foreground">Veuillez vous connecter pour voir vos messages.</p>;
   }
 
-  if (chats.length === 0) {
-    return <p className="text-center text-muted-foreground">Aucune conversation pour le moment.</p>;
+  if (filteredChats.length === 0) {
+    return <p className="text-center text-muted-foreground">{searchTerm ? 'Aucune conversation trouvée.' : 'Aucune conversation pour le moment.'}</p>;
   }
 
   return (
     <div className="space-y-2">
-      {chats.map(chat => (
+      {filteredChats.map(chat => (
         <ChatListItem key={chat.id} chat={chat} />
       ))}
     </div>

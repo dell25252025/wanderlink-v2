@@ -31,6 +31,9 @@ function DiscoverPage({ user }: { user: User }) {
       try {
         setProfilesLoading(true);
         
+        const blockedUsersRaw = localStorage.getItem('blockedUsers');
+        const blockedUserIds = blockedUsersRaw ? JSON.parse(blockedUsersRaw).map((u: any) => u.id) : [];
+
         const searchResultsJSON = localStorage.getItem('searchResults');
         const searchTimestamp = localStorage.getItem('searchTimestamp');
         
@@ -46,19 +49,17 @@ function DiscoverPage({ user }: { user: User }) {
         }
 
         if (profilesToDisplay) {
-            setDisplayMatches(profilesToDisplay);
-            // Clear the stored results so they aren't shown on the next visit without a new search
+            const filtered = profilesToDisplay.filter((p: DocumentData) => !blockedUserIds.includes(p.id));
+            setDisplayMatches(filtered);
             localStorage.removeItem('searchResults');
             localStorage.removeItem('searchTimestamp');
         } else {
-            // No search results, fetch default users
             const [userProfile, users] = await Promise.all([
               getUserProfile(user.uid),
-              getAllUsers(12), // Fetch a limited number of users
+              getAllUsers(12),
             ]);
             setCurrentUserProfile(userProfile);
-            // Exclude the current user from the list of profiles to display
-            const otherUsers = users.filter(u => u.id !== user.uid);
+            const otherUsers = users.filter(u => u.id !== user.uid && !blockedUserIds.includes(u.id));
             setAllUsers(otherUsers);
             setDisplayMatches(otherUsers);
         }
@@ -151,7 +152,6 @@ function ConditionalHome() {
   }, []);
 
   useEffect(() => {
-    // Redirect only when authentication check is complete and user is not logged in.
     if (!loadingAuth && !currentUserAuth) {
       router.push('/login');
     }
@@ -173,7 +173,6 @@ function ConditionalHome() {
     );
   }
   
-  // Return a loader while redirecting to prevent rendering anything else
   return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-background">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />

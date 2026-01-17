@@ -248,10 +248,24 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   useEffect(() => {
+    const blockedUsersRaw = localStorage.getItem('blockedUsers');
+    if (blockedUsersRaw) {
+      const blockedUserIds = JSON.parse(blockedUsersRaw).map((u: any) => u.id);
+      if (blockedUserIds.includes(otherUserId)) {
+        toast({
+          variant: 'destructive',
+          title: 'Utilisateur bloqué',
+          description: 'Vous ne pouvez pas interagir avec cet utilisateur.'
+        });
+        router.push('/inbox');
+        return; 
+      }
+    }
+    
     if (otherUserId) {
       getUserProfile(otherUserId).then(setOtherUser);
     }
-  }, [otherUserId]);
+  }, [otherUserId, router, toast]);
 
   const requestCameraPermission = useCallback(async (): Promise<boolean> => {
     const result = await Camera.checkPermissions();
@@ -714,7 +728,3 @@ const takePicture = useCallback(async (source: CameraSource) => {
     </div>
   );
 }
-
-    
-
-    
