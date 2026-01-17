@@ -66,12 +66,6 @@ const SettingsPage = () => {
 
   const settingsItems = [
     {
-      icon: Crown,
-      label: 'WanderLink Gold',
-      href: '/premium',
-      isSpecial: true,
-    },
-    {
       icon: User,
       label: 'Paramètres du compte',
       href: '/settings/account',
@@ -179,22 +173,6 @@ const SettingsPage = () => {
             </li>
 
           {settingsItems.map((item) => {
-            if (item.isSpecial) {
-              return (
-                 <li key={item.label}>
-                    <Link href={item.href || '#'} className="block p-2">
-                       <div className="relative flex cursor-pointer items-center p-4 rounded-lg overflow-hidden bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-900 shadow-md transition-transform hover:scale-[1.02]">
-                          <div className='mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/30'>
-                             <item.icon className='h-5 w-5 text-slate-900' />
-                          </div>
-                          <span className='flex-1 text-sm font-bold'>{item.label}</span>
-                          <ChevronRight className='h-5 w-5 text-slate-900/70' />
-                       </div>
-                    </Link>
-                 </li>
-              )
-            }
-            
             const content = (
               <div className="flex cursor-pointer items-center p-4 transition-colors">
                 <div className={cn('mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', item.bgColor)}>
