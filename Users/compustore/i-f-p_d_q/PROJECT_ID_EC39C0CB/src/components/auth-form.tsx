@@ -10,14 +10,13 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Loader2, Mail, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { auth } from '@/lib/firebase';
-import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithCredential, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { auth, db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
 import { useRouter } from 'next/navigation';
-import { createOrUpdateGoogleUserProfile } from '@/lib/firebase-actions';
-import { Capacitor } from '@capacitor/core';
-import { GoogleAuth } from '@capacitor/google-auth';
-
+import { signInWithGoogle } from '@/lib/firebase-actions';
+import { useOnboarding } from '@/context/OnboardingContext';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Adresse e-mail invalide.' }),
@@ -38,7 +37,7 @@ type AuthFormProps = {
   setIsLogin: (isLogin: boolean) => void;
   isEmailFormVisible: boolean;
   setIsEmailFormVisible: (isVisible: boolean) => void;
-  onSuccess?: () => void; // Made onSuccess optional as we handle redirection here
+  onSuccess?: () => void; 
 };
 
 export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setIsEmailFormVisible, onSuccess }: AuthFormProps) {
@@ -48,6 +47,7 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
+  const { setMode, setOverlayActive } = useOnboarding(); // Use the context
 
   const form = useForm({
     resolver: zodResolver(isLogin ? loginSchema : signupSchema),
@@ -56,6 +56,8 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
 
   async function onSubmit(values: z.infer<typeof loginSchema | typeof signupSchema>) {
     setIsLoading(true);
+    setMode('email'); 
+    setOverlayActive(false); 
     try {
       if (isLogin) {
         const loginValues = values as z.infer<typeof loginSchema>;
@@ -64,11 +66,8 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
         if (onSuccess) onSuccess(); else router.push('/');
       } else {
         const signupValues = values as z.infer<typeof signupSchema>;
-        const userCredential = await createUserWithEmailAndPassword(auth, signupValues.email, signupValues.password);
-        // await sendEmailVerification(userCredential.user); // We will add this later
-
+        await createUserWithEmailAndPassword(auth, signupValues.email, signupValues.password);
         toast({ title: 'Compte créé !', description: "Vous pouvez maintenant vous connecter." });
-        // Redirect to login or directly to profile creation
         router.push('/create-profile');
       }
     } catch (error) {
@@ -81,64 +80,66 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
         }
       }
       toast({ variant: 'destructive', title: isLogin ? 'Erreur de connexion' : 'Erreur de création de compte', description });
+       setOverlayActive(false);
+       setMode(null);
     } finally {
       setIsLoading(false);
     }
   }
 
-  async function handleNativeGoogleSignIn() {
-    try {
-        const googleUser = await GoogleAuth.signIn();
-        const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
-        const result = await signInWithCredential(auth, credential);
-        return result.user;
-    } catch (error) {
-        console.error("Native Google sign-in error", error);
-        // If native sign-in fails, we can fall back to the web method.
-        // For simplicity, we just log the error here.
-        throw new Error("La connexion native avec Google a échoué.");
-    }
-  }
-
-  async function handleWebGoogleSignIn() {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      return result.user;
-  }
-
   async function handleGoogleSignIn() {
     setIsGoogleLoading(true);
-    try {
-        const user = Capacitor.isNativePlatform() 
-            ? await handleNativeGoogleSignIn() 
-            : await handleWebGoogleSignIn();
-      
-      const profileResult = await createOrUpdateGoogleUserProfile(user.uid, {
-        email: user.email,
-        displayName: user.displayName,
-        photoURL: user.photoURL
-      });
+    setMode('google');
+    setOverlayActive(true);
 
-      if (!profileResult.success) {
-        throw new Error(profileResult.error || "Failed to create or update profile.");
-      }
-      
-      toast({ title: 'Connexion réussie !', description: 'Bienvenue sur WanderLink.' });
-      
-      if (profileResult.isNewUser) {
-        router.push(`/create-profile`);
-      } else {
-        router.push('/');
-      }
-      
-    } catch (error) {
-      console.error("Erreur de connexion Google:", error);
-      const errorMessage = error instanceof Error ? error.message : "Une erreur inattendue s'est produite.";
-      toast({ variant: 'destructive', title: 'Erreur de connexion Google', description: errorMessage });
-    } finally {
-      setIsGoogleLoading(false);
+    const result = await signInWithGoogle();
+
+    if (!result || !result.success) {
+        setIsGoogleLoading(false);
+        setOverlayActive(false);
+        setMode(null);
+        if (result && result.error && !result.error.includes('annulée')) {
+             toast({ variant: 'destructive', title: 'Erreur de connexion Google', description: result.error });
+        }
+        return;
     }
-  }
+
+    const { user } = result;
+    
+    const timeout = setTimeout(() => {
+        toast({ variant: "destructive", title: "Délai dépassé", description: "La vérification du profil a pris trop de temps." });
+        setOverlayActive(false);
+        setMode(null);
+        setIsGoogleLoading(false);
+        router.push('/');
+    }, 5000); // 5 seconds failsafe
+
+    try {
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        
+        clearTimeout(timeout);
+
+        if (userDoc.exists() && userDoc.data()?.profileComplete) {
+            router.push('/');
+        } else {
+            const query = new URLSearchParams();
+            if (user.displayName) query.append('firstName', user.displayName.split(' ')[0]);
+            if (user.photoURL) query.append('photoURL', user.photoURL);
+            router.push(`/create-profile?${query.toString()}`);
+        }
+    } catch (error) {
+        clearTimeout(timeout);
+        console.error("Error checking user profile:", error);
+        toast({ variant: 'destructive', title: 'Erreur', description: "Impossible de vérifier l'état du profil." });
+        router.push('/'); // Fallback to home on error
+    } finally {
+        // Overlay will be deactivated in the destination page's useEffect
+        // for a smoother transition.
+        setIsGoogleLoading(false);
+    }
+}
+
 
   const toggleForm = () => {
     setIsLogin(!isLogin);
