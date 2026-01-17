@@ -44,7 +44,7 @@ const intentionMap: { [key: string]: { icon: React.ElementType, color: string, t
 
 const MAX_PHOTOS = 6;
 
-const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: number }) => {
+const PhotoViewer = ({ images, startIndex, onClose }: { images: string[], startIndex: number, onClose: () => void }) => {
     const [currentIndex, setCurrentIndex] = useState(startIndex);
     const [scale, setScale] = useState(1);
     const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -75,9 +75,6 @@ const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: num
         setCurrentIndex((prev) => (prev - 1 + images.length) % images.length);
         resetZoom();
     };
-
-    const handleZoomIn = () => setScale(s => Math.min(s + 0.2, 3));
-    const handleZoomOut = () => setScale(s => Math.max(s - 0.2, 1));
     
     const handleLike = () => {
         const newLikedState = !isLiked;
@@ -145,6 +142,11 @@ const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: num
                     Agrandissement de la photo de profil. Utilisez les flèches pour naviguer et les boutons pour zoomer.
                 </DialogDescription>
             </DialogHeader>
+             <DialogClose asChild>
+                <Button variant="ghost" size="icon" className="absolute top-2 right-2 z-50 h-9 w-9 text-white bg-black/30 hover:bg-black/50 hover:text-white" onClick={onClose}>
+                    <X className="h-5 w-5" />
+                </Button>
+            </DialogClose>
              <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
                 <Image
                     ref={imageRef}
@@ -213,6 +215,7 @@ export default function ProfileClientPage() {
   const [isFriend, setIsFriend] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isFriendActionLoading, setIsFriendActionLoading] = useState(false);
+  const [photoViewerIndex, setPhotoViewerIndex] = useState<number | null>(null);
 
   useEffect(() => {
     setIsClient(true);
@@ -377,7 +380,28 @@ export default function ProfileClientPage() {
   
   const handleBlockUser = () => {
     setIsDrawerOpen(false);
-    toast({ title: `${profile?.firstName} a été bloqué(e).` });
+    if (!profile) return;
+    try {
+      const blockedUsers = JSON.parse(localStorage.getItem('blockedUsers') || '[]');
+      const isAlreadyBlocked = blockedUsers.some((user: any) => user.id === profile.id);
+      
+      if (!isAlreadyBlocked) {
+        const userToBlock = {
+          id: profile.id,
+          name: profile.firstName,
+          avatarUrl: profile.profilePictures?.[0] || `https://picsum.photos/seed/${profile.id}/200`
+        };
+        blockedUsers.push(userToBlock);
+        localStorage.setItem('blockedUsers', JSON.stringify(blockedUsers));
+        toast({ title: `${profile.firstName} a été bloqué(e).` });
+        router.push('/');
+      } else {
+        toast({ title: 'Déjà bloqué', description: `${profile.firstName} est déjà dans votre liste de blocage.` });
+      }
+    } catch (error) {
+      console.error("Failed to block user:", error);
+      toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de bloquer cet utilisateur.' });
+    }
   };
 
   const handleReportUser = () => {
@@ -456,40 +480,42 @@ export default function ProfileClientPage() {
         <main className={cn("flex-1", !isOwner && "pb-24 md:pb-0")}>
              <div className="w-full bg-background md:py-4">
                 {profilePictures.length > 0 ? (
-                    <Dialog>
+                    <>
                         <Carousel
                             className="w-full max-w-4xl mx-auto"
-                             opts={{
+                            opts={{
                                 align: "center",
                                 loop: profilePictures.length > 1,
                             }}
                             plugins={profilePictures.length > 1 ? [
                                 Autoplay({
-                                  delay: 5000,
-                                  stopOnInteraction: true,
+                                delay: 5000,
+                                stopOnInteraction: true,
                                 }),
                             ] : []}
                         >
                             <CarouselContent className="-ml-1 md:-ml-4">
                                 {profilePictures.map((src: string, index: number) => (
                                     <CarouselItem key={index} className="pl-1 md:pl-4 basis-2/5 md:basis-1/5">
-                                        <DialogTrigger asChild>
-                                            <div className="relative aspect-[3/4] w-full overflow-hidden rounded-lg md:rounded-2xl group cursor-pointer">
-                                                <Image 
-                                                    src={src}
-                                                    alt={`Photo de profil de ${profile.firstName} ${index + 1}`}
-                                                    fill
-                                                    className="object-cover"
-                                                    priority={index === 0}
-                                                />
-                                            </div>
-                                        </DialogTrigger>
+                                        <div onClick={() => setPhotoViewerIndex(index)} className="relative aspect-[3/4] w-full overflow-hidden rounded-lg md:rounded-2xl group cursor-pointer">
+                                            <Image 
+                                                src={src}
+                                                alt={`Photo de profil de ${profile.firstName} ${index + 1}`}
+                                                fill
+                                                className="object-cover"
+                                                priority={index === 0}
+                                            />
+                                        </div>
                                     </CarouselItem>
                                 ))}
                             </CarouselContent>
                         </Carousel>
-                        {isClient && <PhotoViewer images={profilePictures} startIndex={0} />}
-                    </Dialog>
+                        <Dialog open={photoViewerIndex !== null} onOpenChange={(open) => !open && setPhotoViewerIndex(null)}>
+                            {isClient && photoViewerIndex !== null && (
+                                <PhotoViewer images={profilePictures} startIndex={photoViewerIndex} onClose={() => setPhotoViewerIndex(null)} />
+                            )}
+                        </Dialog>
+                    </>
                 ) : (
                      <div className="flex h-48 md:h-64 w-full items-center justify-center bg-card">
                          {isOwner ? (
@@ -620,8 +646,8 @@ export default function ProfileClientPage() {
                     </div>
 
                     {!isOwner && (
-                        <div className="mt-4 flex w-full gap-2 md:hidden">
-                            <Button asChild className="flex-1">
+                        <div className="fixed bottom-0 left-0 right-0 z-10 p-4 bg-background/80 backdrop-blur-sm border-t md:hidden">
+                            <Button asChild className="w-full" size="lg">
                                 <Link href={`/chat?id=${profileId}`}>
                                     <Send className="mr-2 h-4 w-4" /> Message
                                 </Link>
