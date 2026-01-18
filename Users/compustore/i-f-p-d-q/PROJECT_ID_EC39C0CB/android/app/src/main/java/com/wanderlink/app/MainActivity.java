@@ -1,16 +1,25 @@
 package com.wanderlink.app;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.WindowManager;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-import com.getcapacitor.BridgeActivity;
-import com.getcapacitor.PluginMethod;
+
 import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
+import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+
+    private static final int NOTIFICATION_PERMISSION_REQUEST_CODE = 1001;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         // Appliquer le drapeau de sécurité AVANT l'initialisation de l'activité parente.
@@ -22,6 +31,13 @@ public class MainActivity extends BridgeActivity {
         android.util.Log.e("FLAG_SECURE_TEST", "onCreate MainActivity executing");
 
         super.onCreate(savedInstanceState);
+
+        // Demande de permission pour les notifications sur Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_PERMISSION_REQUEST_CODE);
+            }
+        }
     }
 
     @Override
