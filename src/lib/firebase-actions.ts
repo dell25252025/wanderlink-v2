@@ -75,9 +75,6 @@ export async function signInWithGoogle() {
   try {
     let user;
     if (Capacitor.isNativePlatform()) {
-      // Force a native sign-out to ensure the account picker always shows
-      // This helps prevent issues with stale tokens on Android
-      await GoogleAuth.signOut().catch(e => console.warn("Pre-emptive sign out failed, continuing...", e));
       const googleUser = await GoogleAuth.signIn();
 
       if (!googleUser.authentication?.idToken) {
