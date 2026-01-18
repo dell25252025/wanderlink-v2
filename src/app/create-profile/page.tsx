@@ -24,6 +24,8 @@ import { Geolocation } from '@capacitor/geolocation';
 import { countries } from '@/lib/countries';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { PushNotifications } from '@capacitor/push-notifications';
+import { AndroidPermissions } from '@awesome-cordova-plugins/android-permissions';
+
 
 const steps = [
   { id: 1, title: 'Qui êtes-vous ?', component: Step1, fields: ['firstName', 'age', 'gender', 'profilePictures', 'bio'] },
@@ -113,7 +115,19 @@ function ProfileCreationForm() {
         console.warn("Camera/Photos permission failed", e);
       }
 
-      // 3. Demande pour les notifications (déplacée ici)
+      // 3. Demande pour le microphone
+      if (Capacitor.getPlatform() === 'android') {
+        try {
+          const checkResult = await AndroidPermissions.checkPermission(AndroidPermissions.PERMISSION.RECORD_AUDIO);
+          if (!checkResult.hasPermission) {
+            await AndroidPermissions.requestPermission(AndroidPermissions.PERMISSION.RECORD_AUDIO);
+          }
+        } catch (e) {
+          console.error("Android RECORD_AUDIO permission error:", e);
+        }
+      }
+      
+      // 4. Demande pour les notifications
       try {
         let permStatus = await PushNotifications.checkPermissions();
         if (permStatus.receive === 'prompt') {
