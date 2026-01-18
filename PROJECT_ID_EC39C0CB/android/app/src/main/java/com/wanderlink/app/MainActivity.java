@@ -1,24 +1,15 @@
 package com.wanderlink.app;
 
-import android.Manifest;
-import android.os.Build;
 import android.os.Bundle;
 import android.view.WindowManager;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
+import com.getcapacitor.BridgeActivity;
 import androidx.annotation.NonNull;
 
-import com.getcapacitor.BridgeActivity;
-
 public class MainActivity extends BridgeActivity {
-
-    private ActivityResultLauncher<String> notificationPermissionLauncher;
-
     @Override
     public void onCreate(Bundle savedInstanceState) {
         // Appliquer le drapeau de sécurité AVANT l'initialisation de l'activité parente.
@@ -27,29 +18,14 @@ public class MainActivity extends BridgeActivity {
             WindowManager.LayoutParams.FLAG_SECURE
         );
         android.util.Log.e("FLAG_SECURE_TEST", "onCreate MainActivity executing");
-
+        
         super.onCreate(savedInstanceState);
-
-        // Demande de permission pour les notifications avec l'API Activity Result, compatible Capacitor
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            notificationPermissionLauncher =
-                registerForActivityResult(
-                  new ActivityResultContracts.RequestPermission(),
-                  isGranted -> {
-                    // Le résultat est géré par le système. Aucune action supplémentaire n'est nécessaire ici.
-                  }
-                );
-
-            notificationPermissionLauncher.launch(
-                Manifest.permission.POST_NOTIFICATIONS
-            );
-        }
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        
+
         WebView webView = this.bridge.getWebView();
 
         if (webView != null) {
