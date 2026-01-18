@@ -22,8 +22,7 @@ import { onAuthStateChanged, type User } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { getUserProfile } from '@/lib/firebase-actions';
 import type { DocumentData } from 'firebase/firestore';
-import { Loader2, Search, Crown } from 'lucide-react';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Loader2, Search } from 'lucide-react';
 
 declare global {
     interface Window { 
@@ -34,22 +33,18 @@ declare global {
 }
 
 // --- STABLE SINGLETON PATTERN --- //
-// This lives outside the React component and survives re-renders.
 let usersIndexSingleton: ReturnType<ReturnType<typeof algoliasearch>['initIndex']> | null = null;
 
 function getUsersIndex() {
-  // Return the existing instance if it's already created.
   if (usersIndexSingleton) {
     return usersIndexSingleton;
   }
 
-  // Ensure the Algolia script has been loaded from the CDN.
   if (typeof window === 'undefined' || typeof window.algoliasearch === 'undefined') {
     console.error("Algolia script not loaded or not in a browser environment.");
     return null;
   }
 
-  // Use fallback for Capacitor environment, as diagnosed.
   const appId = process.env.NEXT_PUBLIC_ALGOLIA_APP_ID || window.__ALGOLIA_APP_ID__;
   const searchKey = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY || window.__ALGOLIA_SEARCH_KEY__;
 
@@ -58,23 +53,18 @@ function getUsersIndex() {
     return null;
   }
 
-  // Create the client and index ONCE, then store it in the singleton.
   const client = window.algoliasearch(appId, searchKey);
   usersIndexSingleton = client.initIndex("users");
 
   return usersIndexSingleton;
 }
-// --- END OF SINGLETON PATTERN --- //
 
 export default function DiscoverPage() {
     const router = useRouter();
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [userProfile, setUserProfile] = useState<DocumentData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [isPremiumDialogOpen, setIsPremiumDialogOpen] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
-    
-    // REMOVED: algoliaClient and usersIndex are no longer in React state.
 
     const [showMe, setShowMe] = useState('Femme');
     const [ageRange, setAgeRange] = useState<[number, number]>([25, 45]);
@@ -88,8 +78,6 @@ export default function DiscoverPage() {
     const [activities, setActivities] = useState('Toutes');
 
     useEffect(() => {
-        // Ensure the Algolia script is on the page. We don't need to wait for it here.
-        // The singleton will handle initialization when it's first needed.
         if (!document.querySelector('script[src="https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js"]')) {
             const script = document.createElement('script');
             script.src = 'https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js';
@@ -107,7 +95,6 @@ export default function DiscoverPage() {
                         else if (profile.gender === 'Autre') setShowMe('Autre');
                         else setShowMe('Femme');
                     }
-                    // The page is ready once we have the user profile.
                     setLoading(false);
                 });
             } else {
@@ -120,10 +107,6 @@ export default function DiscoverPage() {
     }, [router]);
 
     const handleNearbyChange = (checked: boolean) => {
-        if (!userProfile?.isPremium && !checked) {
-            setIsPremiumDialogOpen(true);
-            return;
-        }
         setNearby(checked);
         if (checked) {
             setCountry('');
@@ -138,30 +121,26 @@ export default function DiscoverPage() {
     };
 
     const handleSearch = async () => {
-        // 1. Get the stable singleton instance of the index.
         const index = getUsersIndex();
-
-        // 2. Guard clause to ensure everything is ready.
         if (!index || !userProfile || !currentUser) {
             console.log('Search aborted. Index or profile not ready yet.', { index: !!index, userProfile: !!userProfile, currentUser: !!currentUser });
             return;
         }
         
-        // 3. Set loading state and perform search.
         setIsSearching(true);
     
         const filters = [];
-        if (showMe) filters.push(`gender:${showMe}`);
+        if (showMe) filters.push(`gender:"${showMe}"`);
         
         const numericFilters = [];
         numericFilters.push(`age >= ${ageRange[0]}`);
         numericFilters.push(`age <= ${ageRange[1]}`);
     
-        if (country && !nearby && userProfile.isPremium) filters.push(`location:"${country}"`);
+        if (country && !nearby) filters.push(`location:"${country}"`);
         if (destination && destination !== 'Toutes') filters.push(`destination:"${destination}"`);
-        if (intention && userProfile.isPremium) filters.push(`intention:"${intention}"`);
-        if (travelStyle && travelStyle !== 'Tous' && userProfile.isPremium) filters.push(`travelStyle:"${travelStyle}"`);
-        if (activities && activities !== 'Toutes' && userProfile.isPremium) filters.push(`activities:"${activities}"`);
+        if (intention && intention !== '') filters.push(`intention:"${intention}"`);
+        if (travelStyle && travelStyle !== 'Tous') filters.push(`travelStyle:"${travelStyle}"`);
+        if (activities && activities !== 'Toutes') filters.push(`activities:"${activities}"`);
     
         filters.push(`NOT objectID:${currentUser.uid}`);
     
@@ -187,14 +166,7 @@ export default function DiscoverPage() {
         }
     };
     
-    const handlePremiumFeatureClick = () => {
-        if (!userProfile?.isPremium) {
-            setIsPremiumDialogOpen(true);
-        }
-    };
-
     const uniformSelectClass = "w-3/5 md:w-[45%] h-9 text-sm";
-    const isPremium = userProfile?.isPremium ?? false;
 
     if (loading) {
          return (
@@ -238,14 +210,9 @@ export default function DiscoverPage() {
                                     <Checkbox id="nearby" checked={nearby} onCheckedChange={handleNearbyChange} />
                                 </div>
                                 <Separator />
-                                <div onClick={!isPremium && !nearby ? handlePremiumFeatureClick : undefined} className={cn(!isPremium && !nearby && 'cursor-pointer')}>
-                                    <div className="flex items-center justify-between py-1 px-1 text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <span className={cn('text-muted-foreground', (nearby || !isPremium) && 'opacity-50')}>Pays</span>
-                                            {!isPremium && <Crown className="h-4 w-4 text-yellow-500" />}
-                                        </div>
-                                        <CountrySelect className={uniformSelectClass} value={country} onValueChange={setCountry} disabled={nearby || !isPremium} />
-                                    </div>
+                                <div className="flex items-center justify-between py-1 px-1 text-sm">
+                                    <span className={cn('text-muted-foreground', nearby && 'opacity-50')}>Pays</span>
+                                    <CountrySelect className={uniformSelectClass} value={country} onValueChange={setCountry} disabled={nearby} />
                                 </div>
                                 <Separator />
                                 <div className="flex items-center justify-between py-1 px-1 text-sm">
@@ -269,34 +236,19 @@ export default function DiscoverPage() {
                         <div className="space-y-1">
                             <h2 className="font-semibold text-sm">Filtres Avancés</h2>
                             <div className="rounded-lg border bg-card p-2 space-y-2">
-                                <div onClick={!isPremium ? handlePremiumFeatureClick : undefined} className={cn(!isPremium && 'cursor-pointer')}>
-                                    <div className="flex items-center justify-between py-1 px-1 text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <span className={cn('text-muted-foreground', !isPremium && 'opacity-50')}>Intention</span>
-                                            {!isPremium && <Crown className="h-4 w-4 text-yellow-500" />}
-                                        </div>
-                                        <GenericSelect className={uniformSelectClass} value={intention} onValueChange={setIntention} options={[{ value: '', label: 'Toutes' }, ...travelIntentions]} placeholder="Toutes" disabled={!isPremium} />
-                                    </div>
+                                <div className="flex items-center justify-between py-1 px-1 text-sm">
+                                    <span className='text-muted-foreground'>Intention</span>
+                                    <GenericSelect className={uniformSelectClass} value={intention} onValueChange={setIntention} options={[{ value: '', label: 'Toutes' }, ...travelIntentions]} placeholder="Toutes" />
                                 </div>
                                 <Separator />
-                                <div onClick={!isPremium ? handlePremiumFeatureClick : undefined} className={cn(!isPremium && 'cursor-pointer')}>
-                                    <div className="flex items-center justify-between py-1 px-1 text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <span className={cn('text-muted-foreground', !isPremium && 'opacity-50')}>Style de voyage</span>
-                                            {!isPremium && <Crown className="h-4 w-4 text-yellow-500" />}
-                                        </div>
-                                        <GenericSelect className={uniformSelectClass} value={travelStyle} onValueChange={setTravelStyle} options={travelStyles} placeholder="Tous" disabled={!isPremium} />
-                                    </div>
+                                <div className="flex items-center justify-between py-1 px-1 text-sm">
+                                    <span className='text-muted-foreground'>Style de voyage</span>
+                                    <GenericSelect className={uniformSelectClass} value={travelStyle} onValueChange={setTravelStyle} options={travelStyles} placeholder="Tous" />
                                 </div>
                                 <Separator />
-                                <div onClick={!isPremium ? handlePremiumFeatureClick : undefined} className={cn(!isPremium && 'cursor-pointer')}>
-                                    <div className="flex items-center justify-between py-1 px-1 text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <span className={cn('text-muted-foreground', !isPremium && 'opacity-50')}>Activités</span>
-                                            {!isPremium && <Crown className="h-4 w-4 text-yellow-500" />}
-                                        </div>
-                                        <GenericSelect className={uniformSelectClass} value={activities} onValueChange={setActivities} options={travelActivities} placeholder="Toutes" disabled={!isPremium} />
-                                    </div>
+                                <div className="flex items-center justify-between py-1 px-1 text-sm">
+                                    <span className='text-muted-foreground'>Activités</span>
+                                    <GenericSelect className={uniformSelectClass} value={activities} onValueChange={setActivities} options={travelActivities} placeholder="Toutes" />
                                 </div>
                             </div>
                         </div>
@@ -309,26 +261,6 @@ export default function DiscoverPage() {
                     {isSearching ? 'Recherche...' : 'Lancer la recherche'}
                 </Button>
             </footer>
-
-            <AlertDialog open={isPremiumDialogOpen} onOpenChange={setIsPremiumDialogOpen}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2">
-                            <Crown className="text-yellow-500" />
-                            Fonctionnalité WanderLink Gold
-                        </AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Passez à Gold pour débloquer le Mode Passeport et les filtres avancés.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Plus tard</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => router.push('/premium')}>
-                            Passer à Gold
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
         </div>
     );
 }
