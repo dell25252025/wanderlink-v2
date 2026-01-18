@@ -46,7 +46,7 @@ async function handleUser(user: any) {
       isPremium: false,
       subscriptionEndDate: null,
       isVerified: false,
-      profileComplete: false 
+      onboardingCompleted: false // ETAPE 1: Initialisation du champ
     };
     await setDoc(userRef, sanitizeData(newProfileData));
 
@@ -54,7 +54,7 @@ async function handleUser(user: any) {
       success: true, 
       id: user.uid, 
       isNewUser: true,
-      profileComplete: false, 
+      onboardingCompleted: false, 
       userData: { 
         firstName: firstName, 
         photoURL: photoURL 
@@ -65,39 +65,28 @@ async function handleUser(user: any) {
     return { 
         success: true, 
         id: user.uid, 
-        isNewUser: !data.profileComplete,
-        profileComplete: data.profileComplete === true 
+        isNewUser: !data.onboardingCompleted, // La decision est maintenant basée sur ce champ
+        onboardingCompleted: data.onboardingCompleted === true 
     };
   }
 }
 
 export async function signInWithGoogle() {
   try {
-    let user;
     if (Capacitor.isNativePlatform()) {
+      await firebaseSignOut(auth).catch(e => console.warn("Le nettoyage préventif de Firebase a échoué, continuant...", e));
       const googleUser = await GoogleAuth.signIn();
-
       if (!googleUser.authentication?.idToken) {
         throw new Error('Native Google sign-in failed: idToken is missing.');
       }
-      
-      // CRITICAL STEP: Always force sign-in with credential to establish a Firebase session
       const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
       const userCredential = await signInWithCredential(auth, credential);
-      user = userCredential.user;
-      
-      // Force a reload of the user state to ensure it's fresh on Android
-      await user.reload();
-      
+      return await handleUser(userCredential.user);
     } else {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
-      user = result.user;
+      return await handleUser(result.user);
     }
-    
-    // With a guaranteed Firebase user session, now check the Firestore profile
-    return await handleUser(user);
-
   } catch (error: any) {
     console.error("signInWithGoogle error:", error);
     let errorMessage = "Une erreur inconnue est survenue.";
@@ -209,6 +198,7 @@ export async function createUserProfile(userId: string, profileData: any) {
             ...restOfProfileData,
             profilePictures: uploadedPhotoUrls,
             updatedAt: new Date().toISOString(),
+            onboardingCompleted: true // ETAPE 3: Finalisation du champ
         };
         if (finalProfileData.dates?.from) {
           finalProfileData.dates.from = new Date(finalProfileData.dates.from);
@@ -303,8 +293,7 @@ export async function getUserProfile(id: string): Promise<DocumentData | null> {
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
-      // Forcer isPremium à true pour débloquer les fonctionnalités de recherche
-      return { id: docSnap.id, ...data, isPremium: true };
+      return { id: docSnap.id, ...data };
     } else {
       return null;
     }
@@ -386,7 +375,7 @@ export async function submitVerificationRequest(userId: string, selfieDataUrl: s
         return { success: true };
     } catch (error) {
         console.error("Error submitting verification request:", error);
-        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+        const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
         return { success: false, error: errorMessage };
     }
 }
