@@ -19,8 +19,7 @@ import { onAuthStateChanged, type User } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { getUserProfile } from '@/lib/firebase-actions';
 import type { DocumentData } from 'firebase/firestore';
-import { Loader2, Search, Crown } from 'lucide-react';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Loader2, Search } from 'lucide-react';
 import algoliasearch from 'algoliasearch/lite';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { functions } from '@/lib/firebase';
@@ -36,7 +35,6 @@ export default function DiscoverPage() {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [userProfile, setUserProfile] = useState<DocumentData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [isPremiumDialogOpen, setIsPremiumDialogOpen] = useState(false);
     const [algoliaConfig, setAlgoliaConfig] = useState<{ appId: string, searchKey: string } | null>(null);
     const [isSearching, setIsSearching] = useState(false);
 
@@ -102,10 +100,6 @@ export default function DiscoverPage() {
 
 
     const handleNearbyChange = (checked: boolean) => {
-        if (!userProfile?.isPremium && !checked) {
-            setIsPremiumDialogOpen(true);
-            return;
-        }
         setNearby(checked);
         if (checked) {
             setCountry('');
@@ -133,11 +127,11 @@ export default function DiscoverPage() {
         numericFilters.push(`age >= ${ageRange[0]}`);
         numericFilters.push(`age <= ${ageRange[1]}`);
     
-        if (country && !nearby && userProfile.isPremium) filters.push(`location:"${country}"`);
+        if (country && !nearby) filters.push(`location:"${country}"`);
         if (destination && destination !== 'Toutes') filters.push(`destination:"${destination}"`);
-        if (intention && userProfile.isPremium) filters.push(`intention:"${intention}"`);
-        if (travelStyle && travelStyle !== 'Tous' && userProfile.isPremium) filters.push(`travelStyle:"${travelStyle}"`);
-        if (activities && activities !== 'Toutes' && userProfile.isPremium) filters.push(`activities:"${activities}"`);
+        if (intention && intention !== 'Toutes' && intention !== '') filters.push(`intention:"${intention}"`);
+        if (travelStyle && travelStyle !== 'Tous') filters.push(`travelStyle:"${travelStyle}"`);
+        if (activities && activities !== 'Toutes') filters.push(`activities:"${activities}"`);
     
         // Ensure we don't find the current user in the results
         if (userProfile.id) {
@@ -178,14 +172,7 @@ export default function DiscoverPage() {
     };
     
     
-    const handlePremiumFeatureClick = () => {
-        if (!userProfile?.isPremium) {
-            setIsPremiumDialogOpen(true);
-        }
-    };
-
     const uniformSelectClass = "w-3/5 md:w-[45%] h-9 text-sm";
-    const isPremium = userProfile?.isPremium ?? false;
 
     if (loading || !algoliaConfig) {
          return (
@@ -240,14 +227,9 @@ export default function DiscoverPage() {
                                     <Checkbox id="nearby" checked={nearby} onCheckedChange={handleNearbyChange} />
                                 </div>
                                 <Separator />
-                                <div onClick={!isPremium && !nearby ? handlePremiumFeatureClick : undefined} className={cn(!isPremium && !nearby && 'cursor-pointer')}>
-                                    <div className="flex items-center justify-between py-1 px-1 text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <span className={cn('text-muted-foreground', (nearby || !isPremium) && 'opacity-50')}>Pays</span>
-                                            {!isPremium && <Crown className="h-4 w-4 text-yellow-500" />}
-                                        </div>
-                                        <CountrySelect className={uniformSelectClass} value={country} onValueChange={setCountry} disabled={nearby || !isPremium} />
-                                    </div>
+                                <div className="flex items-center justify-between py-1 px-1 text-sm">
+                                    <span className={cn('text-muted-foreground', nearby && 'opacity-50')}>Pays</span>
+                                    <CountrySelect className={uniformSelectClass} value={country} onValueChange={setCountry} disabled={nearby} />
                                 </div>
                                 <Separator />
                                 <div className="flex items-center justify-between py-1 px-1 text-sm">
@@ -278,55 +260,37 @@ export default function DiscoverPage() {
                         <div className="space-y-1">
                             <h2 className="font-semibold text-sm">Filtres Avancés</h2>
                             <div className="rounded-lg border bg-card p-2 space-y-2">
-                                <div onClick={!isPremium ? handlePremiumFeatureClick : undefined} className={cn(!isPremium && 'cursor-pointer')}>
-                                    <div className="flex items-center justify-between py-1 px-1 text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <span className={cn('text-muted-foreground', !isPremium && 'opacity-50')}>Intention</span>
-                                            {!isPremium && <Crown className="h-4 w-4 text-yellow-500" />}
-                                        </div>
-                                        <GenericSelect 
-                                            className={uniformSelectClass}
-                                            value={intention} 
-                                            onValueChange={setIntention} 
-                                            options={[{ value: '', label: 'Toutes' }, ...travelIntentions]}
-                                            placeholder="Toutes"
-                                            disabled={!isPremium}
-                                        />
-                                    </div>
+                                <div className="flex items-center justify-between py-1 px-1 text-sm">
+                                    <span className='text-muted-foreground'>Intention</span>
+                                    <GenericSelect 
+                                        className={uniformSelectClass}
+                                        value={intention} 
+                                        onValueChange={setIntention} 
+                                        options={[{ value: '', label: 'Toutes' }, ...travelIntentions]}
+                                        placeholder="Toutes"
+                                    />
                                 </div>
                                 <Separator />
-                                <div onClick={!isPremium ? handlePremiumFeatureClick : undefined} className={cn(!isPremium && 'cursor-pointer')}>
-                                    <div className="flex items-center justify-between py-1 px-1 text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <span className={cn('text-muted-foreground', !isPremium && 'opacity-50')}>Style de voyage</span>
-                                            {!isPremium && <Crown className="h-4 w-4 text-yellow-500" />}
-                                        </div>
-                                        <GenericSelect 
-                                            className={uniformSelectClass}
-                                            value={travelStyle} 
-                                            onValueChange={setTravelStyle} 
-                                            options={travelStyles} 
-                                            placeholder="Tous"
-                                            disabled={!isPremium}
-                                        />
-                                    </div>
+                                <div className="flex items-center justify-between py-1 px-1 text-sm">
+                                    <span className='text-muted-foreground'>Style de voyage</span>
+                                    <GenericSelect 
+                                        className={uniformSelectClass}
+                                        value={travelStyle} 
+                                        onValueChange={setTravelStyle} 
+                                        options={travelStyles} 
+                                        placeholder="Tous"
+                                    />
                                 </div>
                                 <Separator />
-                                <div onClick={!isPremium ? handlePremiumFeatureClick : undefined} className={cn(!isPremium && 'cursor-pointer')}>
-                                    <div className="flex items-center justify-between py-1 px-1 text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <span className={cn('text-muted-foreground', !isPremium && 'opacity-50')}>Activités</span>
-                                            {!isPremium && <Crown className="h-4 w-4 text-yellow-500" />}
-                                        </div>
-                                        <GenericSelect 
-                                            className={uniformSelectClass}
-                                            value={activities} 
-                                            onValueChange={setActivities} 
-                                            options={travelActivities} 
-                                            placeholder="Toutes"
-                                            disabled={!isPremium}
-                                        />
-                                    </div>
+                                <div className="flex items-center justify-between py-1 px-1 text-sm">
+                                    <span className='text-muted-foreground'>Activités</span>
+                                    <GenericSelect 
+                                        className={uniformSelectClass}
+                                        value={activities} 
+                                        onValueChange={setActivities} 
+                                        options={travelActivities} 
+                                        placeholder="Toutes"
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -340,28 +304,6 @@ export default function DiscoverPage() {
                     {isSearching ? 'Recherche...' : 'Recherche'}
                 </Button>
             </footer>
-
-            <AlertDialog open={isPremiumDialogOpen} onOpenChange={setIsPremiumDialogOpen}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2">
-                            <Crown className="text-yellow-500" />
-                            Fonctionnalité WanderLink Gold
-                        </AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Passez à Gold pour débloquer le Mode Passeport et les filtres avancés, et trouver le partenaire de voyage idéal où que vous soyez.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Plus tard</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => router.push('/premium')}>
-                            Passer à Gold
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
         </div>
     );
 }
-
-    
