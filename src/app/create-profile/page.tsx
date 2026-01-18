@@ -22,9 +22,8 @@ import { Capacitor } from '@capacitor/core';
 import { Camera } from '@capacitor/camera';
 import { Geolocation } from '@capacitor/geolocation';
 import { countries } from '@/lib/countries';
-import { useOnboarding } from '@/context/OnboardingContext'; // Import the hook
-
-declare var cordova: any;
+import { useOnboarding } from '@/context/OnboardingContext';
+import { PushNotifications } from '@capacitor/push-notifications';
 
 const steps = [
   { id: 1, title: 'Qui êtes-vous ?', component: Step1, fields: ['firstName', 'age', 'gender', 'profilePictures', 'bio'] },
@@ -87,6 +86,7 @@ function ProfileCreationForm() {
         return;
       }
       
+      // 1. Demande pour la géolocalisation
       try {
         const geoStatus = await Geolocation.requestPermissions();
         if (geoStatus.location === 'granted') {
@@ -103,27 +103,27 @@ function ProfileCreationForm() {
           }
         }
       } catch (e) { 
-        console.warn("Geolocation permission or request failed", e); 
-        toast({ variant: 'default', title: 'Localisation optionnelle', description: "Le pays peut être ajouté manuellement." });
+        console.warn("Geolocation or Notification permission/request failed", e); 
       }
 
+      // 2. Demande pour la caméra et les photos
       try {
         await Camera.requestPermissions({ permissions: ['camera', 'photos'] });
       } catch (e) { 
         console.warn("Camera/Photos permission failed", e);
       }
 
-      if (Capacitor.getPlatform() === 'android') {
-         try {
-            await new Promise<void>((resolve) => {
-              if (window.cordova?.plugins?.permissions) {
-                window.cordova.plugins.permissions.requestPermissions(['android.permission.RECORD_AUDIO'], () => resolve(), () => resolve());
-              } else {
-                console.warn('Cordova permissions plugin not available.');
-                resolve();
-              }
-            });
-         } catch(e) { console.error("Android RECORD_AUDIO permission error:", e); }
+      // 3. Demande pour les notifications (déplacée ici)
+      try {
+        let permStatus = await PushNotifications.checkPermissions();
+        if (permStatus.receive === 'prompt') {
+          permStatus = await PushNotifications.requestPermissions();
+        }
+        if (permStatus.receive === 'granted') {
+          await PushNotifications.register();
+        }
+      } catch (e) {
+         console.warn("Push notification permission failed", e);
       }
 
       setPermissionsReady(true);
@@ -182,7 +182,6 @@ function ProfileCreationForm() {
   
   const prevStep = () => { if (currentStep > 0) { setCurrentStep(currentStep - 1); } }; 
   const handleCancel = () => { router.push('/'); }
-  const handlePermissionRetry = async () => { /* ... (logic unchanged) ... */ };
 
   if (authLoading) { return ( <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div> ) }
 
@@ -208,10 +207,6 @@ function ProfileCreationForm() {
               </div>
 
               <div className="flex items-center gap-x-2">
-                {showPermissionRetry && (
-                    <Button type="button" variant="secondary" onClick={handlePermissionRetry}>Réessayer</Button>
-                )}
-                
                 {!(isGoogleOnboarding && watchedIntention) && (
                    currentStep < steps.length - 1 ? (
                     <Button type="button" onClick={nextStep}>
