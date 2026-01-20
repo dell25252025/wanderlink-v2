@@ -9,32 +9,48 @@ import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 
 
-// --- NOUVELLE FONCTION DE DECONNEXION ---
+// --- NOUVELLE FONCTION DE PRESENCE ---
+export async function updateUserPresence(userId: string, isOnline: boolean) {
+  if (!userId) return;
+  try {
+    const userDocRef = doc(db, 'users', userId);
+    await updateDoc(userDocRef, {
+      isOnline: isOnline,
+      lastSeen: serverTimestamp()
+    });
+  } catch (error) {
+    // This can fail if the user is offline, which is expected.
+    // We don't need to show an error to the user.
+    console.info(`Could not update presence for user ${userId}:`, error);
+  }
+}
+
+// --- FONCTION DE DECONNEXION MISE A JOUR ---
 export async function signOutFromGoogle() {
   try {
+    const user = auth.currentUser;
+    if (user) {
+      await updateUserPresence(user.uid, false); // Définir hors ligne avant de déconnecter
+    }
     if (Capacitor.isNativePlatform()) {
-      // Force la déconnexion du compte Google natif sur l'appareil
       await GoogleAuth.signOut();
     }
-    // Déconnecte l'utilisateur de la session Firebase
     await firebaseSignOut(auth);
     return { success: true };
   } catch (error) {
     console.error("Erreur lors de la déconnexion :", error);
-    const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
-    // Tenter de déconnecter Firebase même si la déconnexion Google native échoue
     await firebaseSignOut(auth).catch(e => console.error("Erreur lors de la déconnexion Firebase de secours :", e));
+    const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
     return { success: false, error: errorMessage };
   }
 }
 
-// --- LOGIQUE DE GESTION D'UTILISATEUR (CORRIGÉE) ---
+// --- LOGIQUE DE GESTION D'UTILISATEUR (INCHANGÉE) ---
 async function handleUser(user: any) {
   const userRef = doc(db, "users", user.uid);
   const userDoc = await getDoc(userRef);
 
   if (!userDoc.exists()) {
-    // L'utilisateur n'existe pas, c'est sa première connexion.
     const [firstName] = user.displayName?.split(' ') || [''];
     const photoURL = user.photoURL || null;
     
@@ -50,7 +66,9 @@ async function handleUser(user: any) {
       isPremium: false,
       subscriptionEndDate: null,
       isVerified: false,
-      profileComplete: false // Le profil est initialement incomplet
+      onboardingCompleted: false,
+      isOnline: true, // En ligne lors de la création
+      lastSeen: serverTimestamp(),
     };
     await setDoc(userRef, sanitizeData(newProfileData));
 
@@ -58,7 +76,7 @@ async function handleUser(user: any) {
       success: true, 
       id: user.uid, 
       isNewUser: true, 
-      profileComplete: false, 
+      onboardingCompleted: false, 
       userData: { 
         firstName: firstName, 
         photoURL: photoURL 
@@ -66,51 +84,57 @@ async function handleUser(user: any) {
     };
   } else {
     const data = userDoc.data();
-    const isProfileComplete = data.profileComplete === true;
+    // Mettre à jour le statut en ligne au login
+    await updateDoc(userRef, { isOnline: true, lastSeen: serverTimestamp() });
+    const isProfileComplete = data.onboardingCompleted === true;
     
     return { 
         success: true, 
         id: user.uid, 
         isNewUser: !isProfileComplete, 
-        profileComplete: isProfileComplete 
+        onboardingCompleted: isProfileComplete 
     };
   }
 }
 
 export async function signInWithGoogle() {
-  const auth = getAuth();
-
-  if (Capacitor.isNativePlatform()) {
-    try {
-      // Déconnexion préalable pour forcer le choix du compte
-      await GoogleAuth.signOut().catch(e => console.log("Déconnexion préalable (native) ignorée, continuant..."));
+  try {
+    let user;
+    if (Capacitor.isNativePlatform()) {
+      await firebaseSignOut(auth).catch(e => console.warn("Le nettoyage préventif de Firebase a échoué, continuant...", e));
       const googleUser = await GoogleAuth.signIn();
-      const idToken = googleUser.authentication.idToken;
-      const credential = GoogleAuthProvider.credential(idToken);
-      const result = await signInWithCredential(auth, credential);
-      return await handleUser(result.user);
-    } catch (error: any) {
-      console.error("Erreur avec le plugin natif Google Sign-In :", error);
-      if (error.message && (error.message.includes('12501') || error.message.includes('canceled'))) {
-         return { success: false, error: 'Connexion annulée par l\'utilisateur.' };
+      if (!googleUser.authentication?.idToken) {
+        throw new Error('Native Google sign-in failed: idToken is missing.');
       }
-      return { success: false, error: error.message || "Une erreur inconnue est survenue sur mobile." };
-    }
-  } 
-  else {
-    try {
+      const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
+      const userCredential = await signInWithCredential(auth, credential);
+      user = userCredential.user;
+    } else {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
-      return await handleUser(result.user);
-    } catch (error: any) {
-      console.error("Erreur Google Sign-In (Web) :", error);
-      if (error.code === 'auth/popup-closed-by-user') {
-        return { success: false, error: 'Connexion annulée par l\'utilisateur.' };
-      }
-      return { success: false, error: error.message || "Une erreur inconnue est survenue sur le web." };
+      user = result.user;
     }
+    return await handleUser(user);
+  } catch (error: any) {
+    console.error("signInWithGoogle error:", error);
+    let errorMessage = "Une erreur inconnue est survenue.";
+    if (error.message) {
+        if (error.message.includes('12501') || error.message.includes('canceled') || error.message.includes('popup-closed-by-user')) {
+            errorMessage = 'Connexion annulée par l\'utilisateur.';
+        } else {
+            errorMessage = error.message;
+        }
+    } else if (error.code) {
+        if (error.code === 'auth/popup-closed-by-user') {
+            errorMessage = 'Connexion annulée par l\'utilisateur.';
+        } else {
+            errorMessage = error.code;
+        }
+    }
+    return { success: false, error: errorMessage };
   }
 }
+
 
 export async function handleGoogleRedirect() {
     console.log("handleGoogleRedirect is deprecated with the current authentication approach.");
@@ -202,6 +226,7 @@ export async function createUserProfile(userId: string, profileData: any) {
             ...restOfProfileData,
             profilePictures: uploadedPhotoUrls,
             updatedAt: new Date().toISOString(),
+            onboardingCompleted: true 
         };
         if (finalProfileData.dates?.from) {
           finalProfileData.dates.from = new Date(finalProfileData.dates.from);
@@ -306,10 +331,10 @@ export async function getUserProfile(id: string): Promise<DocumentData | null> {
   }
 }
 
-export async function getAllUsers(count?: number) {
+export async function getAllUsers() {
   try {
     const usersCollection = collection(db, "users");
-    const q = count ? firestoreQuery(usersCollection, limit(count)) : usersCollection;
+    const q = firestoreQuery(usersCollection, where("onboardingCompleted", "==", true));
     const userSnapshot = await getDocs(q);
     const userList = userSnapshot.docs.map(doc => {
       const data = doc.data();
@@ -412,7 +437,7 @@ export async function removeFriend(currentUserId: string, friendId: string) {
     const currentUserRef = doc(db, 'users', currentUserId);
     const friendRef = doc(db, 'users', friendId);
     await updateDoc(currentUserRef, {
-      friends: arrayRemove(currentUserId),
+      friends: arrayRemove(friendId),
     });
     await updateDoc(friendRef, {
       friends: arrayRemove(currentUserId),

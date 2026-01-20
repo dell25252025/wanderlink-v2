@@ -1,4 +1,3 @@
-
 import Image from 'next/image';
 import type { UserProfile } from '@/lib/schema';
 import { Card } from '@/components/ui/card';
@@ -37,6 +36,10 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, isFriend, onAddFrien
 
   return (
     <Card className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl border-0 shadow-lg group">
+       {/* @ts-ignore */}
+      {profile.isOnline && (
+        <div className="absolute top-3 right-3 z-10 h-3 w-3 rounded-full bg-green-500 ring-2 ring-white" />
+      )}
       <Link href={`/profile?id=${profile.id}`} passHref>
         <div className="cursor-pointer">
             <Image

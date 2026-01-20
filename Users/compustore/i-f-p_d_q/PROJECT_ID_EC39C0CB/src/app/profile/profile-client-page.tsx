@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
@@ -13,7 +12,7 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import type { User } from 'firebase/auth';
 import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -24,6 +23,7 @@ import { Drawer, DrawerContent, DrawerTrigger, DrawerClose, DrawerHeader as Draw
 import { cn } from '@/lib/utils';
 import { countries } from '@/lib/countries';
 import { travelIntentions, travelStyles, travelActivities } from '@/lib/options';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 const CannabisIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -44,7 +44,7 @@ const intentionMap: { [key: string]: { icon: React.ElementType, color: string, t
 
 const MAX_PHOTOS = 6;
 
-const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: number }) => {
+const PhotoViewer = ({ images, startIndex, onClose }: { images: string[], startIndex: number, onClose: () => void }) => {
     const [currentIndex, setCurrentIndex] = useState(startIndex);
     const [scale, setScale] = useState(1);
     const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -52,7 +52,10 @@ const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: num
     const lastDist = useRef(0);
     const { toast } = useToast();
     const [isLiked, setIsLiked] = useState(false);
-
+    
+    // For swipe gestures
+    const touchStartX = useRef(0);
+    const touchStartY = useRef(0);
 
     const resetZoom = () => {
         setScale(1);
@@ -65,7 +68,6 @@ const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: num
         setIsLiked(false);
     }, [currentIndex]);
 
-
     const handleNext = () => {
         setCurrentIndex((prev) => (prev + 1) % images.length);
         resetZoom();
@@ -76,9 +78,6 @@ const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: num
         resetZoom();
     };
 
-    const handleZoomIn = () => setScale(s => Math.min(s + 0.2, 3));
-    const handleZoomOut = () => setScale(s => Math.max(s - 0.2, 1));
-    
     const handleLike = () => {
         const newLikedState = !isLiked;
         setIsLiked(newLikedState);
@@ -101,14 +100,21 @@ const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: num
         };
 
         const handleTouchStart = (e: TouchEvent) => {
+            // Pinch-to-zoom start
             if (e.touches.length === 2) {
                 const dx = e.touches[0].clientX - e.touches[1].clientX;
                 const dy = e.touches[0].clientY - e.touches[1].clientY;
                 lastDist.current = Math.sqrt(dx * dx + dy * dy);
+            } 
+            // Swipe start
+            else if (e.touches.length === 1) {
+                touchStartX.current = e.touches[0].clientX;
+                touchStartY.current = e.touches[0].clientY;
             }
         };
 
         const handleTouchMove = (e: TouchEvent) => {
+            // Pinch-to-zoom move
             if (e.touches.length === 2) {
                 e.preventDefault();
                 const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -119,17 +125,39 @@ const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: num
                 lastDist.current = dist;
             }
         };
+        
+        const handleTouchEnd = (e: TouchEvent) => {
+            // Swipe end
+            if (e.changedTouches.length === 1 && scale === 1) { // only swipe when not zoomed
+                const touchEndX = e.changedTouches[0].clientX;
+                const touchEndY = e.changedTouches[0].clientY;
+                const deltaX = touchEndX - touchStartX.current;
+                const deltaY = touchEndY - touchStartY.current;
+    
+                // Horizontal swipe detection
+                if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) { 
+                    if (deltaX < 0) {
+                        handleNext();
+                    } else {
+                        handlePrev();
+                    }
+                }
+            }
+        };
 
         const imageEl = imageRef.current;
         imageEl?.addEventListener('wheel', handleWheel, { passive: false });
         imageEl?.addEventListener('touchstart', handleTouchStart, { passive: true });
         imageEl?.addEventListener('touchmove', handleTouchMove, { passive: false });
+        imageEl?.addEventListener('touchend', handleTouchEnd, { passive: true });
+        
         return () => {
             imageEl?.removeEventListener('wheel', handleWheel);
             imageEl?.removeEventListener('touchstart', handleTouchStart);
             imageEl?.removeEventListener('touchmove', handleTouchMove);
+            imageEl?.removeEventListener('touchend', handleTouchEnd);
         }
-    }, [currentIndex]);
+    }, [currentIndex, images.length, scale]);
     
     useEffect(() => {
         if (scale === 1) {
@@ -142,9 +170,14 @@ const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: num
             <DialogHeader className="sr-only">
                 <DialogTitle>Visionneuse de photos</DialogTitle>
                 <DialogDescription>
-                    Agrandissement de la photo de profil. Utilisez les flèches pour naviguer et les boutons pour zoomer.
+                    Glissez pour naviguer entre les photos et pincez pour zoomer.
                 </DialogDescription>
             </DialogHeader>
+             <DialogClose asChild>
+                <Button variant="ghost" size="icon" className="absolute top-2 right-2 z-50 h-9 w-9 text-white bg-black/30 hover:bg-black/50 hover:text-white" onClick={onClose}>
+                    <X className="h-5 w-5" />
+                </Button>
+            </DialogClose>
              <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
                 <Image
                     ref={imageRef}
@@ -171,13 +204,6 @@ const PhotoViewer = ({ images, startIndex }: { images: string[], startIndex: num
                     }}
                 />
             </div>
-
-            {images.length > 1 && (
-                <>
-                    <Button onClick={handlePrev} variant="ghost" size="icon" className="absolute left-2 top-1/2 -translate-y-1/2 text-white bg-black/30 hover:bg-black/50 hover:text-white"><ArrowLeft /></Button>
-                    <Button onClick={handleNext} variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 text-white bg-black/30 hover:bg-black/50 hover:text-white"><ArrowRight /></Button>
-                </>
-            )}
            
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 rounded-full bg-black/30 text-white">
                 <Button 
@@ -213,6 +239,7 @@ export default function ProfileClientPage() {
   const [isFriend, setIsFriend] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isFriendActionLoading, setIsFriendActionLoading] = useState(false);
+  const [photoViewerIndex, setPhotoViewerIndex] = useState<number | null>(null);
 
   useEffect(() => {
     setIsClient(true);
@@ -248,24 +275,31 @@ export default function ProfileClientPage() {
 
   useEffect(() => {
     if (profileId) {
-      const fetchProfile = async () => {
         setLoading(true);
-        try {
-          const profileData = await getUserProfile(profileId as string);
-          setProfile(profileData);
-        } catch (error) {
-          console.error("Failed to fetch profile:", error);
-          toast({
-            variant: "destructive",
-            title: "Erreur de chargement",
-            description: "Impossible de récupérer les informations du profil."
-          })
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchProfile();
-    }
+        const unsub = onSnapshot(doc(db, "users", profileId as string), (docSnap) => {
+            if (docSnap.exists()) {
+              setProfile({ id: docSnap.id, ...docSnap.data() });
+            } else {
+              setProfile(null);
+              toast({
+                  variant: "destructive",
+                  title: "Erreur de chargement",
+                  description: "Profil non trouvé."
+              });
+            }
+            setLoading(false);
+        }, (error) => {
+            console.error("Failed to fetch profile:", error);
+            toast({
+              variant: "destructive",
+              title: "Erreur de chargement",
+              description: "Impossible de récupérer les informations du profil."
+            });
+            setLoading(false);
+        });
+  
+        return () => unsub();
+      }
   }, [profileId, toast]);
 
   const handlePhotoAdd = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -377,7 +411,28 @@ export default function ProfileClientPage() {
   
   const handleBlockUser = () => {
     setIsDrawerOpen(false);
-    toast({ title: `${profile?.firstName} a été bloqué(e).` });
+    if (!profile) return;
+    try {
+      const blockedUsers = JSON.parse(localStorage.getItem('blockedUsers') || '[]');
+      const isAlreadyBlocked = blockedUsers.some((user: any) => user.id === profile.id);
+      
+      if (!isAlreadyBlocked) {
+        const userToBlock = {
+          id: profile.id,
+          name: profile.firstName,
+          avatarUrl: profile.profilePictures?.[0] || `https://picsum.photos/seed/${profile.id}/200`
+        };
+        blockedUsers.push(userToBlock);
+        localStorage.setItem('blockedUsers', JSON.stringify(blockedUsers));
+        toast({ title: `${profile.firstName} a été bloqué(e).` });
+        router.push('/');
+      } else {
+        toast({ title: 'Déjà bloqué', description: `${profile.firstName} est déjà dans votre liste de blocage.` });
+      }
+    } catch (error) {
+      console.error("Failed to block user:", error);
+      toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de bloquer cet utilisateur.' });
+    }
   };
 
   const handleReportUser = () => {
@@ -438,7 +493,7 @@ export default function ProfileClientPage() {
       ? `${format(fromDate, 'd LLL yyyy', { locale: fr })}${toDate ? ` au ${format(toDate, 'd LLL yyyy', { locale: fr })}` : ''}`
       : 'Non spécifié';
 
-  const profilePictures = profile.profilePictures && profile.profilePictures.length > 0 ? profile.profilePictures : [];
+  const profilePictures = profile.profilePictures && profile.profilePictures.length > 0 ? [...new Set(profile.profilePictures)] : [];
   
   const destinationCountry = countries.find(c => c.name === profile.destination);
   const locationCountry = countries.find(c => c.name === profile.location);
@@ -453,10 +508,10 @@ export default function ProfileClientPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
         </header>
-        <main className={cn("flex-1", !isOwner && "pb-4")}>
+        <main className={cn("flex-1", !isOwner && "pb-24 md:pb-0")}>
              <div className="w-full bg-background md:py-4">
                 {profilePictures.length > 0 ? (
-                    <Dialog>
+                    <>
                         <Carousel
                             className="w-full max-w-4xl mx-auto"
                              opts={{
@@ -473,23 +528,25 @@ export default function ProfileClientPage() {
                             <CarouselContent className="-ml-1 md:-ml-4">
                                 {profilePictures.map((src: string, index: number) => (
                                     <CarouselItem key={index} className="pl-1 md:pl-4 basis-2/5 md:basis-1/5">
-                                        <DialogTrigger asChild>
-                                            <div className="relative aspect-[3/4] w-full overflow-hidden rounded-lg md:rounded-2xl group cursor-pointer">
-                                                <Image 
-                                                    src={src}
-                                                    alt={`Photo de profil de ${profile.firstName} ${index + 1}`}
-                                                    fill
-                                                    className="object-cover"
-                                                    priority={index === 0}
-                                                />
-                                            </div>
-                                        </DialogTrigger>
+                                        <div onClick={() => setPhotoViewerIndex(index)} className="relative aspect-[3/4] w-full overflow-hidden rounded-lg md:rounded-2xl group cursor-pointer">
+                                            <Image 
+                                                src={src}
+                                                alt={`Photo de profil de ${profile.firstName} ${index + 1}`}
+                                                fill
+                                                className="object-cover"
+                                                priority={index === 0}
+                                            />
+                                        </div>
                                     </CarouselItem>
                                 ))}
                             </CarouselContent>
                         </Carousel>
-                        {isClient && <PhotoViewer images={profilePictures} startIndex={0} />}
-                    </Dialog>
+                        <Dialog open={photoViewerIndex !== null} onOpenChange={(open) => !open && setPhotoViewerIndex(null)}>
+                            {isClient && photoViewerIndex !== null && (
+                                <PhotoViewer images={profilePictures} startIndex={photoViewerIndex} onClose={() => setPhotoViewerIndex(null)} />
+                            )}
+                        </Dialog>
+                    </>
                 ) : (
                      <div className="flex h-48 md:h-64 w-full items-center justify-center bg-card">
                          {isOwner ? (
@@ -512,6 +569,7 @@ export default function ProfileClientPage() {
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                                 <h1 className="text-2xl md:text-2xl font-bold font-headline truncate">{profile.firstName}, {profile.age}</h1>
+                                {profile.isOnline && <div className="h-3 w-3 rounded-full bg-green-500 shrink-0" />}
                                 {profile.isVerified && <CheckCircle className="h-5 w-5 text-blue-500 shrink-0" />}
                             </div>
                             <div className="flex items-center gap-2 mt-1 text-sm md:text-sm text-muted-foreground">
@@ -580,6 +638,35 @@ export default function ProfileClientPage() {
                                 {intention.text}
                             </Badge>
                         )}
+                        {!isOwner && (
+                          <div className="flex items-center gap-2">
+                              {isFriend ? (
+                                  <AlertDialog>
+                                      <AlertDialogTrigger asChild>
+                                          <Button variant="secondary" size="sm" className="h-8">
+                                              <UserCheck className="mr-2 h-4 w-4 text-green-500" /> Amis
+                                          </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                              <AlertDialogTitle>Retirer {profile.firstName} de vos amis ?</AlertDialogTitle>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                              <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                              <AlertDialogAction onClick={handleFriendAction} className="bg-destructive hover:bg-destructive/90">
+                                                  <UserX className="mr-2 h-4 w-4" /> Retirer
+                                              </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                  </AlertDialog>
+                              ) : (
+                                  <Button onClick={handleFriendAction} size="sm" variant="secondary" disabled={isFriendActionLoading}>
+                                      {isFriendActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
+                                      Ajouter
+                                  </Button>
+                              )}
+                          </div>
+                        )}
                         {isOwner && !profile.isVerified && (
                             <Button variant="default" size="icon" className="h-8 w-8 bg-blue-500 hover:bg-blue-600 text-white" asChild>
                                 <Link href="/profile/verify">
@@ -591,35 +678,8 @@ export default function ProfileClientPage() {
                     </div>
 
                     {!isOwner && (
-                        <div className="mt-4 flex w-full gap-2">
-                            {isFriend ? (
-                                <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                        <Button variant="secondary" className="flex-1" disabled={isFriendActionLoading}>
-                                            {isFriendActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="mr-2 h-4 w-4" />}
-                                            Amis
-                                        </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                            <AlertDialogTitle>Retirer {profile.firstName} de vos amis ?</AlertDialogTitle>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                            <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                            <AlertDialogAction onClick={handleFriendAction} className="bg-destructive hover:bg-destructive/90">
-                                                <UserX className="mr-2 h-4 w-4" /> Retirer
-                                            </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                </AlertDialog>
-                            ) : (
-                                <Button onClick={handleFriendAction} className="flex-1" variant="secondary" disabled={isFriendActionLoading}>
-                                     {isFriendActionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
-                                    Ajouter
-                                </Button>
-                            )}
-
-                            <Button asChild className="flex-1">
+                        <div className="fixed bottom-0 left-0 right-0 z-10 p-4 bg-background/80 backdrop-blur-sm border-t md:hidden">
+                            <Button asChild className="w-full" size="lg">
                                 <Link href={`/chat?id=${profileId}`}>
                                     <Send className="mr-2 h-4 w-4" /> Message
                                 </Link>
@@ -759,5 +819,3 @@ export default function ProfileClientPage() {
     </div>
   );
 }
-
-    
