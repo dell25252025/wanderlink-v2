@@ -69,16 +69,35 @@ export const syncUserToAlgolia = onDocumentWritten("users/{userId}", async (even
         return;
     }
 
-    const { privateData, email, ...rest } = newData;
-    const algoliaRecord: any = { objectID, ...rest };
+    // Explicitly build the record for Algolia to ensure all filterable fields have a value.
+    // This prevents profiles from being excluded from search results if a filterable field is missing.
+    const algoliaRecord: any = {
+        objectID,
+        // --- Core Profile Info for display ---
+        firstName: newData.firstName || '',
+        profilePictures: newData.profilePictures || [],
+        isVerified: newData.isVerified || false,
+        onboardingCompleted: newData.onboardingCompleted || false,
+
+        // --- Filterable Attributes (with defaults) ---
+        gender: newData.gender || null, // Use null for attributes that can be absent
+        age: typeof newData.age === 'number' ? newData.age : -1, // Use -1 as a sentinel value for missing age
+        location: newData.location || null,
+        destination: newData.destination || 'Toutes',
+        intention: newData.intention || null,
+        travelStyle: newData.travelStyle || 'Tous',
+        activities: newData.activities || 'Toutes',
+    };
 
     if (newData.latitude && newData.longitude) {
         algoliaRecord._geoloc = { lat: newData.latitude, lng: newData.longitude };
     }
 
+    logger.info(`Attempting to index user ${objectID}. Data:`, algoliaRecord);
+
     try {
         await usersIndex.saveObject(algoliaRecord);
-        logger.log(`User ${objectID} indexed in Algolia.`);
+        logger.log(`User ${objectID} successfully indexed in Algolia.`);
     } catch (error) {
         logger.error(`Error indexing user ${objectID} in Algolia:`, error);
     }
@@ -165,3 +184,157 @@ export const onUserDelete = onUserDeleted(async (event) => {
         logger.error(`Error cleaning up data for user ${userId}:`, error);
     }
 });
+
+// --- START: Notification Functions ---
+
+// Sends a notification when a new call is created.
+export const sendCallNotification = onDocumentWritten("calls/{callId}", async (event) => {
+    // Only trigger on create
+    if (!event.data?.after.exists || event.data.before.exists) {
+        return;
+    }
+
+    const callData = event.data.after.data();
+    if (!callData) return;
+
+    const { callerId, receiverId, isVideo } = callData;
+
+    const [callerProfile, receiverProfile] = await Promise.all([
+        admin.firestore().collection('users').doc(callerId).get(),
+        admin.firestore().collection('users').doc(receiverId).get()
+    ]);
+    
+    const receiverToken = receiverProfile.data()?.fcmToken;
+    const callerName = callerProfile.data()?.firstName || 'Quelqu\\'un';
+
+    if (!receiverToken) {
+        logger.log(`Receiver ${receiverId} does not have an FCM token.`);
+        return;
+    }
+
+    const callType = isVideo ? "vidéo" : "audio";
+    const payload = {
+        token: receiverToken,
+        notification: {
+            title: `Appel ${callType} entrant 📞`,
+            body: `${callerName} vous appelle.`
+        },
+        data: {
+            type: 'VIDEO_CALL',
+            callId: event.params.callId,
+            callerName: callerName
+        },
+        android: {
+            priority: 'high' as const
+        }
+    };
+
+    try {
+        await admin.messaging().send(payload);
+        logger.log(`Call notification sent to ${receiverId}`);
+    } catch (error) {
+        logger.error(`Error sending call notification to ${receiverId}:`, error);
+    }
+});
+
+
+// Sends a notification for a new message.
+export const sendNewMessageNotification = onDocumentWritten("chats/{chatId}/messages/{messageId}", async (event) => {
+    if (!event.data?.after.exists || event.data.before.exists) {
+        return;
+    }
+    const messageData = event.data.after.data();
+    if (!messageData) return;
+
+    const { senderId, text, imageUrl, audioUrl } = messageData;
+    const chatId = event.params.chatId;
+    const participants = chatId.split('_');
+    const receiverId = participants.find(p => p !== senderId);
+
+    if (!receiverId) return;
+
+     const [senderProfile, receiverProfile] = await Promise.all([
+        admin.firestore().collection('users').doc(senderId).get(),
+        admin.firestore().collection('users').doc(receiverId).get()
+    ]);
+
+    const receiverToken = receiverProfile.data()?.fcmToken;
+    const senderName = senderProfile.data()?.firstName || 'Quelqu\\'un';
+
+    if (!receiverToken) return;
+
+    let messageBody = text;
+    if(imageUrl) messageBody = '📷 a envoyé une photo.';
+    if(audioUrl) messageBody = '🎤 a envoyé un message vocal.';
+
+    const payload = {
+        token: receiverToken,
+        notification: {
+            title: `Nouveau message de ${senderName}`,
+            body: messageBody
+        },
+        data: {
+            type: 'MESSAGE',
+            chatId: chatId,
+            senderId: senderId
+        }
+    };
+
+     try {
+        await admin.messaging().send(payload);
+        logger.log(`Message notification sent to ${receiverId}`);
+    } catch (error) {
+        logger.error(`Error sending message notification to ${receiverId}:`, error);
+    }
+});
+
+// Sends a notification for a new friend request.
+export const sendFriendRequestNotification = onDocumentWritten("users/{userId}", async (event) => {
+    if (!event.data?.before.exists || !event.data?.after.exists) {
+        return; // Only interested in updates
+    }
+    const beforeData = event.data.before.data();
+    const afterData = event.data.after.data();
+    const beforeFriends = beforeData.friends || [];
+    const afterFriends = afterData.friends || [];
+
+    // Find who added whom
+    if (afterFriends.length > beforeFriends.length) {
+        const newFriendId = afterFriends.find((id: string) => !beforeFriends.includes(id));
+        const userIdWhoWasAdded = event.params.userId; // The document that was changed
+        const userIdWhoAdded = newFriendId;
+        
+        if (!userIdWhoAdded) return;
+
+        const [addedByProfile, addedProfile] = await Promise.all([
+             admin.firestore().collection('users').doc(userIdWhoAdded).get(),
+             admin.firestore().collection('users').doc(userIdWhoWasAdded).get()
+        ]);
+
+        const receiverToken = addedProfile.data()?.fcmToken;
+        const senderName = addedByProfile.data()?.firstName || 'Quelqu\\'un';
+
+        if (!receiverToken) return;
+
+        const payload = {
+            token: receiverToken,
+            notification: {
+                title: 'Nouvelle amitié ! 🎉',
+                body: `${senderName} vous a ajouté(e) comme ami(e).`
+            },
+            data: {
+                type: 'FRIEND_REQUEST',
+                senderId: userIdWhoAdded
+            }
+        };
+
+        try {
+            await admin.messaging().send(payload);
+            logger.log(`Friend request notification sent to ${userIdWhoWasAdded}`);
+        } catch (error) {
+            logger.error(`Error sending friend request notification to ${userIdWhoWasAdded}:`, error);
+        }
+    }
+});
+
+// --- END: Notification Functions ---
