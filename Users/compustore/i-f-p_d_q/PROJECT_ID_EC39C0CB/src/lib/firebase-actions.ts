@@ -1,7 +1,8 @@
+
 'use client';
 
 import { db, storage, auth } from "@/lib/firebase";
-import { collection, doc, getDoc, DocumentData, setDoc, updateDoc, getDocs, arrayUnion, arrayRemove, addDoc, serverTimestamp, limit, query as firestoreQuery } from "firebase/firestore";
+import { collection, doc, getDoc, DocumentData, setDoc, updateDoc, getDocs, arrayUnion, arrayRemove, addDoc, serverTimestamp, limit, query as firestoreQuery, where } from "firebase/firestore";
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut, signInWithCredential } from "firebase/auth";
 import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 import { v4 as uuidv4 } from 'uuid';
@@ -471,3 +472,5 @@ export async function getFriends(userId: string) {
     throw new Error("Failed to retrieve friends list.");
   }
 }
+
+    

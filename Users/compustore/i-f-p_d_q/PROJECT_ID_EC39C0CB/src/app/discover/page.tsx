@@ -121,18 +121,19 @@ export default function DiscoverPage() {
         }
         setIsSearching(true);
     
-        // Hard filters: gender is always a strict requirement.
+        // Filtres stricts qui DOIVENT correspondre
         const filters: string[] = [];
         if (showMe) {
             filters.push(`gender:"${showMe}"`);
         }
+        filters.push(`onboardingCompleted:true`); // N'inclure que les profils complets
         filters.push(`NOT objectID:${currentUser.uid}`);
     
-        // Numeric filters: Age is a hard filter, but we include profiles without an age set.
+        // Filtre numérique pour l'âge, incluant les profils sans âge spécifié
         const numericFilters: string[] = [];
         numericFilters.push(`(age >= ${ageRange[0]} AND age <= ${ageRange[1]}) OR age = -1`);
         
-        // Optional filters: These will influence ranking but not exclude results.
+        // Filtres optionnels : ils influencent le classement mais n'excluent pas les résultats
         const optionalFilters: string[] = [];
         if (country && !nearby) {
             optionalFilters.push(`location:"${country}"`);
@@ -158,14 +159,14 @@ export default function DiscoverPage() {
     
         if (nearby && userProfile.latitude && userProfile.longitude) {
             searchOptions.aroundLatLng = `${userProfile.latitude}, ${userProfile.longitude}`;
-            searchOptions.aroundRadius = 50000; // 50km radius in meters
+            searchOptions.aroundRadius = 50000; // Rayon de 50km
         }
         
-        console.log("Algolia search options:", JSON.stringify(searchOptions, null, 2));
+        console.log("Options de recherche Algolia:", JSON.stringify(searchOptions, null, 2));
     
         try {
             const { hits, nbHits } = await usersIndex.search('', searchOptions);
-            console.log(`Algolia search found ${nbHits} hits.`);
+            console.log(`Recherche Algolia terminée : ${nbHits} résultats trouvés.`);
             const searchResults = hits.map((hit: any) => {
                 const { _highlightResult, _snippetResult, ...rest } = hit;
                 return { id: hit.objectID, ...rest };
@@ -323,3 +324,5 @@ export default function DiscoverPage() {
         </div>
     );
 }
+
+    
