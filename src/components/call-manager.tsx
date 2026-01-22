@@ -1,10 +1,11 @@
+
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { getUserProfile } from '@/lib/firebase-actions';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -14,17 +15,40 @@ import { Phone, Video, X } from 'lucide-react';
 interface CallData {
   id: string;
   callerId: string;
-  receiverId: string; 
+  receiverId: string;
   status: 'ringing' | 'active' | 'ended' | 'rejected';
   isVideo: boolean;
   [key: string]: any;
 }
 
-export function CallManager() { // Changement ici: export nommé
+export function CallManager() {
   const [currentUser] = useAuthState(auth);
   const [incomingCall, setIncomingCall] = useState<CallData | null>(null);
   const [callerProfile, setCallerProfile] = useState<any>(null);
   const router = useRouter();
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (incomingCall) {
+      if (!audioRef.current) {
+        audioRef.current = new Audio('https://ik.imagekit.io/fip3ktm2p/ringtone-023-376906.mp3?updatedAt=1765815052990');
+        audioRef.current.loop = true;
+      }
+      audioRef.current.play().catch(e => console.error("Erreur de lecture de la sonnerie (peut être dû aux politiques autoplay du navigateur):", e));
+    } else {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    }
+    // Cleanup on component unmount
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    };
+  }, [incomingCall]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -40,8 +64,10 @@ export function CallManager() { // Changement ici: export nommé
         if(window.location.pathname.startsWith('/call/')) return;
 
         setIncomingCall(callData);
-        const profile = await getUserProfile(callData.callerId);
-        setCallerProfile(profile);
+        if (!callerProfile) {
+            const profile = await getUserProfile(callData.callerId);
+            setCallerProfile(profile);
+        }
       } else {
         setIncomingCall(null);
         setCallerProfile(null);
@@ -49,10 +75,14 @@ export function CallManager() { // Changement ici: export nommé
     });
 
     return () => unsubscribe();
-  }, [currentUser]);
+  }, [currentUser, callerProfile]);
 
   const handleAcceptCall = useCallback(async () => {
     if (!incomingCall) return;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
     const callDocRef = doc(db, 'calls', incomingCall.id);
     await updateDoc(callDocRef, { status: 'active' });
     setIncomingCall(null);
@@ -61,6 +91,10 @@ export function CallManager() { // Changement ici: export nommé
 
   const handleRejectCall = useCallback(async () => {
     if (!incomingCall) return;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
     const callDocRef = doc(db, 'calls', incomingCall.id);
     await updateDoc(callDocRef, { status: 'rejected' });
     setIncomingCall(null);
