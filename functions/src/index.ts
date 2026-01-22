@@ -55,33 +55,39 @@ export const syncUserToAlgolia = onDocumentWritten("users/{userId}", async (even
     // Case 1: Document deleted from Firestore OR onboarding is not complete
     if (!event.data?.after.exists || event.data.after.data()?.onboardingCompleted !== true) {
         try {
+            // Attempt to delete the object from Algolia.
+            // This is safe to call even if the object doesn't exist.
             await usersIndex.deleteObject(objectID);
+            
             if (!event.data?.after.exists) {
                 logger.log(`SUCCESS: User ${objectID} deleted from Algolia index 'users'.`);
             } else {
                 logger.log(`INFO: Incomplete profile ${objectID} removed from Algolia index 'users'.`);
             }
         } catch (error) {
-            // It's not a critical error if the object to delete doesn't exist.
-            logger.warn(`Warning while trying to delete user ${objectID} from Algolia:`, error);
+            // Log a warning if the deletion fails for some reason other than not found.
+            logger.warn(`Warning while trying to delete user ${objectID} from Algolia index 'users':`, error);
         }
         return;
     }
 
-    // Case 2: Document is complete and should be indexed.
+    // Case 2: Document exists and onboarding is complete.
     const newData = event.data.after.data();
 
+    // Construct a clean, predictable record for Algolia.
+    // This ensures all filterable attributes exist.
     const algoliaRecord: any = {
         objectID,
-        // --- Core Profile Info for display ---
+        onboardingCompleted: true,
+
+        // --- Core display attributes ---
         firstName: newData.firstName || '',
         profilePictures: newData.profilePictures || [],
         isVerified: newData.isVerified || false,
-        onboardingCompleted: true, // Guaranteed to be true at this point
-
-        // --- Filterable Attributes (with defaults for robustness) ---
+        
+        // --- Filterable attributes with safe defaults ---
         gender: newData.gender || null, // Use null for attributes that can be absent
-        age: typeof newData.age === 'number' ? newData.age : -1, // Use -1 as a sentinel value
+        age: typeof newData.age === 'number' ? newData.age : -1, // Use -1 as a sentinel for missing age
         location: newData.location || null,
         destination: newData.destination || 'Toutes',
         intention: newData.intention || null,
@@ -89,17 +95,18 @@ export const syncUserToAlgolia = onDocumentWritten("users/{userId}", async (even
         activities: newData.activities || 'Toutes',
     };
 
+    // Add geolocation if available
     if (newData.latitude && newData.longitude) {
         algoliaRecord._geoloc = { lat: newData.latitude, lng: newData.longitude };
     }
-
-    logger.info(`Indexing complete profile for user ${objectID} in index 'users'.`);
+    
+    logger.log(`SYNC: Preparing to index objectID '${objectID}' in index 'users'.`, { data: algoliaRecord });
 
     try {
         await usersIndex.saveObject(algoliaRecord);
-        logger.log(`SUCCESS: User ${objectID} indexed in Algolia.`);
+        logger.log(`SUCCESS: User ${objectID} indexed in Algolia index 'users'.`);
     } catch (error) {
-        logger.error(`FAILURE: Error indexing user ${objectID} in Algolia:`, error);
+        logger.error(`FAILURE: Error indexing user ${objectID} in Algolia index 'users':`, error);
     }
 });
 
