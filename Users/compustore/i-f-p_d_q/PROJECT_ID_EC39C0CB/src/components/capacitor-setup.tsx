@@ -37,7 +37,7 @@ const CapacitorSetup = () => {
           if (data.type === 'INCOMING_CALL' && data.callId) {
               // L'action "accept" est pour notre bouton personnalisé, "tap" est pour un appui sur la notification elle-même
               if (notification.actionId === 'accept' || notification.actionId === 'tap') { 
-                  router.push(`/call/${data.callId}`);
+                  router.push(`/call/receive?callId=${data.callId}&video=${data.isVideo === 'true'}`);
               } 
               // L'action "reject" pour refuser l'appel
               else if (notification.actionId === 'reject') {
