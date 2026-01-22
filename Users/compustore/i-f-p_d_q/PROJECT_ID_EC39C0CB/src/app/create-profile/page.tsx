@@ -24,8 +24,8 @@ import { Geolocation } from '@capacitor/geolocation';
 import { countries } from '@/lib/countries';
 import { useOnboarding } from '@/context/OnboardingContext';
 import { PushNotifications } from '@capacitor/push-notifications';
+import { AndroidPermissions } from '@awesome-cordova-plugins/android-permissions';
 
-declare var cordova: any;
 
 const steps = [
   { id: 1, title: 'Qui êtes-vous ?', component: Step1, fields: ['firstName', 'age', 'gender', 'profilePictures', 'bio'] },
@@ -117,19 +117,29 @@ function ProfileCreationForm() {
 
       // 3. Demande pour le microphone
       if (Capacitor.getPlatform() === 'android') {
-         try {
-            await new Promise<void>((resolve) => {
-              if (window.cordova?.plugins?.permissions) {
-                window.cordova.plugins.permissions.requestPermissions(['android.permission.RECORD_AUDIO'], () => resolve(), () => resolve());
-              } else {
-                console.warn('Cordova permissions plugin not available.');
-                resolve();
-              }
-            });
-         } catch(e) { console.error("Android RECORD_AUDIO permission error:", e); }
+        try {
+          const checkResult = await AndroidPermissions.checkPermission(AndroidPermissions.PERMISSION.RECORD_AUDIO);
+          if (!checkResult.hasPermission) {
+            await AndroidPermissions.requestPermission(AndroidPermissions.PERMISSION.RECORD_AUDIO);
+          }
+        } catch (e) {
+          console.error("Android RECORD_AUDIO permission error:", e);
+        }
+      }
+
+      // 4. Demande pour l'état du téléphone (NOUVEAU)
+      if (Capacitor.getPlatform() === 'android') {
+        try {
+          const checkResult = await AndroidPermissions.checkPermission(AndroidPermissions.PERMISSION.READ_PHONE_STATE);
+          if (!checkResult.hasPermission) {
+            await AndroidPermissions.requestPermission(AndroidPermissions.PERMISSION.READ_PHONE_STATE);
+          }
+        } catch (e) {
+          console.error("Android READ_PHONE_STATE permission error:", e);
+        }
       }
       
-      // 4. Demande pour les notifications
+      // 5. Demande pour les notifications
       try {
         let permStatus = await PushNotifications.checkPermissions();
         if (permStatus.receive === 'prompt') {
