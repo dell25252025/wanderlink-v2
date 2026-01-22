@@ -52,41 +52,61 @@ export const syncUserToAlgolia = onDocumentWritten("users/{userId}", async (even
     const objectID = event.params.userId;
     const usersIndex = getAlgoliaClient().initIndex("users");
 
-    if (!event.data?.after.exists) {
+    // Case 1: Document deleted from Firestore OR onboarding is not complete
+    if (!event.data?.after.exists || event.data.after.data()?.onboardingCompleted !== true) {
         try {
+            // Attempt to delete the object from Algolia.
+            // This is safe to call even if the object doesn't exist.
             await usersIndex.deleteObject(objectID);
-            logger.log(`User ${objectID} deleted from Algolia.`);
+            
+            if (!event.data?.after.exists) {
+                logger.log(`SUCCESS: User ${objectID} deleted from Algolia index 'users'.`);
+            } else {
+                logger.log(`INFO: Incomplete profile ${objectID} removed from Algolia index 'users'.`);
+            }
         } catch (error) {
-            logger.error(`Error deleting user ${objectID} from Algolia:`, error);
+            // Log a warning if the deletion fails for some reason other than not found.
+            logger.warn(`Warning while trying to delete user ${objectID} from Algolia index 'users':`, error);
         }
         return;
     }
 
+    // Case 2: Document exists and onboarding is complete.
     const newData = event.data.after.data();
 
-    if (!newData) {
-        logger.warn(`No data found for user ${objectID} on write event.`);
-        return;
-    }
+    // Construct a clean, predictable record for Algolia.
+    // This ensures all filterable attributes exist.
+    const algoliaRecord: any = {
+        objectID,
+        onboardingCompleted: true,
 
-    const { privateData, email, ...rest } = newData;
-    const algoliaRecord: any = { objectID, ...rest };
+        // --- Core display attributes ---
+        firstName: newData.firstName || '',
+        profilePictures: newData.profilePictures || [],
+        isVerified: newData.isVerified || false,
+        
+        // --- Filterable attributes with safe defaults ---
+        gender: newData.gender || null, // Use null for attributes that can be absent
+        age: typeof newData.age === 'number' ? newData.age : -1, // Use -1 as a sentinel for missing age
+        location: newData.location || null,
+        destination: newData.destination || 'Toutes',
+        intention: newData.intention || null,
+        travelStyle: newData.travelStyle || 'Tous',
+        activities: newData.activities || 'Toutes',
+    };
 
+    // Add geolocation if available
     if (newData.latitude && newData.longitude) {
         algoliaRecord._geoloc = { lat: newData.latitude, lng: newData.longitude };
     }
-
-    // Ensure age is always present for filtering, using a sentinel value.
-    if (typeof newData.age !== 'number') {
-        algoliaRecord.age = -1;
-    }
-
+    
+    logger.log(`SYNC: Preparing to index objectID '${objectID}' in index 'users'.`, { data: algoliaRecord });
 
     try {
         await usersIndex.saveObject(algoliaRecord);
-        logger.log(`User ${objectID} indexed in Algolia.`);
+        logger.log(`SUCCESS: User ${objectID} indexed in Algolia index 'users'.`);
     } catch (error) {
-        logger.error(`Error indexing user ${objectID} in Algolia:`, error);
+        logger.error(`FAILURE: Error indexing user ${objectID} in Algolia index 'users':`, error);
     }
 });
 
@@ -176,51 +196,56 @@ export const onUserDelete = onUserDeleted(async (event) => {
 
 // Sends a notification when a new call is created.
 export const sendCallNotification = onDocumentWritten("calls/{callId}", async (event) => {
-    // Only trigger on create
-    if (!event.data?.after.exists || event.data.before.exists) {
-        return;
-    }
-
+    if (event.data.before.exists) return; // Only trigger on create
+    if (!event.data.after.exists) return;
+    
     const callData = event.data.after.data();
     if (!callData) return;
 
     const { callerId, receiverId, isVideo } = callData;
-
-    const [callerProfile, receiverProfile] = await Promise.all([
-        admin.firestore().collection('users').doc(callerId).get(),
-        admin.firestore().collection('users').doc(receiverId).get()
-    ]);
-    
-    const receiverToken = receiverProfile.data()?.fcmToken;
-    const callerName = callerProfile.data()?.firstName || 'Quelqu\'un';
-
-    if (!receiverToken) {
-        logger.log(`Receiver ${receiverId} does not have an FCM token.`);
-        return;
-    }
-
-    const callType = isVideo ? "vidéo" : "audio";
-    const payload = {
-        token: receiverToken,
-        notification: {
-            title: `Appel ${callType} entrant 📞`,
-            body: `${callerName} vous appelle.`
-        },
-        data: {
-            type: 'VIDEO_CALL',
-            callId: event.params.callId,
-            callerName: callerName
-        },
-        android: {
-            priority: 'high' as const
-        }
-    };
+    if (!callerId || !receiverId) return;
 
     try {
+        const [callerProfileSnap, receiverProfileSnap] = await Promise.all([
+            admin.firestore().collection('users').doc(callerId).get(),
+            admin.firestore().collection('users').doc(receiverId).get()
+        ]);
+
+        if (!callerProfileSnap.exists() || !receiverProfileSnap.exists()) {
+            logger.log("Caller or receiver profile not found.");
+            return;
+        }
+
+        const receiverToken = receiverProfileSnap.data()?.fcmToken;
+        const callerName = callerProfileSnap.data()?.firstName || 'Quelqu\\'un';
+
+        if (!receiverToken) {
+            logger.log(`Receiver ${receiverId} does not have an FCM token.`);
+            return;
+        }
+
+        const callType = isVideo ? "vidéo" : "audio";
+        const payload = {
+            token: receiverToken,
+            data: {
+                title: `Appel ${callType} entrant 📞`,
+                body: `${callerName} vous appelle.`,
+                type: 'INCOMING_CALL',
+                callId: event.params.callId,
+                callerName: callerName,
+                isVideo: String(isVideo),
+                channelId: event.params.callId,
+            },
+            android: {
+                priority: 'high' as const
+            }
+        };
+
         await admin.messaging().send(payload);
         logger.log(`Call notification sent to ${receiverId}`);
+
     } catch (error) {
-        logger.error(`Error sending call notification to ${receiverId}:`, error);
+        logger.error(`Error processing call notification for ${receiverId}:`, error);
     }
 });
 
@@ -246,7 +271,7 @@ export const sendNewMessageNotification = onDocumentWritten("chats/{chatId}/mess
     ]);
 
     const receiverToken = receiverProfile.data()?.fcmToken;
-    const senderName = senderProfile.data()?.firstName || 'Quelqu\'un';
+    const senderName = senderProfile.data()?.firstName || 'Quelqu\\'un';
 
     if (!receiverToken) return;
 
@@ -299,7 +324,7 @@ export const sendFriendRequestNotification = onDocumentWritten("users/{userId}",
         ]);
 
         const receiverToken = addedProfile.data()?.fcmToken;
-        const senderName = addedByProfile.data()?.firstName || 'Quelqu\'un';
+        const senderName = addedByProfile.data()?.firstName || 'Quelqu\\'un';
 
         if (!receiverToken) return;
 
