@@ -56,7 +56,7 @@ export function CallManager() {
         if(window.location.pathname.startsWith('/call/')) return;
 
         setIncomingCall(callData);
-        if (!callerProfile || callerProfile.id !== callData.callerId) {
+        if (!callerProfile) {
             const profile = await getUserProfile(callData.callerId);
             setCallerProfile(profile);
         }
@@ -69,34 +69,28 @@ export function CallManager() {
     return () => unsubscribe();
   }, [currentUser, callerProfile]);
 
-  const stopRinging = useCallback(() => {
+  const handleAcceptCall = useCallback(async () => {
+    if (!incomingCall) return;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
-    setIncomingCall(null);
-    setCallerProfile(null);
-  }, []);
-
-  const handleAcceptCall = useCallback(async () => {
-    if (!incomingCall) return;
-    const callId = incomingCall.id;
-    const isVideo = incomingCall.isVideo;
-    
-    stopRinging();
-
-    const callDocRef = doc(db, 'calls', callId);
+    const callDocRef = doc(db, 'calls', incomingCall.id);
     await updateDoc(callDocRef, { status: 'active' });
-    
-    router.push(`/call/${callId}?type=${isVideo ? 'video' : 'audio'}`);
-  }, [incomingCall, router, stopRinging]);
+    setIncomingCall(null);
+    router.push(`/call/${incomingCall.id}?type=${incomingCall.isVideo ? 'video' : 'audio'}`);
+  }, [incomingCall, router]);
 
   const handleRejectCall = useCallback(async () => {
     if (!incomingCall) return;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
     const callDocRef = doc(db, 'calls', incomingCall.id);
     await updateDoc(callDocRef, { status: 'rejected' });
-    stopRinging();
-  }, [incomingCall, stopRinging]);
+    setIncomingCall(null);
+  }, [incomingCall]);
 
   if (!incomingCall || !callerProfile) {
     return null;
@@ -119,7 +113,7 @@ export function CallManager() {
                 </DialogHeader>
             </div>
 
-            <DialogFooter className="absolute bottom-16 left-0 right-0 flex items-center justify-center gap-x-8">
+            <DialogFooter className="absolute bottom-16 left-0 right-0 flex flex-row items-center justify-around w-full">
                 <div className="flex flex-col items-center space-y-2">
                     <Button variant="destructive" size="icon" className="rounded-full w-16 h-16" onClick={handleRejectCall}>
                         <X className="h-8 w-8" />
