@@ -77,7 +77,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         // Action: Accept
         Intent acceptIntent = new Intent(this, MainActivity.class);
         acceptIntent.setAction("ACCEPT_CALL");
-        acceptIntent.putExtra("actionId", "accept"); // ID pour Capacitor
+        acceptIntent.putExtra("actionId", "accept"); // ID for Capacitor
         for (Map.Entry<String, String> entry : data.entrySet()) {
             acceptIntent.putExtra(entry.getKey(), entry.getValue());
         }
@@ -87,7 +87,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         // Action: Reject
         Intent rejectIntent = new Intent(this, MainActivity.class);
         rejectIntent.setAction("REJECT_CALL");
-        rejectIntent.putExtra("actionId", "reject"); // ID pour Capacitor
+        rejectIntent.putExtra("actionId", "reject"); // ID for Capacitor
         for (Map.Entry<String, String> entry : data.entrySet()) {
             rejectIntent.putExtra(entry.getKey(), entry.getValue());
         }
