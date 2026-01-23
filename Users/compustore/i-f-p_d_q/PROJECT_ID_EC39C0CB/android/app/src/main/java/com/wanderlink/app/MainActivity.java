@@ -22,6 +22,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        setIntent(intent);
         handleIntent(intent);
     }
 
@@ -29,22 +30,17 @@ public class MainActivity extends BridgeActivity {
         if (intent != null && intent.hasExtra("callAction")) {
             String action = intent.getStringExtra("callAction");
             String callId = intent.getStringExtra("callId");
+            String channelName = intent.getStringExtra("channel");
+
             Log.d("MainActivity", "Call action received: " + action + " for callId: " + callId);
 
-            if ("reject".equals(action) && callId != null) {
-                // Stop the foreground service
-                Intent serviceIntent = new Intent(this, CallForegroundService.class);
-                stopService(serviceIntent);
-
-                // Execute JS to update Firestore
-                if (getBridge() != null && getBridge().getWebView() != null) {
-                    getBridge().getWebView().post(() -> {
-                        getBridge().eval("window.rejectCall('" + callId + "')", null);
-                    });
-                }
+            if ("accept".equals(action)) {
+                // The JS side will handle the navigation
+                getBridge().eval("window.handleCallAction('accept', '" + callId + "', '" + channelName + "')", null);
+            } else if ("reject".equals(action)) {
+                // The JS side will handle the firestore update
+                getBridge().eval("window.handleCallAction('reject', '" + callId + "')", null);
             }
-            // "accept" action is handled by bringing the activity to the front
-            // The JS logic will then pick up the navigation from capacitor-setup
         }
     }
 }
