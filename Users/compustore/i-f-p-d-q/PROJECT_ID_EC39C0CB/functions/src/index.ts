@@ -52,39 +52,52 @@ export const syncUserToAlgolia = onDocumentWritten("users/{userId}", async (even
     const objectID = event.params.userId;
     const usersIndex = getAlgoliaClient().initIndex("users");
 
-    if (!event.data?.after.exists) {
+    // Case 1: Document deleted from Firestore OR onboarding is not complete
+    if (!event.data?.after.exists || event.data.after.data()?.onboardingCompleted !== true) {
         try {
             await usersIndex.deleteObject(objectID);
-            logger.log(`User ${objectID} deleted from Algolia.`);
+            
+            if (!event.data?.after.exists) {
+                logger.log(`SUCCESS: User ${objectID} deleted from Algolia index 'users'.`);
+            } else {
+                logger.log(`INFO: Incomplete profile ${objectID} removed from Algolia index 'users'.`);
+            }
         } catch (error) {
-            logger.error(`Error deleting user ${objectID} from Algolia:`, error);
+            logger.warn(`Warning while trying to delete user ${objectID} from Algolia index 'users':`, error);
         }
         return;
     }
 
     const newData = event.data.after.data();
-
-    if (!newData) {
-        logger.warn(`No data found for user ${objectID} on write event.`);
-        return;
-    }
-
-    const { privateData, email, ...rest } = newData;
-    const algoliaRecord: any = { objectID, ...rest };
+    const algoliaRecord: any = {
+        objectID,
+        onboardingCompleted: true,
+        firstName: newData.firstName || '',
+        profilePictures: newData.profilePictures || [],
+        isVerified: newData.isVerified || false,
+        gender: newData.gender || null,
+        age: typeof newData.age === 'number' ? newData.age : -1,
+        location: newData.location || null,
+        destination: newData.destination || 'Toutes',
+        intention: newData.intention || null,
+        travelStyle: newData.travelStyle || 'Tous',
+        activities: newData.activities || 'Toutes',
+    };
 
     if (newData.latitude && newData.longitude) {
         algoliaRecord._geoloc = { lat: newData.latitude, lng: newData.longitude };
     }
+    
+    logger.log(`SYNC: Preparing to index objectID '${objectID}' in index 'users'.`, { data: algoliaRecord });
 
     try {
         await usersIndex.saveObject(algoliaRecord);
-        logger.log(`User ${objectID} indexed in Algolia.`);
+        logger.log(`SUCCESS: User ${objectID} indexed in Algolia index 'users'.`);
     } catch (error) {
-        logger.error(`Error indexing user ${objectID} in Algolia:`, error);
+        logger.error(`FAILURE: Error indexing user ${objectID} in Algolia index 'users':`, error);
     }
 });
 
-// This function securely provides the frontend with the keys it needs.
 export const getAlgoliaConfig = onCall((request) => {
   const appId = ALGOLIA_APP_ID.value();
   const searchKey = ALGOLIA_SEARCH_KEY.value();
@@ -96,15 +109,10 @@ export const getAlgoliaConfig = onCall((request) => {
   return { appId: appId, searchKey: searchKey };
 });
 
-
-/**
- * Triggered when a new image is uploaded, moderates it using Google Cloud Vision API.
- */
 export const moderateProfilePicture = onObjectFinalized(async (event) => {
     const { bucket, name, contentType } = event.data;
 
     if (!name?.startsWith("profilePictures/") || contentType?.endsWith("/") || !contentType?.startsWith("image/")) {
-        logger.log(`File ${name} is not an image in profilePictures/ folder. Ignoring.`);
         return null;
     }
 
@@ -116,7 +124,6 @@ export const moderateProfilePicture = onObjectFinalized(async (event) => {
       const safeSearch = result.safeSearchAnnotation;
 
       if (!safeSearch) {
-        logger.log(`No safe search annotation for ${name}.`);
         return null;
       }
 
@@ -127,8 +134,6 @@ export const moderateProfilePicture = onObjectFinalized(async (event) => {
         logger.warn(`Inappropriate image detected: ${name}. Deleting...`);
         const storageBucket = admin.storage().bucket(bucket);
         await storageBucket.file(name).delete();
-      } else {
-        logger.log(`Image ${name} is clean.`);
       }
       return null;
     } catch (error) {
@@ -137,10 +142,8 @@ export const moderateProfilePicture = onObjectFinalized(async (event) => {
     }
 });
 
-// Export the Agora token generation function
 export const generateAgoraToken = agoraTokenGenerator;
 
-// Deletes a user's document and storage files when their auth account is deleted.
 export const onUserDelete = onUserDeleted(async (event) => {
     const user = event.data;
     const userId = user.uid;
@@ -149,81 +152,76 @@ export const onUserDelete = onUserDeleted(async (event) => {
     try {
         const db = admin.firestore();
         const bucket = admin.storage().bucket();
-
-        // 1. Delete user document from Firestore.
-        // This will also trigger the 'syncUserToAlgolia' function to remove the user from Algolia.
         const userDocRef = db.collection('users').doc(userId);
         await userDocRef.delete();
         logger.log(`Successfully deleted Firestore document for user: ${userId}`);
-
-        // 2. Delete user profile pictures from Storage.
         const profilePicturesPath = `profilePictures/${userId}/`;
         await bucket.deleteFiles({ prefix: profilePicturesPath });
         logger.log(`Successfully deleted profile pictures for user: ${userId}`);
-
     } catch (error) {
         logger.error(`Error cleaning up data for user ${userId}:`, error);
     }
 });
 
-// --- START: Notification Functions ---
-
-// Sends a notification when a new call is created.
 export const sendCallNotification = onDocumentWritten("calls/{callId}", async (event) => {
-    // Only trigger on create
-    if (!event.data?.after.exists || event.data.before.exists) {
-        return;
-    }
-
-    const callData = event.data.after.data();
-    if (!callData) return;
-
-    const { callerId, receiverId, isVideo } = callData;
-
-    const [callerProfile, receiverProfile] = await Promise.all([
-        admin.firestore().collection('users').doc(callerId).get(),
-        admin.firestore().collection('users').doc(receiverId).get()
-    ]);
     
-    const receiverToken = receiverProfile.data()?.fcmToken;
-    const callerName = callerProfile.data()?.firstName || 'Quelqu\'un';
+    if (!event.data?.after.exists && event.data?.before.exists) {
+        const callData = event.data.before.data();
+        if (!callData) return;
+        const receiverId = callData.callerId === callData.receiverId ? callData.callerId : (callData.callerId === event.params.userId ? callData.receiverId : callData.callerId);
+        const receiverProfileSnap = await admin.firestore().collection('users').doc(receiverId).get();
+        const receiverToken = receiverProfileSnap.data()?.fcmToken;
 
-    if (!receiverToken) {
-        logger.log(`Receiver ${receiverId} does not have an FCM token.`);
+        if (receiverToken) {
+            const payload = { token: receiverToken, data: { type: 'CALL_ENDED', callId: event.params.callId } };
+            await admin.messaging().send(payload).catch(e => logger.error(`Error sending CALL_ENDED notification:`, e));
+        }
         return;
     }
 
-    const callType = isVideo ? "vidéo" : "audio";
-    const payload = {
-        token: receiverToken,
-        notification: {
-            title: `Appel ${callType} entrant 📞`,
-            body: `${callerName} vous appelle.`
-        },
-        data: {
-            type: 'VIDEO_CALL',
-            callId: event.params.callId,
-            callerName: callerName
-        },
-        android: {
-            priority: 'high' as const
-        }
-    };
+    if (event.data?.after.exists && !event.data.before.exists) {
+        const callData = event.data.after.data();
+        if (!callData) return;
 
-    try {
-        await admin.messaging().send(payload);
-        logger.log(`Call notification sent to ${receiverId}`);
-    } catch (error) {
-        logger.error(`Error sending call notification to ${receiverId}:`, error);
+        const { callerId, receiverId, isVideo } = callData;
+        if (!callerId || !receiverId) return;
+
+        try {
+            const [callerProfileSnap, receiverProfileSnap] = await Promise.all([
+                admin.firestore().collection('users').doc(callerId).get(),
+                admin.firestore().collection('users').doc(receiverId).get()
+            ]);
+
+            if (!callerProfileSnap.exists() || !receiverProfileSnap.exists()) return;
+
+            const receiverToken = receiverProfileSnap.data()?.fcmToken;
+            const callerName = callerProfileSnap.data()?.firstName || 'Quelqu\\'un';
+            const channelName = event.params.callId;
+
+            if (!receiverToken) return;
+
+            const payload = {
+                token: receiverToken,
+                data: {
+                    type: 'INCOMING_CALL',
+                    callId: channelName,
+                    channel: channelName,
+                    callerId: callerId,
+                    callerName: callerName,
+                    isVideo: String(isVideo),
+                },
+                android: { priority: 'high' as const, ttl: 30000 },
+            };
+
+            await admin.messaging().send(payload);
+        } catch (error) {
+            logger.error(`Error processing call notification:`, error);
+        }
     }
 });
 
-
-// Sends a notification for a new message.
 export const sendNewMessageNotification = onDocumentWritten("chats/{chatId}/messages/{messageId}", async (event) => {
-    if (!event.data?.after.exists || event.data.before.exists) {
-        return;
-    }
+    if (!event.data?.after.exists || event.data.before.exists) return;
     const messageData = event.data.after.data();
     if (!messageData) return;
 
@@ -231,58 +229,41 @@ export const sendNewMessageNotification = onDocumentWritten("chats/{chatId}/mess
     const chatId = event.params.chatId;
     const participants = chatId.split('_');
     const receiverId = participants.find(p => p !== senderId);
-
     if (!receiverId) return;
 
-     const [senderProfile, receiverProfile] = await Promise.all([
+    const [senderProfile, receiverProfile] = await Promise.all([
         admin.firestore().collection('users').doc(senderId).get(),
         admin.firestore().collection('users').doc(receiverId).get()
     ]);
-
     const receiverToken = receiverProfile.data()?.fcmToken;
-    const senderName = senderProfile.data()?.firstName || 'Quelqu\'un';
-
+    const senderName = senderProfile.data()?.firstName || 'Quelqu\\'un';
     if (!receiverToken) return;
 
     let messageBody = text;
-    if(imageUrl) messageBody = '📷 a envoyé une photo.';
-    if(audioUrl) messageBody = '🎤 a envoyé un message vocal.';
+    if (imageUrl) messageBody = '📷 a envoyé une photo.';
+    if (audioUrl) messageBody = '🎤 a envoyé un message vocal.';
 
     const payload = {
         token: receiverToken,
-        notification: {
-            title: `Nouveau message de ${senderName}`,
-            body: messageBody
-        },
-        data: {
-            type: 'MESSAGE',
-            chatId: chatId,
-            senderId: senderId
-        }
+        notification: { title: `Nouveau message de ${senderName}`, body: messageBody },
+        data: { type: 'MESSAGE', chatId: chatId, senderId: senderId }
     };
 
-     try {
+    try {
         await admin.messaging().send(payload);
-        logger.log(`Message notification sent to ${receiverId}`);
     } catch (error) {
-        logger.error(`Error sending message notification to ${receiverId}:`, error);
+        logger.error(`Error sending message notification:`, error);
     }
 });
 
-// Sends a notification for a new friend request.
 export const sendFriendRequestNotification = onDocumentWritten("users/{userId}", async (event) => {
-    if (!event.data?.before.exists || !event.data?.after.exists) {
-        return; // Only interested in updates
-    }
-    const beforeData = event.data.before.data();
-    const afterData = event.data.after.data();
-    const beforeFriends = beforeData.friends || [];
-    const afterFriends = afterData.friends || [];
+    if (!event.data?.before.exists || !event.data?.after.exists) return;
+    const beforeFriends = event.data.before.data().friends || [];
+    const afterFriends = event.data.after.data().friends || [];
 
-    // Find who added whom
     if (afterFriends.length > beforeFriends.length) {
         const newFriendId = afterFriends.find((id: string) => !beforeFriends.includes(id));
-        const userIdWhoWasAdded = event.params.userId; // The document that was changed
+        const userIdWhoWasAdded = event.params.userId;
         const userIdWhoAdded = newFriendId;
         
         if (!userIdWhoAdded) return;
@@ -291,31 +272,20 @@ export const sendFriendRequestNotification = onDocumentWritten("users/{userId}",
              admin.firestore().collection('users').doc(userIdWhoAdded).get(),
              admin.firestore().collection('users').doc(userIdWhoWasAdded).get()
         ]);
-
         const receiverToken = addedProfile.data()?.fcmToken;
-        const senderName = addedByProfile.data()?.firstName || 'Quelqu\'un';
-
+        const senderName = addedByProfile.data()?.firstName || 'Quelqu\\'un';
         if (!receiverToken) return;
 
         const payload = {
             token: receiverToken,
-            notification: {
-                title: 'Nouvelle amitié ! 🎉',
-                body: `${senderName} vous a ajouté(e) comme ami(e).`
-            },
-            data: {
-                type: 'FRIEND_REQUEST',
-                senderId: userIdWhoAdded
-            }
+            notification: { title: 'Nouvelle amitié ! 🎉', body: `${senderName} vous a ajouté(e) comme ami(e).` },
+            data: { type: 'FRIEND_REQUEST', senderId: userIdWhoAdded }
         };
 
         try {
             await admin.messaging().send(payload);
-            logger.log(`Friend request notification sent to ${userIdWhoWasAdded}`);
         } catch (error) {
-            logger.error(`Error sending friend request notification to ${userIdWhoWasAdded}:`, error);
+            logger.error(`Error sending friend request notification:`, error);
         }
     }
 });
-
-// --- END: Notification Functions ---

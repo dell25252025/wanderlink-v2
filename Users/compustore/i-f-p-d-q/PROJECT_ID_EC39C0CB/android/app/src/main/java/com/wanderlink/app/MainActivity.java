@@ -1,64 +1,39 @@
 package com.wanderlink.app;
 
+import android.content.Intent;
 import android.os.Bundle;
-import android.view.WindowManager;
-import android.webkit.PermissionRequest;
-import android.webkit.WebChromeClient;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
+import android.util.Log;
 import com.getcapacitor.BridgeActivity;
-import androidx.annotation.NonNull;
 
 public class MainActivity extends BridgeActivity {
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        // Appliquer le drapeau de sécurité AVANT l'initialisation de l'activité parente.
-        getWindow().setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE
-        );
-        android.util.Log.e("FLAG_SECURE_TEST", "onCreate MainActivity executing");
-        
         super.onCreate(savedInstanceState);
+        handleIntent(getIntent());
     }
 
     @Override
-    public void onResume() {
-        super.onResume();
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        handleIntent(intent);
+    }
 
-        WebView webView = this.bridge.getWebView();
+    private void handleIntent(Intent intent) {
+        if (intent != null && intent.hasExtra("callAction")) {
+            String action = intent.getStringExtra("callAction");
+            String callId = intent.getStringExtra("callId");
+            String channelName = intent.getStringExtra("channel");
 
-        if (webView != null) {
-            WebSettings settings = webView.getSettings();
-            
-            settings.setJavaScriptEnabled(true);
-            settings.setDomStorageEnabled(true);
-            settings.setDatabaseEnabled(true);
-            settings.setMediaPlaybackRequiresUserGesture(false);
-            settings.setAllowFileAccess(true);
-            settings.setAllowContentAccess(true);
-            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            Log.d("MainActivity", "Call action received: " + action + " for callId: " + callId);
 
-            WebView.setWebContentsDebuggingEnabled(true);
-
-            webView.setWebChromeClient(new WebChromeClient() {
-                @Override
-                public void onPermissionRequest(final PermissionRequest request) {
-                    runOnUiThread(() -> {
-                        request.grant(request.getResources());
-                    });
-                }
-            });
+            if ("accept".equals(action)) {
+                // The JS side will handle the navigation
+                getBridge().eval("window.handleCallAction('accept', '" + callId + "', '" + channelName + "')", null);
+            } else if ("reject".equals(action)) {
+                // The JS side will handle the firestore update
+                getBridge().eval("window.handleCallAction('reject', '" + callId + "')", null);
+            }
         }
-    }
-
-    @Override
-    public void onPause() {
-        super.onPause();
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 }
