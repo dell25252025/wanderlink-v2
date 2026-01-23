@@ -194,58 +194,81 @@ export const onUserDelete = onUserDeleted(async (event) => {
 
 // --- START: Notification Functions ---
 
-// Sends a notification when a new call is created.
+// Sends a notification when a new call is created or deleted.
 export const sendCallNotification = onDocumentWritten("calls/{callId}", async (event) => {
-    if (event.data.before.exists) return; // Only trigger on create
-    if (!event.data.after.exists) return;
     
-    const callData = event.data.after.data();
-    if (!callData) return;
+    // Call ended (document deleted)
+    if (!event.data?.after.exists && event.data?.before.exists) {
+        const callData = event.data.before.data();
+        if (!callData || !callData.receiverId) return;
 
-    const { callerId, receiverId, isVideo } = callData;
-    if (!callerId || !receiverId) return;
-
-    try {
-        const [callerProfileSnap, receiverProfileSnap] = await Promise.all([
-            admin.firestore().collection('users').doc(callerId).get(),
-            admin.firestore().collection('users').doc(receiverId).get()
-        ]);
-
-        if (!callerProfileSnap.exists() || !receiverProfileSnap.exists()) {
-            logger.log("Caller or receiver profile not found.");
-            return;
-        }
-
+        const receiverProfileSnap = await admin.firestore().collection('users').doc(callData.receiverId).get();
         const receiverToken = receiverProfileSnap.data()?.fcmToken;
-        const callerName = callerProfileSnap.data()?.firstName || 'Quelqu\'un';
 
-        if (!receiverToken) {
-            logger.log(`Receiver ${receiverId} does not have an FCM token.`);
-            return;
+        if (receiverToken) {
+            const payload = {
+                token: receiverToken,
+                data: {
+                    type: 'CALL_ENDED',
+                    callId: event.params.callId,
+                },
+            };
+            await admin.messaging().send(payload).catch(error => {
+                logger.error(`Error sending CALL_ENDED notification to ${callData.receiverId}:`, error);
+            });
         }
+        return;
+    }
 
-        const callType = isVideo ? "vidéo" : "audio";
-        const payload = {
-            token: receiverToken,
-            data: {
-                title: `Appel ${callType} entrant 📞`,
-                body: `${callerName} vous appelle.`,
-                type: 'INCOMING_CALL',
-                callId: event.params.callId,
-                callerName: callerName,
-                isVideo: String(isVideo),
-                channelId: event.params.callId,
-            },
-            android: {
-                priority: 'high' as const
+    // Call created
+    if (event.data?.after.exists && !event.data.before.exists) {
+        const callData = event.data.after.data();
+        if (!callData) return;
+
+        const { callerId, receiverId, isVideo } = callData;
+        if (!callerId || !receiverId) return;
+
+        try {
+            const [callerProfileSnap, receiverProfileSnap] = await Promise.all([
+                admin.firestore().collection('users').doc(callerId).get(),
+                admin.firestore().collection('users').doc(receiverId).get()
+            ]);
+
+            if (!callerProfileSnap.exists() || !receiverProfileSnap.exists()) {
+                logger.log("Caller or receiver profile not found.");
+                return;
             }
-        };
 
-        await admin.messaging().send(payload);
-        logger.log(`Call notification sent to ${receiverId}`);
+            const receiverToken = receiverProfileSnap.data()?.fcmToken;
+            const callerName = callerProfileSnap.data()?.firstName || 'Quelqu\'un';
 
-    } catch (error) {
-        logger.error(`Error processing call notification for ${receiverId}:`, error);
+            if (!receiverToken) {
+                logger.log(`Receiver ${receiverId} does not have an FCM token.`);
+                return;
+            }
+
+            const payload = {
+                token: receiverToken,
+                data: {
+                    type: 'INCOMING_CALL',
+                    callId: event.params.callId,
+                    channel: event.params.callId, // Using callId as channel name
+                    callerId: callerId,
+                    callerName: callerName,
+                    isVideo: String(isVideo),
+                },
+                android: {
+                    priority: 'high' as const,
+                    ttl: 30000 // 30s
+                },
+            };
+
+            await admin.messaging().send(payload);
+            logger.log(`Call notification sent to ${receiverId}`);
+
+        } catch (error) {
+            logger.error(`Error processing call notification for ${receiverId}:`, error);
+        }
     }
 });
 

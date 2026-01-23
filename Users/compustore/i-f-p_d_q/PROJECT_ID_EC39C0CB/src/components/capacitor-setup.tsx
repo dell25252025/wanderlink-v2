@@ -30,25 +30,20 @@ const CapacitorSetup = () => {
       SplashScreen.hide();
 
        PushNotifications.addListener('pushNotificationActionPerformed',
-        (notification: ActionPerformed) => {
-          const data = notification.notification.data;
-          console.log('Action de notification effectuée : ', notification.actionId, data);
+        (action: ActionPerformed) => {
+          const data = action.notification.data;
+          console.log('Action de notification effectuée : ', action.actionId, data);
 
-          if (data.type === 'INCOMING_CALL' && data.callId) {
-              // L'action "accept" est pour notre bouton personnalisé, "tap" est pour un appui sur la notification elle-même
-              if (notification.actionId === 'accept' || notification.actionId === 'tap') { 
-                  router.push(`/call/receive?callId=${data.callId}&video=${data.isVideo === 'true'}`);
-              } 
-              // L'action "reject" pour refuser l'appel
-              else if (notification.actionId === 'reject') {
-                  const callDocRef = doc(db, 'calls', data.callId);
-                  updateDoc(callDocRef, { status: 'rejected' }).catch(err => {
-                      console.error("Impossible de refuser l'appel depuis la notification", err);
-                  });
-              }
-          } else if (data.type === 'MESSAGE' && data.senderId) {
+           if (data.callAction === 'accept' && data.channel) {
+                router.push(`/call/${data.channel}`);
+           } else if (data.callAction === 'reject' && data.callId) {
+                const callDocRef = doc(db, 'calls', data.callId);
+                updateDoc(callDocRef, { status: 'rejected' }).catch(err => {
+                    console.error("Impossible de refuser l'appel depuis la notification", err);
+                });
+           } else if (data.type === 'MESSAGE' && data.senderId) {
               router.push(`/chat?id=${data.senderId}`);
-          }
+           }
         }
       );
     }

@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.os.Build;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
 
@@ -19,13 +20,23 @@ import java.util.Objects;
 public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
     private static final String TAG = "MyFirebaseMsgService";
+    private static final int INCOMING_CALL_NOTIFICATION_ID = 999;
+    private static final String INCOMING_CALL_CHANNEL_ID = "incoming_call_channel";
 
     @Override
     public void onMessageReceived(RemoteMessage remoteMessage) {
         Log.d(TAG, "From: " + remoteMessage.getFrom());
         if (remoteMessage.getData().size() > 0) {
             Log.d(TAG, "Message data payload: " + remoteMessage.getData());
-            sendNotification(remoteMessage.getData());
+            String type = remoteMessage.getData().get("type");
+            if ("INCOMING_CALL".equals(type)) {
+                createIncomingCallNotification(remoteMessage.getData());
+            } else if ("CALL_ENDED".equals(type)) {
+                // Cancel the notification when the call ends
+                NotificationManagerCompat.from(this).cancel(INCOMING_CALL_NOTIFICATION_ID);
+            } else {
+                 handleRegularNotification(remoteMessage.getData());
+            }
         }
     }
 
@@ -35,82 +46,49 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         // If you need to send the token to your app server, do it here.
     }
 
-    private void sendNotification(Map<String, String> data) {
-        String type = data.get("type");
-        if (Objects.equals(type, "INCOMING_CALL")) {
-            handleIncomingCall(data);
-        } else {
-            handleRegularNotification(data);
-        }
-    }
-
-    private void handleIncomingCall(Map<String, String> data) {
-        String channelId = "incoming_calls_channel";
-        String channelName = "Appels Entrants";
-
-        NotificationManager notificationManager =
-                (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(channelId,
-                    channelName,
-                    NotificationManager.IMPORTANCE_HIGH);
-            channel.setDescription("Notifications pour les appels entrants");
-            channel.setVibrationPattern(new long[]{0, 1000, 500, 1000});
-            channel.enableVibration(true);
-            notificationManager.createNotificationChannel(channel);
-        }
+    private void createIncomingCallNotification(Map<String, String> data) {
+        createCallNotificationChannel();
 
         String callId = data.get("callId");
+        String callerName = data.get("callerName");
+        String channelName = data.get("channel");
+        String isVideo = data.get("isVideo");
 
-        // Intent for full screen - launches the main activity
+        // Intent to launch the app when the notification is tapped (accept action)
         Intent fullScreenIntent = new Intent(this, MainActivity.class);
-        fullScreenIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        fullScreenIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        fullScreenIntent.putExtra("callAction", "accept");
         fullScreenIntent.putExtra("callId", callId);
-        // Pass all data to the intent so the JS layer can receive it
-        for (Map.Entry<String, String> entry : data.entrySet()) {
-            fullScreenIntent.putExtra(entry.getKey(), entry.getValue());
-        }
-        PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(this, callId.hashCode() + 1, fullScreenIntent,
+        fullScreenIntent.putExtra("channel", channelName);
+        fullScreenIntent.putExtra("isVideo", isVideo);
+        PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(this, 1, fullScreenIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        // Action: Accept
-        Intent acceptIntent = new Intent(this, MainActivity.class);
-        acceptIntent.setAction("ACCEPT_CALL");
-        acceptIntent.putExtra("actionId", "accept"); // ID for Capacitor
-        for (Map.Entry<String, String> entry : data.entrySet()) {
-            acceptIntent.putExtra(entry.getKey(), entry.getValue());
-        }
-        PendingIntent acceptPendingIntent = PendingIntent.getActivity(this, callId.hashCode() + 2, acceptIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        
-        // Action: Reject
+        // Intent for the "Reject" action
         Intent rejectIntent = new Intent(this, MainActivity.class);
-        rejectIntent.setAction("REJECT_CALL");
-        rejectIntent.putExtra("actionId", "reject"); // ID for Capacitor
-        for (Map.Entry<String, String> entry : data.entrySet()) {
-            rejectIntent.putExtra(entry.getKey(), entry.getValue());
-        }
-        PendingIntent rejectPendingIntent = PendingIntent.getActivity(this, callId.hashCode() + 3, rejectIntent,
+        rejectIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        rejectIntent.putExtra("callAction", "reject");
+        rejectIntent.putExtra("callId", callId);
+        PendingIntent rejectPendingIntent = PendingIntent.getActivity(this, 2, rejectIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        NotificationCompat.Builder notificationBuilder =
-                new NotificationCompat.Builder(this, channelId)
-                        .setSmallIcon(R.mipmap.ic_launcher)
-                        .setContentTitle(data.get("title"))
-                        .setContentText(data.get("body"))
-                        .setPriority(NotificationCompat.PRIORITY_HIGH)
-                        .setCategory(NotificationCompat.CATEGORY_CALL)
-                        .setFullScreenIntent(fullScreenPendingIntent, true)
-                        .addAction(0, "Refuser", rejectPendingIntent)
-                        .addAction(0, "Accepter", acceptPendingIntent)
-                        .setAutoCancel(true)
-                        .setOngoing(true);
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, INCOMING_CALL_CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher) // Make sure you have this icon
+                .setContentTitle("Appel Entrant")
+                .setContentText(callerName + " vous appelle.")
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setFullScreenIntent(fullScreenPendingIntent, true) // This is what shows the UI on lock screen
+                .addAction(0, "Refuser", rejectPendingIntent)
+                .addAction(0, "Accepter", fullScreenPendingIntent)
+                .setOngoing(true)
+                .setAutoCancel(false) // The notification should not be dismissed by a tap
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
         
-        final int NOTIFICATION_ID = 120; // Use a fixed ID for the call notification
-        notificationManager.notify(NOTIFICATION_ID, notificationBuilder.build());
+        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(this);
+        notificationManager.notify(INCOMING_CALL_NOTIFICATION_ID, builder.build());
     }
-
+    
     private void handleRegularNotification(Map<String, String> data) {
          String channelId = getString(R.string.default_notification_channel_id);
         String title = data.get("title");
@@ -146,5 +124,22 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         }
 
         notificationManager.notify((int) System.currentTimeMillis(), notificationBuilder.build());
+    }
+
+
+    private void createCallNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            CharSequence name = "Appels Entrants";
+            String description = "Notifications pour les appels audio et vidéo entrants";
+            int importance = NotificationManager.IMPORTANCE_HIGH;
+            NotificationChannel channel = new NotificationChannel(INCOMING_CALL_CHANNEL_ID, name, importance);
+            channel.setDescription(description);
+            // Configure sound and vibration
+            channel.setSound(null, null);
+            channel.setVibrationPattern(new long[]{0, 1000, 500, 1000, 500});
+            channel.enableVibration(true);
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            notificationManager.createNotificationChannel(channel);
+        }
     }
 }
