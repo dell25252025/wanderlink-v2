@@ -1,4 +1,3 @@
-
 import * as admin from "firebase-admin";
 import { ImageAnnotatorClient } from "@google-cloud/vision";
 import algoliasearch, { type SearchClient } from "algoliasearch";
