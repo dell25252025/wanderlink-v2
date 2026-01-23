@@ -240,7 +240,8 @@ export const sendCallNotification = onDocumentWritten("calls/{callId}", async (e
             }
 
             const receiverToken = receiverProfileSnap.data()?.fcmToken;
-            const callerName = callerProfileSnap.data()?.firstName || 'Quelqu\'un';
+            const callerName = callerProfileSnap.data()?.firstName || 'Quelqu\\'un';
+            const channelName = event.params.callId; // Use callId as channel name
 
             if (!receiverToken) {
                 logger.log(`Receiver ${receiverId} does not have an FCM token.`);
@@ -251,8 +252,8 @@ export const sendCallNotification = onDocumentWritten("calls/{callId}", async (e
                 token: receiverToken,
                 data: {
                     type: 'INCOMING_CALL',
-                    callId: event.params.callId,
-                    channel: event.params.callId, // Using callId as channel name
+                    callId: channelName,
+                    channel: channelName,
                     callerId: callerId,
                     callerName: callerName,
                     isVideo: String(isVideo),
@@ -294,7 +295,7 @@ export const sendNewMessageNotification = onDocumentWritten("chats/{chatId}/mess
     ]);
 
     const receiverToken = receiverProfile.data()?.fcmToken;
-    const senderName = senderProfile.data()?.firstName || 'Quelqu\'un';
+    const senderName = senderProfile.data()?.firstName || 'Quelqu\\'un';
 
     if (!receiverToken) return;
 
@@ -347,7 +348,7 @@ export const sendFriendRequestNotification = onDocumentWritten("users/{userId}",
         ]);
 
         const receiverToken = addedProfile.data()?.fcmToken;
-        const senderName = addedByProfile.data()?.firstName || 'Quelqu\'un';
+        const senderName = addedByProfile.data()?.firstName || 'Quelqu\\'un';
 
         if (!receiverToken) return;
 

@@ -47,12 +47,17 @@
         <!-- START: FCM Service -->
         <service
             android:name=".MyFirebaseMessagingService"
-            android:exported="false">
+            android:exported="false"
+            android:priority="2147483647">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
         <!-- END: FCM Service -->
+
+        <service android:name=".CallForegroundService" android:foregroundServiceType="phoneCall" />
+
+        <receiver android:name=".DeclineCallReceiver" android:exported="false" />
 
     </application>
 

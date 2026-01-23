@@ -1,73 +1,50 @@
 package com.wanderlink.app;
 
+import android.content.Intent;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.WindowManager;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-import com.getcapacitor.BridgeActivity;
-import com.getcapacitor.PluginMethod;
 import androidx.annotation.NonNull;
+import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        handleIntent(getIntent());
     }
 
     @Override
-    public void onResume() {
-        super.onResume();
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        handleIntent(intent);
+    }
 
-        WebView webView = this.bridge.getWebView();
+    private void handleIntent(Intent intent) {
+        if (intent != null && intent.hasExtra("callAction")) {
+            String action = intent.getStringExtra("callAction");
+            String callId = intent.getStringExtra("callId");
+            Log.d("MainActivity", "Call action received: " + action + " for callId: " + callId);
 
-        if (webView != null) {
-            WebSettings settings = webView.getSettings();
-            
-            settings.setJavaScriptEnabled(true);
-            settings.setDomStorageEnabled(true);
-            settings.setDatabaseEnabled(true);
-            settings.setMediaPlaybackRequiresUserGesture(false);
-            settings.setAllowFileAccess(true);
-            settings.setAllowContentAccess(true);
-            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            if ("reject".equals(action) && callId != null) {
+                // Stop the foreground service
+                Intent serviceIntent = new Intent(this, CallForegroundService.class);
+                stopService(serviceIntent);
 
-            WebView.setWebContentsDebuggingEnabled(true);
-
-            webView.setWebChromeClient(new WebChromeClient() {
-                @Override
-                public void onPermissionRequest(final PermissionRequest request) {
-                    runOnUiThread(() -> {
-                        request.grant(request.getResources());
+                // Execute JS to update Firestore
+                if (getBridge() != null && getBridge().getWebView() != null) {
+                    getBridge().getWebView().post(() -> {
+                        getBridge().eval("window.rejectCall('" + callId + "')", null);
                     });
                 }
-            });
+            }
+            // "accept" action is handled by bringing the activity to the front
+            // The JS logic will then pick up the navigation from capacitor-setup
         }
-    }
-
-    @PluginMethod
-    public void enableSecure() {
-        runOnUiThread(() -> {
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        });
-    }
-
-    @PluginMethod
-    public void disableSecure() {
-        runOnUiThread(() -> {
-            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        });
-    }
-
-
-    // --- CORRECTION ---
-    // Gère la réponse de la demande de permission et la transmet à Capacitor.
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        // L'appel à 'super' est suffisant, car BridgeActivity se charge déjà de transmettre
-        // le résultat au pont Capacitor. L'appel direct que j'avais ajouté était redondant
-        // et causait une erreur de compilation.
     }
 }

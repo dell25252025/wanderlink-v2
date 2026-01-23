@@ -13,6 +13,12 @@ import { PushNotifications, ActionPerformed } from '@capacitor/push-notification
 import { useRouter } from 'next/navigation';
 import { doc, updateDoc } from 'firebase/firestore';
 
+// Make rejectCall globally available
+declare global {
+  interface Window {
+    rejectCall: (callId: string) => void;
+  }
+}
 
 const CapacitorSetup = () => {
   const router = useRouter();
@@ -34,7 +40,7 @@ const CapacitorSetup = () => {
           const data = action.notification.data;
           console.log('Action de notification effectuée : ', action.actionId, data);
 
-           if (data.callAction === 'accept' && data.channel) {
+          if (data.callAction === 'accept' && data.channel) {
                 router.push(`/call/${data.channel}`);
            } else if (data.callAction === 'reject' && data.callId) {
                 const callDocRef = doc(db, 'calls', data.callId);
@@ -47,6 +53,16 @@ const CapacitorSetup = () => {
         }
       );
     }
+
+    const rejectCall = (callId: string) => {
+        if (!callId) return;
+        const callDocRef = doc(db, 'calls', callId);
+        updateDoc(callDocRef, { status: 'rejected' }).catch(err => {
+            console.error("Impossible de refuser l'appel via la fonction window", err);
+        });
+    };
+
+    window.rejectCall = rejectCall;
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -75,7 +91,11 @@ const CapacitorSetup = () => {
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+        unsubscribe();
+        // @ts-ignore
+        delete window.rejectCall;
+    };
   }, [router]);
 
   return null; 
