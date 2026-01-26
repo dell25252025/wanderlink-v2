@@ -43,6 +43,11 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+    
+    // Importer la "Bill of Materials" (BoM) de Firebase
+    implementation platform('com.google.firebase:firebase-bom:32.7.0')
+    
+    // Déclarer la dépendance à Firebase Cloud Messaging sans spécifier de version
     implementation 'com.google.firebase:firebase-messaging'
 }
 
