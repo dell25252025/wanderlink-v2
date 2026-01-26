@@ -1,3 +1,4 @@
+
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -10,7 +11,6 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
 
-        <!-- Ajout de la meta-data pour le thème transparent -->
         <meta-data
             android:name="com.codetrixstudio.capacitor.GoogleAuth.Theme"
             android:value="@style/TransparentTheme" />
@@ -40,6 +40,17 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- START: Firebase Messaging Service Declaration -->
+        <service
+            android:name=".MyFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <!-- END: Firebase Messaging Service Declaration -->
+
     </application>
 
     <!-- Permissions -->
