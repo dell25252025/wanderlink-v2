@@ -3,12 +3,12 @@ import * as admin from "firebase-admin";
 import { ImageAnnotatorClient } from "@google-cloud/vision";
 import algoliasearch, { type SearchClient } from "algoliasearch";
 import * as logger from "firebase-functions/logger";
+import * as functions from "firebase-functions";
 
 // Import v2 functions
 import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onObjectFinalized } from "firebase-functions/v2/storage";
-import { onUserDeleted } from "firebase-functions/v2/auth"; // Added import
 
 // Define parameters for environment variables
 import { defineString } from "firebase-functions/params";
@@ -52,42 +52,34 @@ export const syncUserToAlgolia = onDocumentWritten("users/{userId}", async (even
     const objectID = event.params.userId;
     const usersIndex = getAlgoliaClient().initIndex("users");
 
+    const afterData = event.data?.after.data();
+
     // Case 1: Document deleted from Firestore OR onboarding is not complete
-    if (!event.data?.after.exists || event.data.after.data()?.onboardingCompleted !== true) {
+    if (!event.data?.after.exists || (afterData && afterData.onboardingCompleted !== true)) {
         try {
-            // Attempt to delete the object from Algolia.
-            // This is safe to call even if the object doesn't exist.
             await usersIndex.deleteObject(objectID);
-            
-            if (!event.data?.after.exists) {
-                logger.log(`SUCCESS: User ${objectID} deleted from Algolia index 'users'.`);
-            } else {
-                logger.log(`INFO: Incomplete profile ${objectID} removed from Algolia index 'users'.`);
-            }
+            logger.log(`SUCCESS: User ${objectID} deleted or removed from Algolia index 'users'.`);
         } catch (error) {
-            // Log a warning if the deletion fails for some reason other than not found.
-            logger.warn(`Warning while trying to delete user ${objectID} from Algolia index 'users':`, error);
+            logger.warn(`Warning while deleting user ${objectID} from Algolia:`, error);
         }
         return;
     }
 
     // Case 2: Document exists and onboarding is complete.
-    const newData = event.data.after.data();
+    const newData = afterData;
+    if (!newData) {
+        logger.log(`No data for user ${objectID}, skipping index.`);
+        return;
+    }
 
-    // Construct a clean, predictable record for Algolia.
-    // This ensures all filterable attributes exist.
     const algoliaRecord: any = {
         objectID,
         onboardingCompleted: true,
-
-        // --- Core display attributes ---
         firstName: newData.firstName || '',
         profilePictures: newData.profilePictures || [],
         isVerified: newData.isVerified || false,
-        
-        // --- Filterable attributes with safe defaults ---
-        gender: newData.gender || null, // Use null for attributes that can be absent
-        age: typeof newData.age === 'number' ? newData.age : -1, // Use -1 as a sentinel for missing age
+        gender: newData.gender || null,
+        age: typeof newData.age === 'number' ? newData.age : -1,
         location: newData.location || null,
         destination: newData.destination || 'Toutes',
         intention: newData.intention || null,
@@ -95,22 +87,18 @@ export const syncUserToAlgolia = onDocumentWritten("users/{userId}", async (even
         activities: newData.activities || 'Toutes',
     };
 
-    // Add geolocation if available
     if (newData.latitude && newData.longitude) {
         algoliaRecord._geoloc = { lat: newData.latitude, lng: newData.longitude };
     }
     
-    logger.log(`SYNC: Preparing to index objectID '${objectID}' in index 'users'.`, { data: algoliaRecord });
-
     try {
         await usersIndex.saveObject(algoliaRecord);
         logger.log(`SUCCESS: User ${objectID} indexed in Algolia index 'users'.`);
     } catch (error) {
-        logger.error(`FAILURE: Error indexing user ${objectID} in Algolia index 'users':`, error);
+        logger.error(`FAILURE: Error indexing user ${objectID} in Algolia:`, error);
     }
 });
 
-// This function securely provides the frontend with the keys it needs.
 export const getAlgoliaConfig = onCall((request) => {
   const appId = ALGOLIA_APP_ID.value();
   const searchKey = ALGOLIA_SEARCH_KEY.value();
@@ -122,15 +110,11 @@ export const getAlgoliaConfig = onCall((request) => {
   return { appId: appId, searchKey: searchKey };
 });
 
-
-/**
- * Triggered when a new image is uploaded, moderates it using Google Cloud Vision API.
- */
 export const moderateProfilePicture = onObjectFinalized(async (event) => {
     const { bucket, name, contentType } = event.data;
 
-    if (!name?.startsWith("profilePictures/") || contentType?.endsWith("/") || !contentType?.startsWith("image/")) {
-        logger.log(`File ${name} is not an image in profilePictures/ folder. Ignoring.`);
+    if (!name?.startsWith("profilePictures/") || !contentType || !contentType.startsWith("image/")) {
+        logger.log(`File ${name} is not an image to moderate. Ignoring.`);
         return null;
     }
 
@@ -163,12 +147,9 @@ export const moderateProfilePicture = onObjectFinalized(async (event) => {
     }
 });
 
-// Export the Agora token generation function
 export const generateAgoraToken = agoraTokenGenerator;
 
-// Deletes a user's document and storage files when their auth account is deleted.
-export const onUserDelete = onUserDeleted(async (event) => {
-    const user = event.data;
+export const onUserDelete = functions.auth.user().onDelete(async (user) => {
     const userId = user.uid;
     logger.log(`Cleaning up data for user: ${userId}`);
 
@@ -176,13 +157,10 @@ export const onUserDelete = onUserDeleted(async (event) => {
         const db = admin.firestore();
         const bucket = admin.storage().bucket();
 
-        // 1. Delete user document from Firestore.
-        // This will also trigger the 'syncUserToAlgolia' function to remove the user from Algolia.
         const userDocRef = db.collection('users').doc(userId);
         await userDocRef.delete();
         logger.log(`Successfully deleted Firestore document for user: ${userId}`);
 
-        // 2. Delete user profile pictures from Storage.
         const profilePicturesPath = `profilePictures/${userId}/`;
         await bucket.deleteFiles({ prefix: profilePicturesPath });
         logger.log(`Successfully deleted profile pictures for user: ${userId}`);
@@ -194,12 +172,8 @@ export const onUserDelete = onUserDeleted(async (event) => {
 
 // --- START: Notification Functions ---
 
-// Sends a notification when a new call is created.
 export const sendCallNotification = onDocumentWritten("calls/{callId}", async (event) => {
-    // Only trigger on create
-    if (!event.data?.after.exists || event.data.before.exists) {
-        return;
-    }
+    if (!event.data?.after.exists || event.data.before.exists) return;
 
     const callData = event.data.after.data();
     if (!callData) return;
@@ -212,7 +186,7 @@ export const sendCallNotification = onDocumentWritten("calls/{callId}", async (e
     ]);
     
     const receiverToken = receiverProfile.data()?.fcmToken;
-    const callerName = callerProfile.data()?.firstName || 'Quelqu\\'un';
+    const callerName = callerProfile.data()?.firstName || 'Quelqu\'un';
 
     if (!receiverToken) {
         logger.log(`Receiver ${receiverId} does not have an FCM token.`);
@@ -222,18 +196,9 @@ export const sendCallNotification = onDocumentWritten("calls/{callId}", async (e
     const callType = isVideo ? "vidéo" : "audio";
     const payload = {
         token: receiverToken,
-        notification: {
-            title: `Appel ${callType} entrant 📞`,
-            body: `${callerName} vous appelle.`
-        },
-        data: {
-            type: 'VIDEO_CALL',
-            callId: event.params.callId,
-            callerName: callerName
-        },
-        android: {
-            priority: 'high' as const
-        }
+        notification: { title: `Appel ${callType} entrant 📞`, body: `${callerName} vous appelle.` },
+        data: { type: 'VIDEO_CALL', callId: event.params.callId, callerName: callerName },
+        android: { priority: 'high' as const }
     };
 
     try {
@@ -244,12 +209,8 @@ export const sendCallNotification = onDocumentWritten("calls/{callId}", async (e
     }
 });
 
-
-// Sends a notification for a new message.
 export const sendNewMessageNotification = onDocumentWritten("chats/{chatId}/messages/{messageId}", async (event) => {
-    if (!event.data?.after.exists || event.data.before.exists) {
-        return;
-    }
+    if (!event.data?.after.exists || event.data.before.exists) return;
     const messageData = event.data.after.data();
     if (!messageData) return;
 
@@ -266,7 +227,7 @@ export const sendNewMessageNotification = onDocumentWritten("chats/{chatId}/mess
     ]);
 
     const receiverToken = receiverProfile.data()?.fcmToken;
-    const senderName = senderProfile.data()?.firstName || 'Quelqu\\'un';
+    const senderName = senderProfile.data()?.firstName || 'Quelqu\'un';
 
     if (!receiverToken) return;
 
@@ -276,15 +237,8 @@ export const sendNewMessageNotification = onDocumentWritten("chats/{chatId}/mess
 
     const payload = {
         token: receiverToken,
-        notification: {
-            title: `Nouveau message de ${senderName}`,
-            body: messageBody
-        },
-        data: {
-            type: 'MESSAGE',
-            chatId: chatId,
-            senderId: senderId
-        }
+        notification: { title: `Nouveau message de ${senderName}`, body: messageBody },
+        data: { type: 'MESSAGE', chatId: chatId, senderId: senderId }
     };
 
      try {
@@ -295,20 +249,20 @@ export const sendNewMessageNotification = onDocumentWritten("chats/{chatId}/mess
     }
 });
 
-// Sends a notification for a new friend request.
 export const sendFriendRequestNotification = onDocumentWritten("users/{userId}", async (event) => {
-    if (!event.data?.before.exists || !event.data?.after.exists) {
-        return; // Only interested in updates
-    }
+    if (!event.data?.before.exists || !event.data?.after.exists) return;
+
     const beforeData = event.data.before.data();
     const afterData = event.data.after.data();
+
+    if (!beforeData || !afterData) return;
+
     const beforeFriends = beforeData.friends || [];
     const afterFriends = afterData.friends || [];
 
-    // Find who added whom
     if (afterFriends.length > beforeFriends.length) {
         const newFriendId = afterFriends.find((id: string) => !beforeFriends.includes(id));
-        const userIdWhoWasAdded = event.params.userId; // The document that was changed
+        const userIdWhoWasAdded = event.params.userId;
         const userIdWhoAdded = newFriendId;
         
         if (!userIdWhoAdded) return;
@@ -319,20 +273,14 @@ export const sendFriendRequestNotification = onDocumentWritten("users/{userId}",
         ]);
 
         const receiverToken = addedProfile.data()?.fcmToken;
-        const senderName = addedByProfile.data()?.firstName || 'Quelqu\\'un';
+        const senderName = addedByProfile.data()?.firstName || 'Quelqu\'un';
 
         if (!receiverToken) return;
 
         const payload = {
             token: receiverToken,
-            notification: {
-                title: 'Nouvelle amitié ! 🎉',
-                body: `${senderName} vous a ajouté(e) comme ami(e).`
-            },
-            data: {
-                type: 'FRIEND_REQUEST',
-                senderId: userIdWhoAdded
-            }
+            notification: { title: 'Nouvelle amitié ! 🎉', body: `${senderName} vous a ajouté(e) comme ami(e).` },
+            data: { type: 'FRIEND_REQUEST', senderId: userIdWhoAdded }
         };
 
         try {

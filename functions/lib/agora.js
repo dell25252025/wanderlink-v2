@@ -5,29 +5,41 @@ const functions = require("firebase-functions");
 const agora_token_1 = require("agora-token");
 const params_1 = require("firebase-functions/params");
 const cors = require("cors");
-// Initialize cors middleware
-const corsHandler = cors({ origin: true });
 // Define parameters for environment variables for Agora
 const AGORA_APP_ID = (0, params_1.defineString)("AGORA_APP_ID");
 const AGORA_APP_CERTIFICATE = (0, params_1.defineString)("AGORA_APP_CERTIFICATE");
+// Allowed origins for CORS
+const allowedOrigins = [
+    "https://wanderlink-v2--wanderlink-c1a35.us-east4.hosted.app",
+    "http://localhost:3000",
+    "capacitor://localhost",
+    "http://localhost"
+];
+// Configure cors middleware with a custom origin function
+const corsHandler = cors({
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin)
+            return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
+    credentials: true, // Allow cookies to be sent
+});
 exports.generateAgoraToken = functions.https.onRequest((req, res) => {
-    // Use the cors middleware to handle the preflight request
+    // Use the cors middleware to handle the request and preflight checks
     corsHandler(req, res, async () => {
-        // Check for the POST method
+        // The corsHandler will automatically handle OPTIONS requests.
+        // We only need to handle the POST logic.
         if (req.method !== 'POST') {
+            // The corsHandler should have already handled the OPTIONS preflight,
+            // so if it's not POST, it's an invalid method.
             res.status(405).send('Method Not Allowed');
             return;
         }
-        // The onCall authentication check is manual in onRequest
-        // The token is automatically verified by the Firebase Functions runtime.
-        // If the token is invalid, req.user will be undefined.
-        // For simplicity in this context, we will trust valid requests, but in production,
-        // you should verify the user's identity more strictly.
-        // if (!req.user) {
-        //     functions.logger.error("Authentication check failed.");
-        //     res.status(401).send("Unauthorized");
-        //     return;
-        // }
         const { channelName, role, uid } = req.body.data;
         const appId = AGORA_APP_ID.value();
         const appCertificate = AGORA_APP_CERTIFICATE.value();
@@ -47,7 +59,6 @@ exports.generateAgoraToken = functions.https.onRequest((req, res) => {
         functions.logger.info(`Generating token for channel: ${channelName}, uid: ${uid}`);
         try {
             const token = agora_token_1.RtcTokenBuilder.buildTokenWithUid(appId, appCertificate, channelName, uid, role === 'publisher' ? agora_token_1.RtcRole.PUBLISHER : agora_token_1.RtcRole.SUBSCRIBER, privilegeExpiredTs, privilegeExpiredTs);
-            // Send the token back in the response
             res.status(200).json({ data: { token } });
         }
         catch (error) {
