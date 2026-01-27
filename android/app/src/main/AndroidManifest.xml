@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Permission obligatoire pour afficher les notifications sur Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -40,16 +43,11 @@
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
 
-        <!-- START: Firebase Messaging Service Declaration -->
+        <!-- Déclaration du service Firebase Messaging (sans intent-filter) -->
         <service
             android:name=".MyFirebaseMessagingService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
-        <!-- END: Firebase Messaging Service Declaration -->
-
+            android:exported="false" />
+        
     </application>
 
     <!-- Permissions -->
