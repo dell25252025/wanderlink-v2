@@ -43,11 +43,6 @@
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
 
-        <!-- Déclaration du service Firebase Messaging (sans intent-filter) -->
-        <service
-            android:name=".MyFirebaseMessagingService"
-            android:exported="false" />
-        
     </application>
 
     <!-- Permissions -->
