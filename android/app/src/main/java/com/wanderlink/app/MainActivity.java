@@ -1,17 +1,45 @@
+
 package com.wanderlink.app;
 
 import android.os.Bundle;
+import android.util.Log;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-import com.getcapacitor.BridgeActivity;
+
 import androidx.annotation.NonNull;
 
+import com.getcapacitor.BridgeActivity;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
+import com.google.firebase.messaging.FirebaseMessaging;
+
 public class MainActivity extends BridgeActivity {
+
+    private static final String TAG = "MyFirebaseMsgService";
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Forcer la récupération du token FCM au démarrage de l'activité principale
+        FirebaseMessaging.getInstance().getToken()
+            .addOnCompleteListener(new OnCompleteListener<String>() {
+                @Override
+                public void onComplete(@NonNull Task<String> task) {
+                    if (!task.isSuccessful()) {
+                        Log.w(TAG, "Fetching FCM registration token failed", task.getException());
+                        return;
+                    }
+
+                    // Récupérer le nouveau token d'enregistrement FCM
+                    String token = task.getResult();
+
+                    // Log du token
+                    Log.d(TAG, "FCM Token retrieved from MainActivity: " + token);
+                }
+            });
     }
 
     @Override
@@ -44,13 +72,8 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    // --- CORRECTION ---
-    // Gère la réponse de la demande de permission et la transmet à Capacitor.
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        // L'appel à 'super' est suffisant, car BridgeActivity se charge déjà de transmettre
-        // le résultat au pont Capacitor. L'appel direct que j'avais ajouté était redondant
-        // et causait une erreur de compilation.
     }
 }
