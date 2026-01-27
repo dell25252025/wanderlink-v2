@@ -9,45 +9,23 @@ import { PushNotifications, Token } from '@capacitor/push-notifications';
 import { getFirestore, doc, setDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
+// Ce composant gère l'initialisation des plugins Capacitor et l'écoute des événements globaux
 const CapacitorSetup = () => {
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
-      console.log("Initialisation de Capacitor...");
-
-      // Initialise Google Auth
+      // Initialisation non liée à Firebase qui peut être faite immédiatement
       GoogleAuth.initialize({
         clientId: '186522309970-kimg8pa9cd9lrmbl9uajk129nb0lrre2.apps.googleusercontent.com',
         scopes: ['profile', 'email'],
         grantOfflineAccess: true,
       });
-
-      // Masque le Splash Screen
       SplashScreen.hide();
 
-      // --- DEBUT LOGIQUE DE NOTIFICATION ---
+      // --- DEBUT LOGIQUE D'ECOUTE DES NOTIFICATIONS ---
 
-      // Fonction pour demander la permission et s'enregistrer
-      const registerPush = async () => {
-        let permStatus = await PushNotifications.checkPermissions();
-
-        if (permStatus.receive === 'prompt') {
-          permStatus = await PushNotifications.requestPermissions();
-        }
-
-        if (permStatus.receive !== 'granted') {
-          console.log("Permission de notification non accordee");
-          return;
-        }
-
-        await PushNotifications.register();
-      };
-
-      // Execution de la logique de notification
-      registerPush();
-
-      // Listener pour l'enregistrement réussi du token
+      // Listener pour l'enregistrement réussi du token. Ceci est passif et ne cause pas de crash.
       PushNotifications.addListener('registration', async (token: Token) => {
-        console.log("FCM token recu");
+        console.log("FCM token recu par le listener");
         const auth = getAuth();
         const user = auth.currentUser;
 
@@ -71,10 +49,10 @@ const CapacitorSetup = () => {
 
       // Listener pour les erreurs d'enregistrement
       PushNotifications.addListener('registrationError', (error: any) => {
-        console.log("Erreur enregistrement notification");
+        console.log("Erreur durant l'enregistrement de la notification");
       });
       
-      // --- FIN LOGIQUE DE NOTIFICATION ---
+      // --- FIN LOGIQUE D'ECOUTE ---
     }
   }, []);
 
