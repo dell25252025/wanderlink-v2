@@ -2,7 +2,6 @@
 package com.wanderlink.app;
 
 import android.os.Bundle;
-import android.util.Log;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -11,35 +10,13 @@ import android.webkit.WebView;
 import androidx.annotation.NonNull;
 
 import com.getcapacitor.BridgeActivity;
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
-import com.google.firebase.messaging.FirebaseMessaging;
 
 public class MainActivity extends BridgeActivity {
-
-    private static final String TAG = "MyFirebaseMsgService";
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        // Forcer la récupération du token FCM au démarrage de l'activité principale
-        FirebaseMessaging.getInstance().getToken()
-            .addOnCompleteListener(new OnCompleteListener<String>() {
-                @Override
-                public void onComplete(@NonNull Task<String> task) {
-                    if (!task.isSuccessful()) {
-                        Log.w(TAG, "Fetching FCM registration token failed", task.getException());
-                        return;
-                    }
-
-                    // Récupérer le nouveau token d'enregistrement FCM
-                    String token = task.getResult();
-
-                    // Log du token
-                    Log.d(TAG, "FCM Token retrieved from MainActivity: " + token);
-                }
-            });
+        // LE CODE QUI CRÉAIT LE CRASH A ÉTÉ SUPPRIMÉ D'ICI
     }
 
     @Override
