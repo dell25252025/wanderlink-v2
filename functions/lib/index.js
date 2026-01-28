@@ -26,6 +26,8 @@ exports.sendNewMessageNotificationV2 = functions.region("europe-west1")
         functions.logger.log("Le sender et le receiver sont identiques. Notification annulée.");
         return;
     }
+    // NOUVELLE PARTIE AMÉLIORÉE
+    functions.logger.info(`Récupération des tokens pour le receiverId: '${receiverId}'`);
     // 2. Récupérer les tokens FCM du destinataire
     const tokensSnapshot = await admin
         .firestore()
@@ -33,14 +35,32 @@ exports.sendNewMessageNotificationV2 = functions.region("europe-west1")
         .doc(receiverId)
         .collection("fcmTokens")
         .get();
+    functions.logger.info(`Snapshot de la collection 'fcmTokens' obtenu. La collection est-elle vide ? ${tokensSnapshot.empty}. Nombre de documents: ${tokensSnapshot.size}`);
     if (tokensSnapshot.empty) {
         functions.logger.warn(`Aucun token FCM trouvé pour l'utilisateur ${receiverId}. Notification annulée.`);
         return;
     }
-    // 3. Extraire et logger la liste des tokens
-    const tokens = tokensSnapshot.docs.map((doc) => doc.data().token);
-    const maskedTokens = tokens.map(token => `${token.substring(0, 10)}...`);
-    functions.logger.info(`Trouvé ${tokens.length} token(s) pour ${receiverId}:`, maskedTokens);
+    // 3. Extraire et logger la liste des tokens (logique améliorée)
+    const tokens = [];
+    tokensSnapshot.docs.forEach(doc => {
+        const docData = doc.data();
+        const tokenFromField = docData.token;
+        if (tokenFromField && typeof tokenFromField === 'string') {
+            functions.logger.info(`Token trouvé dans le champ 'token' du document ${doc.id}`);
+            tokens.push(tokenFromField);
+        }
+        else {
+            functions.logger.info(`Champ 'token' non trouvé ou invalide dans le document ${doc.id}. Utilisation de l'ID du document comme token.`);
+            tokens.push(doc.id);
+        }
+    });
+    const validTokens = tokens.filter(t => t && typeof t === 'string' && t.length > 0);
+    if (validTokens.length === 0) {
+        functions.logger.warn(`Après filtrage, aucun token valide n'a été trouvé pour l'utilisateur ${receiverId}. Notification annulée.`);
+        return;
+    }
+    const maskedTokens = validTokens.map(token => `${token.substring(0, 10)}...`);
+    functions.logger.info(`Trouvé ${validTokens.length} token(s) valide(s) pour ${receiverId}:`, maskedTokens);
     // 4. Préparer le payload de la notification
     const payload = {
         notification: {
@@ -50,7 +70,7 @@ exports.sendNewMessageNotificationV2 = functions.region("europe-west1")
         },
     };
     const multicastMessage = {
-        tokens: tokens,
+        tokens: validTokens,
         notification: payload.notification,
     };
     // 5. Envoyer la notification via FCM
@@ -62,15 +82,15 @@ exports.sendNewMessageNotificationV2 = functions.region("europe-west1")
             batchResponse.responses.forEach((result, index) => {
                 const error = result.error;
                 if (error) {
-                    // Log détaillé de l'erreur FCM
-                    functions.logger.error(`Échec de l'envoi au token ${maskedTokens[index]}`, {
-                        code: error.code,
-                        message: error.message,
-                    });
-                    // Planifier la suppression des tokens invalides
+                    functions.logger.error(`Échec de l'envoi au token ${maskedTokens[index]}`, { code: error.code, message: error.message, });
                     if (error.code === "messaging/invalid-registration-token" ||
                         error.code === "messaging/registration-token-not-registered") {
-                        tokensToRemove.push(tokensSnapshot.docs[index].ref.delete());
+                        // Trouver le document original à supprimer
+                        const tokenToDelete = validTokens[index];
+                        const docToDelete = tokensSnapshot.docs.find(doc => doc.id === tokenToDelete || doc.data().token === tokenToDelete);
+                        if (docToDelete) {
+                            tokensToRemove.push(docToDelete.ref.delete());
+                        }
                     }
                 }
             });
