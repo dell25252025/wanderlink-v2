@@ -13,8 +13,6 @@ import { getAuth } from 'firebase/auth';
 const CapacitorSetup = () => {
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
-      console.log("--- CAPACITOR_SETUP: Composant monte et code actif ---");
-
       // Initialisation non liée à Firebase qui peut être faite immédiatement
       GoogleAuth.initialize({
         clientId: '186522309970-kimg8pa9cd9lrmbl9uajk129nb0lrre2.apps.googleusercontent.com',
@@ -27,7 +25,7 @@ const CapacitorSetup = () => {
 
       // Listener pour l'enregistrement réussi du token. Ceci est passif et ne cause pas de crash.
       PushNotifications.addListener('registration', async (token: Token) => {
-        console.log("--- LISTENER: Evenement 'registration' entendu! Token: " + token.value);
+        console.log("Push token received: ", token.value);
         const auth = getAuth();
         const user = auth.currentUser;
 
@@ -40,18 +38,18 @@ const CapacitorSetup = () => {
               createdAt: new Date(),
               platform: Capacitor.getPlatform()
             });
-            console.log("--- LISTENER: Token sauvegarde dans Firestore ---");
+            console.log("FCM Token saved to Firestore.");
           } catch (error) {
-            console.log("--- LISTENER: Erreur Firestore pendant sauvegarde token ---");
+            console.error("Error saving FCM token to Firestore: ", error);
           }
         } else {
-          console.log("--- LISTENER: Utilisateur non connecte. Token non sauvegarde. ---");
+          console.log("User not logged in, token not saved.");
         }
       });
 
       // Listener pour les erreurs d'enregistrement
       PushNotifications.addListener('registrationError', (error: any) => {
-        console.log("--- LISTENER: ERREUR 'registrationError' entendue! ---", error);
+        console.error("Error during push notification registration: ", error);
       });
       
       // --- FIN LOGIQUE D'ECOUTE ---

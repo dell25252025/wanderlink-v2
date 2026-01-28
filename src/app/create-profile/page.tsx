@@ -75,7 +75,6 @@ function ProfileCreationForm() {
 
 
   useEffect(() => {
-    console.log("--- CREATE_PROFILE: useEffect principal demarre ---");
     const firstName = searchParams.get('firstName');
     const photoURL = searchParams.get('photoURL');
     if (firstName && photoURL) {
@@ -84,36 +83,61 @@ function ProfileCreationForm() {
     }
 
     const requestAllPermissions = async () => {
-      console.log("--- CREATE_PROFILE: requestAllPermissions demarre ---");
       if (!Capacitor.isNativePlatform()) {
-        console.log("--- CREATE_PROFILE: Non natif, skip permissions ---");
         setPermissionsReady(true);
         return;
       }
       
-      // ... (autres demandes de permissions) ...
+      // 1. Demande pour la géolocalisation
+      try {
+        const geoStatus = await Geolocation.requestPermissions();
+        if (geoStatus.location === 'granted') {
+          const position = await Geolocation.getCurrentPosition();
+          const { latitude, longitude } = position.coords;
+          const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=fr&zoom=3`;
+          const response = await fetch(url, { headers: { 'User-Agent': 'WanderLink/1.0 (tech.wanderlink.app)' } });
+          if (!response.ok) throw new Error('Reverse geocoding failed');
+          const data = await response.json();
+          const countryCode = data?.address?.country_code;
+          if (countryCode) {
+            const foundCountry = countries.find(c => c.code.toLowerCase() === countryCode.toLowerCase());
+            if (foundCountry) setValue('location', foundCountry.name, { shouldValidate: true });
+          }
+        }
+      } catch (e) { 
+        console.warn("Geolocation or Notification permission/request failed", e); 
+      }
 
+      // 2. Demande pour la caméra et les photos
+      try {
+        await Camera.requestPermissions({ permissions: ['camera', 'photos'] });
+      } catch (e) { 
+        console.warn("Camera/Photos permission failed", e);
+      }
+
+      // 3. Demande pour le microphone
+      if (Capacitor.getPlatform() === 'android') {
+        try {
+          const checkResult = await AndroidPermissions.checkPermission(AndroidPermissions.PERMISSION.RECORD_AUDIO);
+          if (!checkResult.hasPermission) {
+            await AndroidPermissions.requestPermission(AndroidPermissions.PERMISSION.RECORD_AUDIO);
+          }
+        } catch (e) {
+          console.error("Android RECORD_AUDIO permission error:", e);
+        }
+      }
+      
       // 4. Demande pour les notifications
-      console.log("--- CREATE_PROFILE: Bloc de permission notif commence ---");
       try {
         let permStatus = await PushNotifications.checkPermissions();
-        console.log("--- CREATE_PROFILE: Statut permission initial: " + permStatus.receive);
-
         if (permStatus.receive === 'prompt') {
-          console.log("--- CREATE_PROFILE: Permission non demandee, appel de requestPermissions ---");
           permStatus = await PushNotifications.requestPermissions();
-          console.log("--- CREATE_PROFILE: Statut permission apres demande: " + permStatus.receive);
         }
-
         if (permStatus.receive === 'granted') {
-          console.log("--- CREATE_PROFILE: Permission accordee. Appel de register() imminent ---");
           await PushNotifications.register();
-          console.log("--- CREATE_PROFILE: Appel a register() termine. En attente de l'evenement... ---");
-        } else {
-          console.log("--- CREATE_PROFILE: Permission non accordee. Pas d'appel a register() ---");
         }
       } catch (e) {
-         console.log("--- CREATE_PROFILE: ERREUR dans le bloc de permission notif ---", e);
+         console.warn("Push notification permission failed", e);
       }
 
       setPermissionsReady(true);
@@ -125,7 +149,6 @@ function ProfileCreationForm() {
   }, [searchParams, reset]);
 
 
-  // ... (reste du fichier inchangé) ...
   const nextStep = useCallback(async () => {
     const fieldsToValidate = steps[currentStep].fields as (keyof FormData)[];
     const isValid = await trigger(fieldsToValidate);
