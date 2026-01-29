@@ -4,9 +4,16 @@ import * as admin from "firebase-admin";
 
 admin.initializeApp();
 
+// --- NOUVELLE LIGNE DE VÉRIFICATION ---
+const adminProjectId = admin.app().options.projectId;
+
 export const sendNewMessageNotificationV2 = functions.region("europe-west1")
   .firestore.document("conversations/{conversationId}/messages/{messageId}")
   .onCreate(async (snapshot, context) => {
+    
+    // --- NOUVELLE LIGNE DE LOG ---
+    functions.logger.info(`--- Cloud Function is running for Firebase project: ${adminProjectId} ---`);
+
     const message = snapshot.data();
     if (!message) {
       functions.logger.error("Message data is empty.");
@@ -31,11 +38,9 @@ export const sendNewMessageNotificationV2 = functions.region("europe-west1")
       return;
     }
 
-    // --- MODIFICATION: Logique de filtrage et de collecte améliorée ---
     const tokensData: { token: string; ref: admin.firestore.DocumentReference }[] = [];
     tokensSnapshot.forEach(doc => {
       const token = doc.data().token;
-      // Ajout d'un filtre de validité de base
       if (token && typeof token === 'string' && token.length > 10) {
         tokensData.push({ token, ref: doc.ref });
       }
@@ -59,7 +64,6 @@ export const sendNewMessageNotificationV2 = functions.region("europe-west1")
       const response = await admin.messaging().sendEach(tokensToSend.map(token => ({ token, notification: payload.notification })));
       functions.logger.info(`${response.successCount} messages were sent successfully.`);
 
-      // --- DEBUT DE LA NOUVELLE LOGIQUE D'AUTO-NETTOYAGE ---
       if (response.failureCount > 0) {
         const tokensToDelete: Promise<void>[] = [];
         response.responses.forEach((result, index) => {
@@ -68,7 +72,6 @@ export const sendNewMessageNotificationV2 = functions.region("europe-west1")
             const failedToken = tokensToSend[index];
             functions.logger.error(`Failure sending notification to token: ${failedToken}`, error);
 
-            // Si l'erreur est que le token n'est pas enregistré, on le supprime
             if (
               error.code === 'messaging/invalid-registration-token' ||
               error.code === 'messaging/registration-token-not-registered'
@@ -83,7 +86,6 @@ export const sendNewMessageNotificationV2 = functions.region("europe-west1")
         await Promise.all(tokensToDelete);
         functions.logger.info(`${tokensToDelete.length} invalid tokens have been deleted.`);
       }
-       // --- FIN DE LA NOUVELLE LOGIQUE D'AUTO-NETTOYAGE ---
 
     } catch (error) {
       functions.logger.error("Error sending notifications:", error);
