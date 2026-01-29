@@ -4,124 +4,88 @@ import * as admin from "firebase-admin";
 
 admin.initializeApp();
 
-/**
- * Se déclenche à la création d'un nouveau message dans n'importe quelle conversation.
- */
 export const sendNewMessageNotificationV2 = functions.region("europe-west1")
   .firestore.document("conversations/{conversationId}/messages/{messageId}")
   .onCreate(async (snapshot, context) => {
-    // --- Log des identifiants ---
-    const messageId = context.params.messageId;
-    const conversationId = context.params.conversationId;
-    functions.logger.info(`--- Début du traitement pour le message ${messageId} dans la conversation ${conversationId} ---`);
-
     const message = snapshot.data();
     if (!message) {
-      functions.logger.error("Le document de message est vide. Fin du traitement.");
+      functions.logger.error("Message data is empty.");
       return;
     }
 
-    const { senderId, receiverId, text } = message;
-    functions.logger.info(`Message de: ${senderId}, Pour: ${receiverId}`);
-
-    // 1. Ne pas envoyer de notification à soi-même
+    const { senderId, receiverId } = message;
     if (senderId === receiverId) {
-      functions.logger.log("Le sender et le receiver sont identiques. Notification annulée.");
+      functions.logger.log("Sender and receiver are the same, no notification sent.");
       return;
     }
 
-    // NOUVELLE PARTIE AMÉLIORÉE
-    functions.logger.info(`Récupération des tokens pour le receiverId: '${receiverId}'`);
-
-    // 2. Récupérer les tokens FCM du destinataire
     const tokensSnapshot = await admin
       .firestore()
       .collection("users")
       .doc(receiverId)
       .collection("fcmTokens")
       .get();
-    
-    functions.logger.info(`Snapshot de la collection 'fcmTokens' obtenu. La collection est-elle vide ? ${tokensSnapshot.empty}. Nombre de documents: ${tokensSnapshot.size}`);
 
     if (tokensSnapshot.empty) {
-      functions.logger.warn(`Aucun token FCM trouvé pour l'utilisateur ${receiverId}. Notification annulée.`);
+      functions.logger.warn(`No FCM tokens found for user ${receiverId}.`);
       return;
     }
 
-    // 3. Extraire et logger la liste des tokens (logique améliorée)
-    const tokens: string[] = [];
-    tokensSnapshot.docs.forEach(doc => {
-        const docData = doc.data();
-        const tokenFromField = docData.token;
-        if (tokenFromField && typeof tokenFromField === 'string') {
-            functions.logger.info(`Token trouvé dans le champ 'token' du document ${doc.id}`);
-            tokens.push(tokenFromField);
-        } else {
-            functions.logger.info(`Champ 'token' non trouvé ou invalide dans le document ${doc.id}. Utilisation de l'ID du document comme token.`);
-            tokens.push(doc.id);
-        }
+    // --- MODIFICATION: Logique de filtrage et de collecte améliorée ---
+    const tokensData: { token: string; ref: admin.firestore.DocumentReference }[] = [];
+    tokensSnapshot.forEach(doc => {
+      const token = doc.data().token;
+      // Ajout d'un filtre de validité de base
+      if (token && typeof token === 'string' && token.length > 10) {
+        tokensData.push({ token, ref: doc.ref });
+      }
     });
 
-    const validTokens = tokens.filter(t => t && typeof t === 'string' && t.length > 0);
-
-    if (validTokens.length === 0) {
-        functions.logger.warn(`Après filtrage, aucun token valide n'a été trouvé pour l'utilisateur ${receiverId}. Notification annulée.`);
-        return;
+    if (tokensData.length === 0) {
+      functions.logger.warn("No valid tokens found after filtering.");
+      return;
     }
-    
-    const maskedTokens = validTokens.map(token => `${token.substring(0, 10)}...`);
-    functions.logger.info(`Trouvé ${validTokens.length} token(s) valide(s) pour ${receiverId}:`, maskedTokens);
 
-    // 4. Préparer le payload de la notification
+    const tokensToSend = tokensData.map(data => data.token);
     const payload = {
       notification: {
         title: "Nouveau message",
-        body: text || "Vous avez reçu un nouveau message",
+        body: message.text || "Vous avez reçu un nouveau message",
         sound: "default",
       },
     };
 
-    const multicastMessage = {
-      tokens: validTokens,
-      notification: payload.notification,
-    };
-
-    // 5. Envoyer la notification via FCM
     try {
-      const batchResponse = await admin.messaging().sendEachForMulticast(multicastMessage);
-      functions.logger.info(`${batchResponse.successCount} message(s) envoyé(s) avec succès.`);
+      const response = await admin.messaging().sendEach(tokensToSend.map(token => ({ token, notification: payload.notification })));
+      functions.logger.info(`${response.successCount} messages were sent successfully.`);
 
-      if (batchResponse.failureCount > 0) {
-        const tokensToRemove: Promise<any>[] = [];
-        batchResponse.responses.forEach((result, index) => {
+      // --- DEBUT DE LA NOUVELLE LOGIQUE D'AUTO-NETTOYAGE ---
+      if (response.failureCount > 0) {
+        const tokensToDelete: Promise<void>[] = [];
+        response.responses.forEach((result, index) => {
           const error = result.error;
           if (error) {
-            functions.logger.error(
-              `Échec de l'envoi au token ${maskedTokens[index]}`,
-              { code: error.code, message: error.message, }
-            );
+            const failedToken = tokensToSend[index];
+            functions.logger.error(`Failure sending notification to token: ${failedToken}`, error);
 
+            // Si l'erreur est que le token n'est pas enregistré, on le supprime
             if (
-              error.code === "messaging/invalid-registration-token" ||
-              error.code === "messaging/registration-token-not-registered"
+              error.code === 'messaging/invalid-registration-token' ||
+              error.code === 'messaging/registration-token-not-registered'
             ) {
-              // Trouver le document original à supprimer
-              const tokenToDelete = validTokens[index];
-              const docToDelete = tokensSnapshot.docs.find(doc => doc.id === tokenToDelete || doc.data().token === tokenToDelete);
-              if (docToDelete) {
-                  tokensToRemove.push(docToDelete.ref.delete());
-              }
+              const tokenDataToDelete = tokensData[index];
+              functions.logger.log(`Marking token for deletion: ${tokenDataToDelete.ref.path}`);
+              tokensToDelete.push(tokenDataToDelete.ref.delete());
             }
           }
         });
 
-        await Promise.all(tokensToRemove);
-        if (tokensToRemove.length > 0) {
-          functions.logger.log(`${tokensToRemove.length} token(s) invalide(s) supprimé(s).`);
-        }
+        await Promise.all(tokensToDelete);
+        functions.logger.info(`${tokensToDelete.length} invalid tokens have been deleted.`);
       }
+       // --- FIN DE LA NOUVELLE LOGIQUE D'AUTO-NETTOYAGE ---
+
     } catch (error) {
-      functions.logger.error("Erreur majeure lors de l'envoi des notifications:", error);
+      functions.logger.error("Error sending notifications:", error);
     }
-     functions.logger.info(`--- Fin du traitement pour le message ${messageId} ---`);
   });
