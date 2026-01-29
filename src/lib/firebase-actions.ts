@@ -27,47 +27,71 @@ export async function signOutFromGoogle() {
 }
 
 async function handleUser(user: any) {
+  console.log("--- WANDERLINK DEBUG: Entrée dans la fonction handleUser ---");
+
+  if (!user || !user.uid) {
+    console.error("--- WANDERLINK DEBUG: handleUser appelée avec un objet utilisateur invalide ---", user);
+    return { success: false, error: "Objet utilisateur invalide fourni à handleUser." };
+  }
+
+  console.log(`--- WANDERLINK DEBUG: Traitement de l'utilisateur avec UID: ${user.uid} ---`);
+
   const userRef = doc(db, "users", user.uid);
-  const userDoc = await getDoc(userRef);
 
-  if (!userDoc.exists()) {
-    const [firstName] = user.displayName?.split(' ') || [''];
-    const photoURL = user.photoURL || null;
-    
-    const newProfileData = {
-      uid: user.uid,
-      email: user.email,
-      firstName: firstName,
-      name: user.displayName,
-      profilePictures: photoURL ? [photoURL] : [],
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      friends: [],
-      isPremium: false,
-      subscriptionEndDate: null,
-      isVerified: false,
-      onboardingCompleted: false // ETAPE 1: Initialisation du champ
-    };
-    await setDoc(userRef, sanitizeData(newProfileData));
+  try {
+    console.log(`--- WANDERLINK DEBUG: Vérification de l'existence du document : users/${user.uid} ---`);
+    const userDoc = await getDoc(userRef);
 
-    return { 
-      success: true, 
-      id: user.uid, 
-      isNewUser: true,
-      onboardingCompleted: false, 
-      userData: { 
-        firstName: firstName, 
-        photoURL: photoURL 
-      } 
-    };
-  } else {
-    const data = userDoc.data();
-    return { 
+    if (!userDoc.exists()) {
+      console.log(`--- WANDERLINK DEBUG: Le document pour ${user.uid} n'existe PAS. Création en cours. ---`);
+      const [firstName] = user.displayName?.split(' ') || [''];
+      const photoURL = user.photoURL || null;
+      
+      const newProfileData = {
+        uid: user.uid,
+        email: user.email,
+        firstName: firstName,
+        name: user.displayName,
+        profilePictures: photoURL ? [photoURL] : [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        friends: [],
+        isPremium: false,
+        subscriptionEndDate: null,
+        isVerified: false,
+        onboardingCompleted: false
+      };
+
+      console.log("--- WANDERLINK DEBUG: Données à écrire :", newProfileData);
+      
+      await setDoc(userRef, sanitizeData(newProfileData));
+      
+      console.log(`--- WANDERLINK DEBUG: Document pour UID: ${user.uid} CRÉÉ AVEC SUCCÈS ---`);
+
+      return { 
         success: true, 
         id: user.uid, 
-        isNewUser: !data.onboardingCompleted, // La decision est maintenant basée sur ce champ
-        onboardingCompleted: data.onboardingCompleted === true 
-    };
+        isNewUser: true,
+        onboardingCompleted: false, 
+        userData: { 
+          firstName: firstName, 
+          photoURL: photoURL 
+        } 
+      };
+    } else {
+      console.log(`--- WANDERLINK DEBUG: Le document pour ${user.uid} EXISTE DÉJÀ. ---`);
+      const data = userDoc.data();
+      return { 
+          success: true, 
+          id: user.uid, 
+          isNewUser: !data.onboardingCompleted,
+          onboardingCompleted: data.onboardingCompleted === true 
+      };
+    }
+  } catch (error) {
+    console.error(`--- WANDERLINK DEBUG: ERREUR CRITIQUE dans handleUser pour UID ${user.uid} ---`, error);
+    const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue dans handleUser.";
+    return { success: false, error: errorMessage };
   }
 }
 
