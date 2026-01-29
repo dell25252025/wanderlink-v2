@@ -10,7 +10,6 @@ admin.initializeApp();
 export const sendNewMessageNotificationV2 = functions.region("europe-west1")
   .firestore.document("conversations/{conversationId}/messages/{messageId}")
   .onCreate(async (snapshot, context) => {
-    functions.logger.info("--- DÉPLOIEMENT FORCÉ - VERSION DU 28/01 ---"); // LIGNE AJOUTÉE
     // --- Log des identifiants ---
     const messageId = context.params.messageId;
     const conversationId = context.params.conversationId;
