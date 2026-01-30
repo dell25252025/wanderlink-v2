@@ -65,7 +65,8 @@ export const sendNewMessageNotificationV2 = functions.region("europe-west1")
       functions.logger.info(`${response.successCount} messages were sent successfully.`);
 
       if (response.failureCount > 0) {
-        const tokensToDelete: Promise<void>[] = [];
+        // --- CORRECTION DE L'ERREUR DE TYPE ---
+        const tokensToDelete: Promise<admin.firestore.WriteResult>[] = [];
         response.responses.forEach((result, index) => {
           const error = result.error;
           if (error) {
