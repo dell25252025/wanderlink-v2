@@ -56,7 +56,7 @@ export const sendNewMessageNotificationV2 = functions.region("europe-west1")
       notification: {
         title: "Nouveau message",
         body: message.text || "Vous avez reçu un nouveau message",
-        sound: "default",
+        // sound: "default",  <-- LIGNE SUPPRIMÉE
       },
     };
 
@@ -65,7 +65,6 @@ export const sendNewMessageNotificationV2 = functions.region("europe-west1")
       functions.logger.info(`${response.successCount} messages were sent successfully.`);
 
       if (response.failureCount > 0) {
-        // --- CORRECTION DE L'ERREUR DE TYPE ---
         const tokensToDelete: Promise<admin.firestore.WriteResult>[] = [];
         response.responses.forEach((result, index) => {
           const error = result.error;
