@@ -35,21 +35,33 @@ declare global {
 // --- STABLE SINGLETON PATTERN --- //
 let usersIndexSingleton: ReturnType<ReturnType<typeof algoliasearch>['initIndex']> | null = null;
 
-function getUsersIndex() {
+async function getUsersIndex(): Promise<ReturnType<ReturnType<typeof algoliasearch>['initIndex']> | null> {
   if (usersIndexSingleton) {
     return usersIndexSingleton;
   }
 
-  if (typeof window === 'undefined' || typeof window.algoliasearch === 'undefined') {
-    console.error("Algolia script not loaded or not in a browser environment.");
-    return null;
+  // Wait for the Algolia script to be loaded
+  if (typeof window !== 'undefined' && !window.algoliasearch) {
+    await new Promise<void>((resolve) => {
+      const interval = setInterval(() => {
+        if (window.algoliasearch) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 100); // Check every 100ms
+    });
+  }
+
+  if (typeof window === 'undefined' || !window.algoliasearch) {
+      console.error("Algolia script could not be loaded or not in a browser environment.");
+      return null;
   }
 
   const appId = process.env.NEXT_PUBLIC_ALGOLIA_APP_ID || window.__ALGOLIA_APP_ID__;
   const searchKey = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY || window.__ALGOLIA_SEARCH_KEY__;
 
   if (!appId || !searchKey) {
-    console.error("Algolia keys are missing from both process.env and window object.");
+    console.error("Algolia keys are missing.");
     return null;
   }
 
@@ -121,7 +133,7 @@ export default function DiscoverPage() {
     };
 
     const handleSearch = async () => {
-        const index = getUsersIndex();
+        const index = await getUsersIndex(); // <-- Correction: Wait for the index to be ready
         if (!index || !userProfile || !currentUser) {
             console.log('Search aborted. Index or profile not ready yet.', { index: !!index, userProfile: !!userProfile, currentUser: !!currentUser });
             return;
@@ -154,8 +166,11 @@ export default function DiscoverPage() {
             searchOptions.aroundRadius = 50000; // 50km
         }
     
+        console.log("Executing Algolia search with options:", searchOptions); // <-- LOGGING
+
         try {
             const { hits } = await index.search('', searchOptions);
+            console.log(`Algolia search successful. Received ${hits.length} hits.`); // <-- LOGGING
             const searchResults = hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined, objectID: undefined }));
             localStorage.setItem('searchResults', JSON.stringify(searchResults));
             router.push('/');
