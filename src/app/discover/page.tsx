@@ -133,7 +133,7 @@ export default function DiscoverPage() {
     };
 
     const handleSearch = async () => {
-        const index = await getUsersIndex(); // <-- Correction: Wait for the index to be ready
+        const index = await getUsersIndex();
         if (!index || !userProfile || !currentUser) {
             console.log('Search aborted. Index or profile not ready yet.', { index: !!index, userProfile: !!userProfile, currentUser: !!currentUser });
             return;
@@ -166,11 +166,11 @@ export default function DiscoverPage() {
             searchOptions.aroundRadius = 50000; // 50km
         }
     
-        console.log("Executing Algolia search with options:", searchOptions); // <-- LOGGING
+        console.log("Executing Algolia search with options:", JSON.stringify(searchOptions, null, 2));
 
         try {
             const { hits } = await index.search('', searchOptions);
-            console.log(`Algolia search successful. Received ${hits.length} hits.`); // <-- LOGGING
+            console.log(`Algolia search successful. Received ${hits.length} hits.`);
             const searchResults = hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined, objectID: undefined }));
             localStorage.setItem('searchResults', JSON.stringify(searchResults));
             router.push('/');
@@ -263,7 +263,7 @@ export default function DiscoverPage() {
                                 <Separator />
                                 <div className="flex items-center justify-between py-1 px-1 text-sm">
                                     <span className='text-muted-foreground'>Activités</span>
-                                    <GenericSelect className={uniformSelectClass} value={activities} onValueChange={setActivities} options={travelActivities} placeholder="Toutes" />
+                                    <GenericSelect className={uniformSelectClass} value={activities} onValue-change={setActivities} options={travelActivities} placeholder="Toutes" />
                                 </div>
                             </div>
                         </div>
