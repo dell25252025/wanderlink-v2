@@ -136,6 +136,7 @@ export const syncUserToAlgolia = functions.region("europe-west1")
     // On ne sélectionne que les champs utiles pour la recherche et le filtrage.
     const record = {
       objectID: userId,
+      uid: userId, // Ajout crucial du champ UID
       firstName: userData.firstName || null,
       age: userData.age || null,
       gender: userData.gender || null,
