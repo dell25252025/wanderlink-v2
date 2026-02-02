@@ -135,45 +135,86 @@ export default function DiscoverPage() {
     const handleSearch = async () => {
         const index = await getUsersIndex();
         if (!index || !userProfile || !currentUser) {
-            console.log('Search aborted. Index or profile not ready yet.', { index: !!index, userProfile: !!userProfile, currentUser: !!currentUser });
+            console.error('Search aborted. Index or profile not ready yet.');
             return;
         }
-        
+    
         setIsSearching(true);
     
-        const filters = [];
-        if (showMe) filters.push(`gender:"${showMe}"`);
-        
-        const numericFilters = [];
-        numericFilters.push(`age >= ${ageRange[0]}`);
-        numericFilters.push(`age <= ${ageRange[1]}`);
-    
-        if (country && !nearby) filters.push(`location:"${country}"`);
-        if (destination && destination !== 'Toutes') filters.push(`destination:"${destination}"`);
-        if (intention && intention !== '') filters.push(`intention:"${intention}"`);
-        if (travelStyle && travelStyle !== 'Tous') filters.push(`travelStyle:"${travelStyle}"`);
-        if (activities && activities !== 'Toutes') filters.push(`activities:"${activities}"`);
-    
-        filters.push(`NOT objectID:${currentUser.uid}`);
-    
-        const searchOptions: any = {
-            filters: filters.join(' AND '),
-            numericFilters: numericFilters.join(' AND '),
-        };
-    
-        if (nearby && userProfile.latitude && userProfile.longitude) {
-            searchOptions.aroundLatLng = `${userProfile.latitude}, ${userProfile.longitude}`;
-            searchOptions.aroundRadius = 50000; // 50km
-        }
-    
-        console.log("Executing Algolia search with options:", JSON.stringify(searchOptions, null, 2));
-
         try {
-            const { hits } = await index.search('', searchOptions);
-            console.log(`Algolia search successful. Received ${hits.length} hits.`);
-            const searchResults = hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined, objectID: undefined }));
+            // PHASE 1: Recherche stricte
+            let filters = [];
+            if (showMe) filters.push(`gender:"${showMe}"`);
+            if (country && !nearby) filters.push(`location:"${country}"`);
+            filters.push(`NOT objectID:${currentUser.uid}`);
+    
+            let numericFilters = [
+                `age >= ${ageRange[0]}`,
+                `age <= ${ageRange[1]}`,
+            ];
+    
+            let searchOptions: any = {
+                filters: filters.join(' AND '),
+                numericFilters: numericFilters.join(' AND '),
+            };
+
+            if (nearby && userProfile.latitude && userProfile.longitude) {
+              searchOptions.aroundLatLng = `${userProfile.latitude}, ${userProfile.longitude}`;
+              searchOptions.aroundRadius = 50000; // 50km
+            }
+    
+            console.log("🔍 Algolia search – Phase 1 (strict)", {
+                filters: searchOptions.filters,
+                numericFilters: searchOptions.numericFilters,
+            });
+    
+            let results = await index.search('', searchOptions);
+            console.log("📦 Phase 1 results:", results.hits.length);
+    
+            // PHASE 2: Fallback (âge élargi) si 0 résultat
+            if (results.hits.length === 0) {
+                console.warn("⚠️ No results found – applying fallback strategy");
+    
+                const expandedAgeMin = Math.max(18, ageRange[0] - 5);
+                const expandedAgeMax = Math.min(99, ageRange[1] + 5);
+                
+                numericFilters = [
+                  `age >= ${expandedAgeMin}`,
+                  `age <= ${expandedAgeMax}`,
+                ];
+    
+                searchOptions = {
+                    filters: `NOT objectID:${currentUser.uid}`,
+                    numericFilters: numericFilters.join(' AND '),
+                };
+                 if (nearby && userProfile.latitude && userProfile.longitude) {
+                    searchOptions.aroundLatLng = `${userProfile.latitude}, ${userProfile.longitude}`;
+                    searchOptions.aroundRadius = 50000;
+                }
+    
+                console.log("🔍 Algolia search – Phase 2 (expanded age)", {
+                    numericFilters: searchOptions.numericFilters,
+                });
+    
+                results = await index.search('', searchOptions);
+                console.log("📦 Phase 2 results:", results.hits.length);
+            }
+    
+            // PHASE 3: Dernier recours (tout retourner) si toujours 0 résultat
+            if (results.hits.length === 0) {
+                console.warn("🆘 No results after fallback – returning all profiles");
+                searchOptions = {
+                    filters: `NOT objectID:${currentUser.uid}`,
+                };
+                results = await index.search('', searchOptions);
+            }
+    
+            console.log("✅ Final Algolia results returned:", results.hits.length);
+    
+            const searchResults = results.hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined, objectID: undefined }));
             localStorage.setItem('searchResults', JSON.stringify(searchResults));
             router.push('/');
+    
         } catch (error) {
             console.error("Error searching with Algolia:", error);
         } finally {
@@ -228,6 +269,7 @@ export default function DiscoverPage() {
                                 <div className="flex items-center justify-between py-1 px-1 text-sm">
                                     <span className={cn('text-muted-foreground', nearby && 'opacity-50')}>Pays</span>
                                     <CountrySelect className={uniformSelectClass} value={country} onValueChange={setCountry} disabled={nearby} />
+
                                 </div>
                                 <Separator />
                                 <div className="flex items-center justify-between py-1 px-1 text-sm">
