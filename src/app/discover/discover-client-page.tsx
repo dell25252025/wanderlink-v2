@@ -64,7 +64,7 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
   };
 
   const mappedProfiles: UserProfile[] = profiles.map(p => ({
-    id: p.id,
+    id: p.uid || p.objectID, // Fallback strategy for the ID
     name: p.firstName,
     age: p.age,
     gender: p.gender,
@@ -76,7 +76,7 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
     travelIntention: p.intention || '50/50',
     verified: p.isVerified ?? false,
     isVerified: p.isVerified ?? false,
-    image: p.profilePictures?.[0] || `https://picsum.photos/seed/${p.id}/800/1200`
+    image: p.profilePictures?.[0] || `https://picsum.photos/seed/${p.uid || p.objectID}/800/1200`
   }));
 
   if (loading) {

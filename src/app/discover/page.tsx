@@ -211,7 +211,7 @@ export default function DiscoverPage() {
     
             console.log("✅ Final Algolia results returned:", results.hits.length);
     
-            const searchResults = results.hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined, objectID: undefined }));
+            const searchResults = results.hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined }));
             localStorage.setItem('searchResults', JSON.stringify(searchResults));
             router.push('/');
     
