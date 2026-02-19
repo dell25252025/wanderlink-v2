@@ -31,7 +31,7 @@ const corsHandler = cors({
 });
 
 
-export const generateAgoraToken = functions.https.onRequest((req, res) => {
+export const generateAgoraToken = functions.region("us-central1").https.onRequest((req, res) => {
     // Use the cors middleware to handle the request and preflight checks
     corsHandler(req, res, async () => {
         // The corsHandler will automatically handle OPTIONS requests.

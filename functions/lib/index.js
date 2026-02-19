@@ -27,7 +27,7 @@ const agora_1 = require("./agora");
 const ALGOLIA_APP_ID = (0, params_1.defineString)("ALGOLIA_APP_ID");
 const ALGOLIA_ADMIN_KEY = (0, params_1.defineString)("ALGOLIA_ADMIN_KEY");
 const ALGOLIA_SEARCH_KEY = (0, params_1.defineString)("ALGOLIA_SEARCH_KEY");
-admin.initializeApp();
+admin.initializeApp({ storageBucket: "wanderlink-c1a35.firebasestorage.app" });
 // Lazily initialize clients to avoid timeout issues on cold start
 let algoliaClient = null;
 let visionClient = null;
@@ -50,7 +50,7 @@ const getVisionClient = () => {
     return visionClient;
 };
 // This function handles creations, updates, and deletions.
-exports.syncUserToAlgolia = (0, firestore_1.onDocumentWritten)("users/{userId}", async (event) => {
+exports.syncUserToAlgolia = (0, firestore_1.onDocumentWritten)({ document: "users/{userId}", region: "us-central1" }, async (event) => {
     var _a;
     const objectID = event.params.userId;
     const usersIndex = getAlgoliaClient().initIndex("users");
@@ -83,7 +83,7 @@ exports.syncUserToAlgolia = (0, firestore_1.onDocumentWritten)("users/{userId}",
     }
 });
 // This function securely provides the frontend with the keys it needs.
-exports.getAlgoliaConfig = (0, https_1.onCall)((request) => {
+exports.getAlgoliaConfig = (0, https_1.onCall)({ region: "us-central1" }, (request) => {
     const appId = ALGOLIA_APP_ID.value();
     const searchKey = ALGOLIA_SEARCH_KEY.value();
     if (!appId || !searchKey) {
@@ -94,7 +94,7 @@ exports.getAlgoliaConfig = (0, https_1.onCall)((request) => {
 /**
  * Triggered when a new image is uploaded, moderates it using Google Cloud Vision API.
  */
-exports.moderateProfilePicture = (0, storage_1.onObjectFinalized)(async (event) => {
+exports.moderateProfilePicture = (0, storage_1.onObjectFinalized)({ region: "us-central1", bucket: "wanderlink-c1a35.firebasestorage.app" }, async (event) => {
     const { bucket, name, contentType } = event.data;
     if (!(name === null || name === void 0 ? void 0 : name.startsWith("profilePictures/")) || (contentType === null || contentType === void 0 ? void 0 : contentType.endsWith("/")) || !(contentType === null || contentType === void 0 ? void 0 : contentType.startsWith("image/"))) {
         logger.log(`File ${name} is not an image in profilePictures/ folder. Ignoring.`);

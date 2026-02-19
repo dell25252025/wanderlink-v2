@@ -19,7 +19,7 @@ const ALGOLIA_APP_ID = defineString("ALGOLIA_APP_ID");
 const ALGOLIA_ADMIN_KEY = defineString("ALGOLIA_ADMIN_KEY");
 const ALGOLIA_SEARCH_KEY = defineString("ALGOLIA_SEARCH_KEY");
 
-admin.initializeApp();
+admin.initializeApp({ storageBucket: "wanderlink-c1a35.firebasestorage.app" });
 
 // Lazily initialize clients to avoid timeout issues on cold start
 let algoliaClient: SearchClient | null = null;
@@ -47,7 +47,7 @@ const getVisionClient = (): ImageAnnotatorClient => {
 
 
 // This function handles creations, updates, and deletions.
-export const syncUserToAlgolia = onDocumentWritten("users/{userId}", async (event) => {
+export const syncUserToAlgolia = onDocumentWritten({ document: "users/{userId}", region: "us-central1" }, async (event) => {
     const objectID = event.params.userId;
     const usersIndex = getAlgoliaClient().initIndex("users");
 
@@ -84,7 +84,7 @@ export const syncUserToAlgolia = onDocumentWritten("users/{userId}", async (even
 });
 
 // This function securely provides the frontend with the keys it needs.
-export const getAlgoliaConfig = onCall((request) => {
+export const getAlgoliaConfig = onCall({ region: "us-central1" }, (request) => {
   const appId = ALGOLIA_APP_ID.value();
   const searchKey = ALGOLIA_SEARCH_KEY.value();
 
@@ -99,7 +99,7 @@ export const getAlgoliaConfig = onCall((request) => {
 /**
  * Triggered when a new image is uploaded, moderates it using Google Cloud Vision API.
  */
-export const moderateProfilePicture = onObjectFinalized(async (event) => {
+export const moderateProfilePicture = onObjectFinalized({ region: "us-central1", bucket: "wanderlink-c1a35.firebasestorage.app" }, async (event) => {
     const { bucket, name, contentType } = event.data;
 
     if (!name?.startsWith("profilePictures/") || contentType?.endsWith("/") || !contentType?.startsWith("image/")) {
