@@ -45,7 +45,7 @@ export const onNewMessage = functions.firestore
     const senderName = senderData?.firstName ?? "Someone";
 
     // Get the recipient's FCM tokens
-    const tokensRef = db.collection("users").doc(recipientId).collection("tokens");
+    const tokensRef = db.collection("users").doc(recipientId).collection("fcmTokens");
     const tokensSnapshot = await tokensRef.get();
 
     if (tokensSnapshot.empty) {
@@ -56,12 +56,18 @@ export const onNewMessage = functions.firestore
     const tokens = tokensSnapshot.docs.map((doc) => doc.id);
     console.log(`Found tokens for recipient: ${tokens.join(", ")}`);
 
-    // Prepare the notification payload
+    // Prepare the notification payload with android channelId
     const payload: admin.messaging.MessagingPayload = {
       notification: {
         title: `New message from ${senderName}`,
-        body: messageData.text || "Sent you an image.", // Fallback for images
-        clickAction: "FLUTTER_NOTIFICATION_CLICK", // Important for Capacitor
+        body: messageData.text || "Sent you an image.",
+      },
+      android: {
+        priority: "high",
+        notification: {
+          channelId: "messages", // **CRITICAL: This must match the channel ID on the client**
+          sound: "default",
+        },
       },
       data: {
         chatId: chatId, // Send chat ID for redirection
@@ -69,8 +75,9 @@ export const onNewMessage = functions.firestore
     };
 
     // Send notification to all tokens
+    console.log("Sending payload:", JSON.stringify(payload, null, 2));
     const response = await fcm.sendToDevice(tokens, payload);
-    console.log("Notification sent successfully:", response);
+    console.log("FCM response:", JSON.stringify(response, null, 2));
 
     // Handle invalid tokens
     const tokensToRemove: Promise<any>[] = [];
