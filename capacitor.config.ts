@@ -10,14 +10,29 @@ const config: CapacitorConfig = {
     cleartext: true
   },
   plugins: {
+    // Configuration pour les notifications Push
+    PushNotifications: {
+      presentationOptions: ["badge", "sound", "alert"],
+      channels: [
+        {
+          id: "messages", // ID unique du canal
+          name: "Messages", // Nom visible par l'utilisateur
+          description: "Notifications pour les nouveaux messages",
+          importance: 5, // Importance maximale pour faire apparaître la notif
+          visibility: 1, // Visible sur l'écran de verrouillage
+          sound: "default", // Son par défaut
+          vibration: true, // Activer la vibration
+        },
+      ],
+    },
     // On ajoute la configuration pour le Splash Screen
     SplashScreen: {
-      launchShowDuration: 3000, // Le splash screen reste affiché 3 secondes
-      launchAutoHide: true, // On force le masquage automatique pour éviter le blocage
-      backgroundColor: "#ffffff", // Mettez la couleur de fond de votre splash
-      androidSplashResourceName: "splash", // Le nom de votre fichier de splash screen
+      launchShowDuration: 3000,
+      launchAutoHide: true,
+      backgroundColor: "#ffffff",
+      androidSplashResourceName: "splash",
       androidScaleType: "CENTER_CROP",
-      showSpinner: false, // On peut masquer le spinner si on a une animation
+      showSpinner: false,
       splashFullScreen: true,
       splashImmersive: true,
     },
