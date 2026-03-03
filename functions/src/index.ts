@@ -1,9 +1,9 @@
 
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
-import { RtcTokenBuilder, RtcRole } from "agora-access-token";
+// CORRECTION 1: Utiliser 'agora-token' qui est déjà installé
+import { RtcTokenBuilder, RtcRole } from "agora-token";
 
-// Importez le middleware CORS
 const cors = require("cors")({ origin: true });
 
 admin.initializeApp();
@@ -13,7 +13,6 @@ const fcm = admin.messaging();
 
 // --- Fonction pour les appels vidéo AGORA (avec CORS) ---
 export const generateAgoraToken = functions.https.onRequest((request, response) => {
-  // Utilisez le middleware CORS
   cors(request, response, async () => {
     const { channelName, uid } = request.body;
 
@@ -22,10 +21,10 @@ export const generateAgoraToken = functions.https.onRequest((request, response) 
       return;
     }
 
-    const APP_ID = "d30835a6438747448375631433f00889"; // Assurez-vous que c'est le bon App ID
-    const APP_CERTIFICATE = "9a72175968d440739e8310f8490a7860"; // Assurez-vous que c'est le bon certificat
+    const APP_ID = "d30835a6438747448375631433f00889";
+    const APP_CERTIFICATE = "9a72175968d440739e8310f8490a7860";
     const role = RtcRole.PUBLISHER;
-    const expirationTimeInSeconds = 3600; // 1 heure
+    const expirationTimeInSeconds = 3600;
     const currentTimestamp = Math.floor(Date.now() / 1000);
     const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
 
@@ -46,7 +45,6 @@ export const generateAgoraToken = functions.https.onRequest((request, response) 
     }
   });
 });
-
 
 // --- Fonction pour les NOTIFICATIONS PUSH ---
 export const onNewMessage = functions.firestore
@@ -94,7 +92,8 @@ export const onNewMessage = functions.firestore
     const tokens = tokensSnapshot.docs.map((doc) => doc.id);
     console.log(`Found tokens for recipient: ${tokens.join(", ")}`);
 
-    const payload: admin.messaging.MessagingPayload = {
+    // CORRECTION 2: Utiliser le type 'admin.messaging.Message' qui est plus complet
+    const payload: admin.messaging.Message = {
       notification: {
         title: `New message from ${senderName}`,
         body: messageData.text || "Sent you an image.",
