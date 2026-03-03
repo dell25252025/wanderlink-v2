@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { initPushNotifications } from '@/lib/fcm'; // Importer notre service
 
 interface AuthContextType {
   currentUser: User | null;
@@ -19,6 +20,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       setLoading(false);
+
+      // Si un utilisateur est connecté, on initialise les notifications
+      if (user) {
+        console.log("User is logged in, initializing push notifications...");
+        initPushNotifications(user.uid);
+      } else {
+        console.log("User is logged out.");
+      }
     });
 
     return () => unsubscribe();
