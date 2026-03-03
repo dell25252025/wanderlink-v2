@@ -1,101 +1,112 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.syncUserToAlgolia = exports.sendNewMessageNotificationV2 = void 0;
+exports.generateAgoraToken = exports.syncUserToAlgolia = exports.sendNewMessageNotificationV2 = void 0;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const algoliasearch_1 = require("algoliasearch");
+// On importe la fonction agora à restaurer
+const agora_1 = require("./agora");
+Object.defineProperty(exports, "generateAgoraToken", { enumerable: true, get: function () { return agora_1.generateAgoraToken; } });
 admin.initializeApp();
-// --- Configuration Algolia ---
-// A FAIRE : Remplacez par vos propres clés. La clé ADMIN doit être une variable d'environnement.
-const ALGOLIA_APP_ID = "H8QSO88UZ6";
-// NE PAS METTRE LA VRAIE CLE ICI. Nous utiliserons les variables d'environnement.
-const ALGOLIA_ADMIN_KEY = functions.config().algolia.key;
-const ALGOLIA_INDEX_NAME = "users";
-const algoliaClient = (0, algoliasearch_1.default)(ALGOLIA_APP_ID, ALGOLIA_ADMIN_KEY);
-const usersIndex = algoliaClient.initIndex(ALGOLIA_INDEX_NAME);
+// --- Initialisation du client Algolia (Lazy Initialization) ---
+// On déclare la variable sans l'initialiser.
+let usersIndex;
+// Fonction qui initialise le client seulement au premier appel.
+function getAlgoliaIndex() {
+    // Si l'index n'est pas encore initialisé...
+    if (!usersIndex) {
+        functions.logger.log("Initializing Algolia client for the first time...");
+        const ALGOLIA_APP_ID = "H8QSO88UZ6";
+        // On récupère la clé depuis la config au moment de l'exécution.
+        const ALGOLIA_ADMIN_KEY = functions.config().algolia.key;
+        if (!ALGOLIA_ADMIN_KEY) {
+            // Si la clé n'est pas là, on lance une erreur claire.
+            throw new functions.https.HttpsError('internal', "La clé d'administration Algolia n'est pas configurée.");
+        }
+        const ALGOLIA_INDEX_NAME = "users";
+        const algoliaClient = (0, algoliasearch_1.default)(ALGOLIA_APP_ID, ALGOLIA_ADMIN_KEY);
+        // On assigne l'index à la variable pour les prochains appels.
+        usersIndex = algoliaClient.initIndex(ALGOLIA_INDEX_NAME);
+    }
+    return usersIndex;
+}
 // --- FIN Configuration Algolia ---
-const adminProjectId = admin.app().options.projectId;
 exports.sendNewMessageNotificationV2 = functions.region("europe-west1")
-    .firestore.document("conversations/{conversationId}/messages/{messageId}")
+    .firestore.document("groupChats/{chatId}/messages/{messageId}")
     .onCreate(async (snapshot, context) => {
-    functions.logger.info(`--- Cloud Function is running for Firebase project: ${adminProjectId} ---`);
     const message = snapshot.data();
-    if (!message) {
-        functions.logger.error("Message data is empty.");
+    const chatId = context.params.chatId;
+    const chatRef = admin.firestore().collection("groupChats").doc(chatId);
+    const chatDoc = await chatRef.get();
+    if (!chatDoc.exists) {
+        functions.logger.log("Chat document not found");
         return;
     }
-    const { senderId, receiverId } = message;
-    if (senderId === receiverId) {
-        functions.logger.log("Sender and receiver are the same, no notification sent.");
+    const chatData = chatDoc.data();
+    if (!chatData) {
+        functions.logger.log("Chat data is empty");
         return;
     }
-    const tokensSnapshot = await admin
+    const recipientId = chatData.members.find((memberId) => memberId !== message.senderId);
+    if (!recipientId) {
+        functions.logger.log("Recipient not found");
+        return;
+    }
+    const recipientTokenRef = admin
         .firestore()
         .collection("users")
-        .doc(receiverId)
-        .collection("fcmTokens")
-        .get();
+        .doc(recipientId)
+        .collection("tokens");
+    const tokensSnapshot = await recipientTokenRef.get();
     if (tokensSnapshot.empty) {
-        functions.logger.warn(`No FCM tokens found for user ${receiverId}.`);
+        functions.logger.log("No tokens found for recipient");
         return;
     }
-    const tokensData = [];
-    tokensSnapshot.forEach(doc => {
-        const token = doc.data().token;
-        if (token && typeof token === 'string' && token.length > 10) {
-            tokensData.push({ token, ref: doc.ref });
-        }
-    });
-    if (tokensData.length === 0) {
-        functions.logger.warn("No valid tokens found after filtering.");
+    const senderRef = await admin
+        .firestore()
+        .collection("users")
+        .doc(message.senderId)
+        .get();
+    const senderData = senderRef.data();
+    if (!senderData) {
+        functions.logger.log("Sender data not found");
         return;
     }
-    const tokensToSend = tokensData.map(data => data.token);
     const payload = {
         notification: {
-            title: "Nouveau message",
-            body: message.text || "Vous avez reçu un nouveau message",
+            title: `${senderData.firstName}`,
+            body: message.text,
+            sound: "default",
+            badge: "1",
+        },
+        data: {
+            chatId: chatId,
+            recipientId: recipientId,
+            senderId: message.senderId,
+            senderName: senderData.firstName,
+            type: "message",
         },
     };
+    const tokens = tokensSnapshot.docs.map((doc) => doc.id);
+    functions.logger.log("Tokens:", tokens);
     try {
-        const response = await admin.messaging().sendEach(tokensToSend.map(token => ({ token, notification: payload.notification })));
-        functions.logger.info(`${response.successCount} messages were sent successfully.`);
-        if (response.failureCount > 0) {
-            const tokensToDelete = [];
-            response.responses.forEach((result, index) => {
-                const error = result.error;
-                if (error) {
-                    const failedToken = tokensToSend[index];
-                    functions.logger.error(`Failure sending notification to token: ${failedToken}`, error);
-                    if (error.code === 'messaging/invalid-registration-token' ||
-                        error.code === 'messaging/registration-token-not-registered') {
-                        const tokenDataToDelete = tokensData[index];
-                        functions.logger.log(`Marking token for deletion: ${tokenDataToDelete.ref.path}`);
-                        tokensToDelete.push(tokenDataToDelete.ref.delete());
-                    }
-                }
-            });
-            await Promise.all(tokensToDelete);
-            functions.logger.info(`${tokensToDelete.length} invalid tokens have been deleted.`);
-        }
+        await admin.messaging().sendToDevice(tokens, payload);
+        functions.logger.log("Notification sent successfully");
     }
     catch (error) {
-        functions.logger.error("Error sending notifications:", error);
+        functions.logger.error("Error sending notification:", error);
     }
 });
-/**
- * Cloud Function qui se déclenche à chaque écriture (création/mise à jour/suppression)
- * dans la collection 'users' de Firestore pour synchroniser avec Algolia.
- */
 exports.syncUserToAlgolia = functions.region("europe-west1")
     .firestore.document("users/{userId}")
     .onWrite(async (change, context) => {
     const userId = context.params.userId;
-    // --- 1. Gérer la Suppression ---
+    // On récupère l'index Algolia de manière sécurisée.
+    const index = getAlgoliaIndex();
     if (!change.after.exists) {
         functions.logger.log(`User ${userId} deleted from Firestore. Removing from Algolia.`);
         try {
-            await usersIndex.deleteObject(userId);
+            await index.deleteObject(userId);
             functions.logger.log(`✅ Successfully removed user ${userId} from Algolia.`);
         }
         catch (error) {
@@ -103,35 +114,24 @@ exports.syncUserToAlgolia = functions.region("europe-west1")
         }
         return;
     }
-    // --- 2. Gérer la Création / Mise à jour ---
     const userData = change.after.data();
     if (!userData) {
         functions.logger.log(`User data for ${userId} is empty. Skipping Algolia sync.`);
         return;
     }
-    // Préparation de l'objet pour Algolia.
-    // On ne sélectionne que les champs utiles pour la recherche et le filtrage.
     const record = {
         objectID: userId,
-        uid: userId, // Ajout crucial du champ UID
+        uid: userId,
         firstName: userData.firstName || null,
         age: userData.age || null,
         gender: userData.gender || null,
-        location: userData.location || null,
-        destination: userData.destination || "Toutes",
-        travelStyle: userData.travelStyle || "Tous",
-        activities: userData.activities || "Toutes",
-        intention: userData.intention || null,
-        bio: userData.bio || null,
-        profilePictures: userData.profilePictures || [],
         onboardingCompleted: userData.onboardingCompleted || false,
     };
     functions.logger.log(`Syncing user ${userId} to Algolia...`, { objectID: record.objectID, age: record.age, gender: record.gender });
-    // On n'indexe que les profils qui ont terminé l'onboarding.
     if (!record.onboardingCompleted) {
         functions.logger.log(`User ${userId} has not completed onboarding. Deleting from Algolia to hide from search.`);
         try {
-            await usersIndex.deleteObject(userId);
+            await index.deleteObject(userId);
         }
         catch (e) {
             // Ignorer l'erreur si l'objet n'existe pas
@@ -139,7 +139,7 @@ exports.syncUserToAlgolia = functions.region("europe-west1")
         return;
     }
     try {
-        await usersIndex.saveObject(record);
+        await index.saveObject(record);
         functions.logger.log(`✅ Successfully synced user ${userId} to Algolia.`);
     }
     catch (error) {

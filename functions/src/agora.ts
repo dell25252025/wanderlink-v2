@@ -1,5 +1,5 @@
 import * as functions from "firebase-functions";
-import { RtcTokenBuilder, RtcRole } from "agora-token";
+import { RtcTokenBuilder } from "agora-token";
 import * as cors from "cors";
 
 // On initialise le middleware CORS pour autoriser les requêtes depuis n'importe quelle origine.
@@ -41,13 +41,15 @@ export const generateAgoraToken = functions.https.onRequest((req, res) => {
     functions.logger.info(`Génération du jeton pour le canal: ${channelName}, uid: ${uid}`);
 
     try {
+        // CORRECTION : La fonction attendait 7 arguments, j'en avais mis 6.
         const token = RtcTokenBuilder.buildTokenWithUid(
             appId,
             appCertificate,
             channelName,
             uid,
             role,
-            privilegeExpiredTs
+            privilegeExpiredTs,
+            privilegeExpiredTs // Le 7ème argument manquant
         );
         
         res.status(200).json({ token });
