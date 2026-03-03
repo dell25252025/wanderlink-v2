@@ -30,7 +30,7 @@ const getAgoraToken = async (channelName: string, uid: string) => {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${idToken}`,
     },
-    body: JSON.stringify({ data: { channelName, uid, role: 'publisher' } }),
+    body: JSON.stringify({ channelName, uid, role: 'publisher' }), // CORRECTION: L'objet data est implicite
   });
 
   if (!response.ok) {
@@ -39,7 +39,7 @@ const getAgoraToken = async (channelName: string, uid: string) => {
   }
 
   const result = await response.json();
-  return result.data.token;
+  return result.token; // CORRECTION: Le token est directement à la racine de la réponse
 };
 
 interface CallData {
