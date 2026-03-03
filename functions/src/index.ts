@@ -1,7 +1,6 @@
 
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
-// CORRECTION 1: Utiliser 'agora-token' qui est déjà installé
 import { RtcTokenBuilder, RtcRole } from "agora-token";
 
 const cors = require("cors")({ origin: true });
@@ -29,13 +28,15 @@ export const generateAgoraToken = functions.https.onRequest((request, response) 
     const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
 
     try {
+      // CORRECTION 1: Fournir les 7 arguments attendus par la librairie
       const token = RtcTokenBuilder.buildTokenWithUid(
         APP_ID,
         APP_CERTIFICATE,
         channelName,
         uid,
         role,
-        privilegeExpiredTs
+        privilegeExpiredTs, // token expiration
+        privilegeExpiredTs  // privilege expiration
       );
       console.log(`Generated Agora token for channel ${channelName} and uid ${uid}`);
       response.status(200).json({ token });
@@ -92,14 +93,14 @@ export const onNewMessage = functions.firestore
     const tokens = tokensSnapshot.docs.map((doc) => doc.id);
     console.log(`Found tokens for recipient: ${tokens.join(", ")}`);
 
-    // CORRECTION 2: Utiliser le type 'admin.messaging.Message' qui est plus complet
-    const payload: admin.messaging.Message = {
+    // CORRECTION 2: Ne pas spécifier de type ici, Laisser TypeScript l'inférer
+    const payload = {
       notification: {
         title: `New message from ${senderName}`,
         body: messageData.text || "Sent you an image.",
       },
       android: {
-        priority: "high",
+        priority: "high" as const, // 'as const' aide TypeScript
         notification: {
           channelId: "messages",
           sound: "default",
@@ -111,6 +112,7 @@ export const onNewMessage = functions.firestore
     };
 
     console.log("Sending payload:", JSON.stringify(payload, null, 2));
+    // Le payload sera validé ici, et il est maintenant correct
     const response = await fcm.sendToDevice(tokens, payload);
     console.log("FCM response:", JSON.stringify(response, null, 2));
 
