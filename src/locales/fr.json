@@ -1,0 +1,12 @@
+
+{
+  "languagePage": {
+    "headerTitle": "Langue",
+    "cardTitle": "Choisir une langue",
+    "cardDescription": "Sélectionnez la langue d'affichage de l'application.",
+    "toast": {
+      "title": "Langue modifiée",
+      "description": "La langue de l'application est maintenant :"
+    }
+  }
+}

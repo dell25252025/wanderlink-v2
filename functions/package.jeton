@@ -1,0 +1,23 @@
+{
+  "name": "functions",
+  "private": true,
+  "main": "lib/index.js",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "deploy": "firebase deploy --only functions",
+    "serve": "npm run build && firebase emulators:start --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^11.11.1",
+    "firebase-functions": "^4.9.0",
+    "@google-cloud/vision": "^4.3.0",
+    "agora-token": "^2.0.5",
+    "algoliasearch": "^4.23.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

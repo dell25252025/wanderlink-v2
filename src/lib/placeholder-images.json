@@ -1,0 +1,16 @@
+{
+  "heroBanner": {
+    "url": "https://picsum.photos/seed/hero/1920/1080",
+    "alt": "Travelers enjoying a scenic view",
+    "hint": "travelers landscape"
+  },
+  "loginVideos": {
+    "desktopVideoUrl": "https://ik.imagekit.io/fip3ktm2p/545556555_24610768548534823_5832326088093088554_n.mp4?updatedAt=1757753813634",
+    "mobileVideoUrl": "https://ik.imagekit.io/fip3ktm2p/video%20app2.mp4?updatedAt=1757957531301"
+  },
+  "verificationPose": {
+    "url": "https://ik.imagekit.io/fip3ktm2p/ChatGPT%20Image%2026%20sept.%202025,%2019_03_02.png?updatedAt=1758888296590",
+    "alt": "Exemple de pose pour la vérification de profil, une personne faisant un signe de paix.",
+    "hint": "woman selfie"
+  }
+}
