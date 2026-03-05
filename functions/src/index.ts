@@ -20,15 +20,15 @@ export const generateAgoraToken = functions.https.onRequest((request, response) 
       return;
     }
 
-    const APP_ID = "d30835a6438747448375631433f00889";
-    const APP_CERTIFICATE = "9a72175968d440739e8310f8490a7860";
+    // Utilise la configuration sécurisée au lieu des clés en dur
+    const APP_ID = functions.config().agora.app_id;
+    const APP_CERTIFICATE = functions.config().agora.app_certificate;
     const role = RtcRole.PUBLISHER;
     const expirationTimeInSeconds = 3600;
     const currentTimestamp = Math.floor(Date.now() / 1000);
     const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
 
     try {
-      // CORRECTION 1: Fournir les 7 arguments attendus par la librairie
       const token = RtcTokenBuilder.buildTokenWithUid(
         APP_ID,
         APP_CERTIFICATE,
@@ -93,14 +93,13 @@ export const onNewMessage = functions.firestore
     const tokens = tokensSnapshot.docs.map((doc) => doc.id);
     console.log(`Found tokens for recipient: ${tokens.join(", ")}`);
 
-    // CORRECTION 2: Ne pas spécifier de type ici, Laisser TypeScript l'inférer
     const payload = {
       notification: {
         title: `New message from ${senderName}`,
         body: messageData.text || "Sent you an image.",
       },
       android: {
-        priority: "high" as const, // 'as const' aide TypeScript
+        priority: "high" as const,
         notification: {
           channelId: "messages",
           sound: "default",
@@ -112,7 +111,6 @@ export const onNewMessage = functions.firestore
     };
 
     console.log("Sending payload:", JSON.stringify(payload, null, 2));
-    // Le payload sera validé ici, et il est maintenant correct
     const response = await fcm.sendToDevice(tokens, payload);
     console.log("FCM response:", JSON.stringify(response, null, 2));
 
