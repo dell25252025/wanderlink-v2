@@ -1,149 +1,108 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateAgoraToken = exports.syncUserToAlgolia = exports.sendNewMessageNotificationV2 = void 0;
+exports.onNewMessage = exports.generateAgoraToken = void 0;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const algoliasearch_1 = require("algoliasearch");
-// On importe la fonction agora à restaurer
-const agora_1 = require("./agora");
-Object.defineProperty(exports, "generateAgoraToken", { enumerable: true, get: function () { return agora_1.generateAgoraToken; } });
+const agora_token_1 = require("agora-token");
+const cors = require("cors")({ origin: true });
 admin.initializeApp();
-// --- Initialisation du client Algolia (Lazy Initialization) ---
-// On déclare la variable sans l'initialiser.
-let usersIndex;
-// Fonction qui initialise le client seulement au premier appel.
-function getAlgoliaIndex() {
-    // Si l'index n'est pas encore initialisé...
-    if (!usersIndex) {
-        functions.logger.log("Initializing Algolia client for the first time...");
-        const ALGOLIA_APP_ID = "H8QSO88UZ6";
-        // On récupère la clé depuis la config au moment de l'exécution.
-        const ALGOLIA_ADMIN_KEY = functions.config().algolia.key;
-        if (!ALGOLIA_ADMIN_KEY) {
-            // Si la clé n'est pas là, on lance une erreur claire.
-            throw new functions.https.HttpsError('internal', "La clé d'administration Algolia n'est pas configurée.");
+const db = admin.firestore();
+const fcm = admin.messaging();
+// --- Fonction pour les appels vidéo AGORA (avec CORS) ---
+exports.generateAgoraToken = functions.https.onRequest((request, response) => {
+    cors(request, response, async () => {
+        const { channelName, uid } = request.body;
+        if (!channelName || !uid) {
+            response.status(400).send("channelName and uid are required.");
+            return;
         }
-        const ALGOLIA_INDEX_NAME = "users";
-        const algoliaClient = (0, algoliasearch_1.default)(ALGOLIA_APP_ID, ALGOLIA_ADMIN_KEY);
-        // On assigne l'index à la variable pour les prochains appels.
-        usersIndex = algoliaClient.initIndex(ALGOLIA_INDEX_NAME);
-    }
-    return usersIndex;
-}
-// --- FIN Configuration Algolia ---
-exports.sendNewMessageNotificationV2 = functions.region("europe-west1")
-    .firestore.document("groupChats/{chatId}/messages/{messageId}")
+        // Utilise la configuration sécurisée au lieu des clés en dur
+        const APP_ID = functions.config().agora.app_id;
+        const APP_CERTIFICATE = functions.config().agora.app_certificate;
+        const role = agora_token_1.RtcRole.PUBLISHER;
+        const expirationTimeInSeconds = 3600;
+        const currentTimestamp = Math.floor(Date.now() / 1000);
+        const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
+        try {
+            const token = agora_token_1.RtcTokenBuilder.buildTokenWithUid(APP_ID, APP_CERTIFICATE, channelName, uid, role, privilegeExpiredTs, // token expiration
+            privilegeExpiredTs // privilege expiration
+            );
+            console.log(`Generated Agora token for channel ${channelName} and uid ${uid}`);
+            response.status(200).json({ token });
+        }
+        catch (error) {
+            console.error("Error generating Agora token:", error);
+            response.status(500).send("Error generating Agora token.");
+        }
+    });
+});
+// --- Fonction pour les NOTIFICATIONS PUSH ---
+exports.onNewMessage = functions.firestore
+    .document("chats/{chatId}/messages/{messageId}")
     .onCreate(async (snapshot, context) => {
-    const message = snapshot.data();
+    var _a;
+    const messageData = snapshot.data();
     const chatId = context.params.chatId;
-    const chatRef = admin.firestore().collection("groupChats").doc(chatId);
+    if (!messageData) {
+        console.log("No data in the new message.");
+        return;
+    }
+    const senderId = messageData.senderId;
+    console.log(`New message from ${senderId} in chat ${chatId}.`);
+    const chatRef = db.collection("chats").doc(chatId);
     const chatDoc = await chatRef.get();
-    if (!chatDoc.exists) {
-        functions.logger.log("Chat document not found");
-        return;
-    }
     const chatData = chatDoc.data();
-    if (!chatData) {
-        functions.logger.log("Chat data is empty");
+    if (!chatData || !chatData.participants) {
+        console.log("Chat data or participants not found.");
         return;
     }
-    const recipientId = chatData.members.find((memberId) => memberId !== message.senderId);
+    const recipientId = chatData.participants.find((p) => p !== senderId);
     if (!recipientId) {
-        functions.logger.log("Recipient not found");
+        console.log("Recipient not found.");
         return;
     }
-    const recipientTokenRef = admin
-        .firestore()
-        .collection("users")
-        .doc(recipientId)
-        .collection("tokens");
-    const tokensSnapshot = await recipientTokenRef.get();
+    console.log(`Recipient identified: ${recipientId}.`);
+    const senderDoc = await db.collection("users").doc(senderId).get();
+    const senderData = senderDoc.data();
+    const senderName = (_a = senderData === null || senderData === void 0 ? void 0 : senderData.firstName) !== null && _a !== void 0 ? _a : "Someone";
+    const tokensRef = db.collection("users").doc(recipientId).collection("fcmTokens");
+    const tokensSnapshot = await tokensRef.get();
     if (tokensSnapshot.empty) {
-        functions.logger.log("No tokens found for recipient");
+        console.log("No FCM tokens for recipient.");
         return;
     }
-    const senderRef = await admin
-        .firestore()
-        .collection("users")
-        .doc(message.senderId)
-        .get();
-    const senderData = senderRef.data();
-    if (!senderData) {
-        functions.logger.log("Sender data not found");
-        return;
-    }
+    const tokens = tokensSnapshot.docs.map((doc) => doc.id);
+    console.log(`Found tokens for recipient: ${tokens.join(", ")}`);
     const payload = {
         notification: {
-            title: `${senderData.firstName}`,
-            body: message.text,
-            sound: "default",
-            badge: "1",
+            title: `New message from ${senderName}`,
+            body: messageData.text || "Sent you an image.",
+        },
+        android: {
+            priority: "high",
+            notification: {
+                channelId: "messages",
+                sound: "default",
+            },
         },
         data: {
             chatId: chatId,
-            recipientId: recipientId,
-            senderId: message.senderId,
-            senderName: senderData.firstName,
-            type: "message",
         },
     };
-    const tokens = tokensSnapshot.docs.map((doc) => doc.id);
-    functions.logger.log("Tokens:", tokens);
-    try {
-        await admin.messaging().sendToDevice(tokens, payload);
-        functions.logger.log("Notification sent successfully");
-    }
-    catch (error) {
-        functions.logger.error("Error sending notification:", error);
-    }
-});
-exports.syncUserToAlgolia = functions.region("europe-west1")
-    .firestore.document("users/{userId}")
-    .onWrite(async (change, context) => {
-    const userId = context.params.userId;
-    // On récupère l'index Algolia de manière sécurisée.
-    const index = getAlgoliaIndex();
-    if (!change.after.exists) {
-        functions.logger.log(`User ${userId} deleted from Firestore. Removing from Algolia.`);
-        try {
-            await index.deleteObject(userId);
-            functions.logger.log(`✅ Successfully removed user ${userId} from Algolia.`);
+    console.log("Sending payload:", JSON.stringify(payload, null, 2));
+    const response = await fcm.sendToDevice(tokens, payload);
+    console.log("FCM response:", JSON.stringify(response, null, 2));
+    const tokensToRemove = [];
+    response.results.forEach((result, index) => {
+        const error = result.error;
+        if (error) {
+            console.error("Failed to send notification to token:", tokens[index], error);
+            if (error.code === "messaging/invalid-registration-token" ||
+                error.code === "messaging/registration-token-not-registered") {
+                tokensToRemove.push(tokensRef.doc(tokens[index]).delete());
+            }
         }
-        catch (error) {
-            functions.logger.error(`❌ Error removing user ${userId} from Algolia:`, error);
-        }
-        return;
-    }
-    const userData = change.after.data();
-    if (!userData) {
-        functions.logger.log(`User data for ${userId} is empty. Skipping Algolia sync.`);
-        return;
-    }
-    const record = {
-        objectID: userId,
-        uid: userId,
-        firstName: userData.firstName || null,
-        age: userData.age || null,
-        gender: userData.gender || null,
-        onboardingCompleted: userData.onboardingCompleted || false,
-    };
-    functions.logger.log(`Syncing user ${userId} to Algolia...`, { objectID: record.objectID, age: record.age, gender: record.gender });
-    if (!record.onboardingCompleted) {
-        functions.logger.log(`User ${userId} has not completed onboarding. Deleting from Algolia to hide from search.`);
-        try {
-            await index.deleteObject(userId);
-        }
-        catch (e) {
-            // Ignorer l'erreur si l'objet n'existe pas
-        }
-        return;
-    }
-    try {
-        await index.saveObject(record);
-        functions.logger.log(`✅ Successfully synced user ${userId} to Algolia.`);
-    }
-    catch (error) {
-        functions.logger.error(`❌ Error syncing user ${userId} to Algolia:`, error);
-    }
+    });
+    return Promise.all(tokensToRemove);
 });
 //# sourceMappingURL=index.js.map
