@@ -21,6 +21,9 @@ interface CallData {
 }
 
 export default function CallManager() {
+  // TEST: Vérifier si la variable d'environnement est injectée au build.
+  console.log("AGORA ID FROM BUILD:", process.env.NEXT_PUBLIC_AGORA_APP_ID);
+
   const [currentUser] = useAuthState(auth);
   const [incomingCall, setIncomingCall] = useState<CallData | null>(null);
   const [callerProfile, setCallerProfile] = useState<any>(null);

@@ -6,6 +6,7 @@ runConfig:
   # more instances in response to increased traffic.
   maxInstances: 1
 
-environmentVariables:
-  AGORA_APP_ID:
+# These variables are available during the build process.
+buildEnvironmentVariables:
+  NEXT_PUBLIC_AGORA_APP_ID:
     secret: AGORA_APP_ID

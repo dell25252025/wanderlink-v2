@@ -6,9 +6,6 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  env: {
-    NEXT_PUBLIC_AGORA_APP_ID: process.env.AGORA_APP_ID,
-  },
   images: {
     unoptimized: true,
     remotePatterns: [
