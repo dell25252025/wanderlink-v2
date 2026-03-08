@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Phone, Video, X } from 'lucide-react';
 
+// CE FICHIER A ETE MODIFIE POUR FORCER UN NOUVEAU BUILD
+
 interface CallData {
   id: string;
   callerId: string;
