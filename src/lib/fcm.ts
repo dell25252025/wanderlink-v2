@@ -36,7 +36,6 @@ export const initPushNotifications = async (userId: string) => {
   try {
     await createNotificationChannel();
 
-    // Demander la permission pour les notifications PUSH
     let permStatus = await PushNotifications.checkPermissions();
     if (permStatus.receive === 'prompt') {
       permStatus = await PushNotifications.requestPermissions();
@@ -45,14 +44,12 @@ export const initPushNotifications = async (userId: string) => {
       throw new Error('User denied push permissions!');
     }
 
-    // Demander la permission pour les notifications LOCALES
     let localPerms: PermissionStatus = await LocalNotifications.checkPermissions();
     if (localPerms.display === 'prompt') {
       localPerms = await LocalNotifications.requestPermissions();
     }
     if (localPerms.display !== 'granted') {
       console.warn('User denied local notification permissions!');
-      // On peut continuer même si c'est refusé, l'app ne plantera pas
     }
 
     await PushNotifications.register();
@@ -73,16 +70,17 @@ export const initPushNotifications = async (userId: string) => {
         await LocalNotifications.schedule({
           notifications: [
             {
-              id: Date.now(),
+              // **LA CORRECTION DÉFINITIVE : Utiliser un entier aléatoire valide**
+              id: Math.floor(Math.random() * 1000000),
               title: notification.data.title || "Nouveau message",
               body: notification.data.body || "Vous avez reçu un message",
               schedule: { at: new Date(Date.now() + 100) },
               extra: notification.data,
-              channelId: CHANNEL_ID // **LA CORRECTION FINALE**
+              channelId: CHANNEL_ID
             }
           ]
         });
-        console.log("Local notification successfully scheduled on channel 'messages'.");
+        console.log("Local notification successfully scheduled.");
       } catch (e) {
         console.error("Error scheduling local notification", e);
       }
