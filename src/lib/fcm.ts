@@ -3,17 +3,19 @@ import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { getFirestore, doc, setDoc } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications, Channel } from '@capacitor/push-notifications';
-import { LocalNotifications } from '@capacitor/local-notifications';
+import { LocalNotifications, PermissionStatus } from '@capacitor/local-notifications';
 
 // Assurez-vous que votre fichier firebase.ts exporte `app`
 import { app } from '@/lib/firebase'; 
 
 const db = getFirestore(app);
 
+const CHANNEL_ID = "messages";
+
 // Fonction pour créer le canal de notification
 const createNotificationChannel = async () => {
   const channel: Channel = {
-    id: "messages", // **CRITICAL: Must match the ID sent from the backend**
+    id: CHANNEL_ID,
     name: "Messages",
     description: "Notifications for new messages",
     importance: 5, // Max importance
@@ -22,7 +24,7 @@ const createNotificationChannel = async () => {
     vibration: true,
   };
   await PushNotifications.createChannel(channel);
-  console.log('Notification channel "messages" created or already exists.');
+  console.log(`Notification channel "${CHANNEL_ID}" created or already exists.`);
 };
 
 export const initPushNotifications = async (userId: string) => {
@@ -32,27 +34,32 @@ export const initPushNotifications = async (userId: string) => {
   }
 
   try {
-    // **CRITICAL: Create the channel first**
     await createNotificationChannel();
 
-    // Demander la permission
+    // Demander la permission pour les notifications PUSH
     let permStatus = await PushNotifications.checkPermissions();
     if (permStatus.receive === 'prompt') {
       permStatus = await PushNotifications.requestPermissions();
     }
-
     if (permStatus.receive !== 'granted') {
-      throw new Error('User denied permissions!');
+      throw new Error('User denied push permissions!');
     }
 
-    // S'enregistrer auprès de Push Notifications
+    // Demander la permission pour les notifications LOCALES
+    let localPerms: PermissionStatus = await LocalNotifications.checkPermissions();
+    if (localPerms.display === 'prompt') {
+      localPerms = await LocalNotifications.requestPermissions();
+    }
+    if (localPerms.display !== 'granted') {
+      console.warn('User denied local notification permissions!');
+      // On peut continuer même si c'est refusé, l'app ne plantera pas
+    }
+
     await PushNotifications.register();
 
-    // Le reste de la logique reste le même...
     PushNotifications.addListener('registration', async (token) => {
       console.log('Push registration success, token:', token.value);
-      const fcmToken = token.value;
-      await saveTokenToFirestore(userId, fcmToken);
+      await saveTokenToFirestore(userId, token.value);
     });
 
     PushNotifications.addListener('registrationError', (error) => {
@@ -62,18 +69,23 @@ export const initPushNotifications = async (userId: string) => {
     PushNotifications.addListener('pushNotificationReceived', async (notification) => {
       console.log('Push received:', notification);
       
-      // **LA SOLUTION : Créer une notification locale pour l'afficher**
-      await LocalNotifications.schedule({
-        notifications: [
-          {
-            id: Date.now(), // ID unique pour la notification
-            title: notification.data.title || "Nouveau message",
-            body: notification.data.body || "Vous avez reçu un message",
-            schedule: { at: new Date(Date.now() + 100) }, // Afficher immédiatement
-            extra: notification.data
-          }
-        ]
-      });
+      try {
+        await LocalNotifications.schedule({
+          notifications: [
+            {
+              id: Date.now(),
+              title: notification.data.title || "Nouveau message",
+              body: notification.data.body || "Vous avez reçu un message",
+              schedule: { at: new Date(Date.now() + 100) },
+              extra: notification.data,
+              channelId: CHANNEL_ID // **LA CORRECTION FINALE**
+            }
+          ]
+        });
+        console.log("Local notification successfully scheduled on channel 'messages'.");
+      } catch (e) {
+        console.error("Error scheduling local notification", e);
+      }
     });
 
     PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
@@ -81,7 +93,6 @@ export const initPushNotifications = async (userId: string) => {
       const chatId = notification.notification.data.chatId;
       if (chatId) {
         console.log(`Should navigate to chat: ${chatId}`);
-        // Vous pouvez ajouter la logique de navigation ici, par exemple :
         // window.location.href = `/chat/${chatId}`;
       }
     });
@@ -97,7 +108,6 @@ const saveTokenToFirestore = async (userId: string, token: string) => {
     return;
   }
   try {
-    // J'ai corrigé le chemin vers `fcmTokens` pour correspondre à votre base de données
     const tokenRef = doc(db, `users/${userId}/fcmTokens/${token}`);
     await setDoc(tokenRef, { createdAt: new Date() });
     console.log(`Token ${token} saved for user ${userId}`);
