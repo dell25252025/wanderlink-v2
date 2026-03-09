@@ -4,7 +4,6 @@ import { getFirestore, doc, setDoc } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications, Channel } from '@capacitor/push-notifications';
 import { LocalNotifications, PermissionStatus } from '@capacitor/local-notifications';
-import { notificationEvents } from "./notificationEvents";
 
 // Assurez-vous que votre fichier firebase.ts exporte `app`
 import { app } from '@/lib/firebase'; 
@@ -90,8 +89,7 @@ export const initPushNotifications = async (userId: string) => {
       console.log('Push action performed:', notification.notification.data);
       const chatId = notification.notification.data.chatId;
       if (chatId) {
-        // Au lieu de logger, on émet un événement global
-        notificationEvents.emit("openChat", chatId);
+        console.log(`Should navigate to chat: ${chatId}`);
       }
     });
 
