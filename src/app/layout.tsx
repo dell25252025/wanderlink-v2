@@ -8,10 +8,11 @@ import { Playfair_Display, Poppins, PT_Sans } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { CallManager } from '@/components/call-manager';
 import { AuthProvider } from '@/context/AuthContext';
-import { OnboardingProvider } from '@/context/OnboardingContext'; // Import OnboardingProvider
+import { OnboardingProvider } from '@/context/OnboardingContext';
 import CapacitorSetup from '@/components/capacitor-setup';
 import AuthHandler from '@/components/auth-handler';
-import OnboardingOverlay from '@/components/OnboardingOverlay'; // Import OnboardingOverlay
+import OnboardingOverlay from '@/components/OnboardingOverlay';
+import NotificationHandler from '@/components/notification-handler'; // Importation du nouveau gestionnaire
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -62,18 +63,19 @@ export default function RootLayout({
           }}
         />
         <AuthProvider>
-          <OnboardingProvider> {/* Wrap with OnboardingProvider */}
+          <OnboardingProvider>
             <ThemeProvider
               attribute="class"
               defaultTheme="system"
               enableSystem
               disableTransitionOnChange
             >
+              <NotificationHandler /> {/* Ajout du gestionnaire de notifications */}
               <CapacitorSetup />
               <AuthHandler />
               <BackButtonHandler />
               <CallManager />
-              <OnboardingOverlay /> {/* Add the overlay */}
+              <OnboardingOverlay />
               <main>{children}</main>
               <Toaster />
             </ThemeProvider>

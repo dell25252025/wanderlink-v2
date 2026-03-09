@@ -4,6 +4,7 @@ import { getFirestore, doc, setDoc } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications, Channel } from '@capacitor/push-notifications';
 import { LocalNotifications, PermissionStatus } from '@capacitor/local-notifications';
+import { notificationEvents } from "./notificationEvents";
 
 // Assurez-vous que votre fichier firebase.ts exporte `app`
 import { app } from '@/lib/firebase'; 
@@ -70,7 +71,6 @@ export const initPushNotifications = async (userId: string) => {
         await LocalNotifications.schedule({
           notifications: [
             {
-              // **LA CORRECTION DÉFINITIVE : Utiliser un entier aléatoire valide**
               id: Math.floor(Math.random() * 1000000),
               title: notification.data.title || "Nouveau message",
               body: notification.data.body || "Vous avez reçu un message",
@@ -90,8 +90,8 @@ export const initPushNotifications = async (userId: string) => {
       console.log('Push action performed:', notification.notification.data);
       const chatId = notification.notification.data.chatId;
       if (chatId) {
-        console.log(`Should navigate to chat: ${chatId}`);
-        // window.location.href = `/chat/${chatId}`;
+        // Au lieu de logger, on émet un événement global
+        notificationEvents.emit("openChat", chatId);
       }
     });
 
