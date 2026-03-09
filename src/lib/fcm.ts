@@ -75,7 +75,8 @@ export const initPushNotifications = async (userId: string) => {
               body: notification.data.body || "Vous avez reçu un message",
               schedule: { at: new Date(Date.now() + 100) },
               extra: notification.data,
-              channelId: CHANNEL_ID
+              channelId: CHANNEL_ID,
+              smallIcon: 'ic_launcher' // <-- LA CORRECTION EST ICI
             }
           ]
         });
