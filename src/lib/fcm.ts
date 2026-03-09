@@ -67,20 +67,20 @@ export const initPushNotifications = async (userId: string) => {
       console.log('Push received:', notification);
       
       try {
+        // CORRECTION : Suppression de la propriété "schedule" pour un affichage instantané
         await LocalNotifications.schedule({
           notifications: [
             {
               id: Math.floor(Math.random() * 1000000),
               title: notification.data.title || "Nouveau message",
               body: notification.data.body || "Vous avez reçu un message",
-              schedule: { at: new Date(Date.now() + 100) },
               extra: notification.data,
               channelId: CHANNEL_ID,
-              smallIcon: 'ic_dialog_info' // <-- NOUVELLE ICÔNE VALIDE
+              smallIcon: 'ic_dialog_info'
             }
           ]
         });
-        console.log("Local notification successfully scheduled with valid icon.");
+        console.log("Local notification successfully scheduled for immediate display.");
       } catch (e) {
         console.error("Error scheduling local notification", e);
       }
