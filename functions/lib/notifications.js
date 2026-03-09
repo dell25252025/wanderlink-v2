@@ -14,11 +14,11 @@ async function getRecipientTokens(userId) {
     const tokensRef = db.collection("users").doc(userId).collection("fcmTokens");
     const tokensSnapshot = await tokensRef.get();
     if (tokensSnapshot.empty) {
-        console.log(`No FCM tokens found for recipient: ${userId}`);
+        console.log(`[DIAGNOSTIC] No FCM tokens found for recipient: ${userId}`);
         return [];
     }
     const tokens = tokensSnapshot.docs.map((doc) => doc.id);
-    console.log(`Found tokens for ${userId}: ${tokens.join(", ")}`);
+    console.log(`[DIAGNOSTIC] Found tokens for ${userId}: ${tokens.join(", ")}`);
     return tokens;
 }
 /**
@@ -28,7 +28,7 @@ async function getRecipientTokens(userId) {
  */
 async function sendFcmNotification(tokens, payload) {
     if (tokens.length === 0) {
-        console.log("Token list is empty, skipping FCM send.");
+        console.log("[DIAGNOSTIC] Token list is empty, skipping FCM send.");
         return;
     }
     const message = {
@@ -37,19 +37,20 @@ async function sendFcmNotification(tokens, payload) {
         android: payload.android,
         data: payload.data,
     };
-    console.log("Sending multicast message:", JSON.stringify(message, null, 2));
-    const response = await fcm.sendEachForMulticast(message);
-    console.log(`${response.successCount} messages were sent successfully`);
-    if (response.failureCount > 0) {
-        response.responses.forEach((resp, idx) => {
-            if (!resp.success && resp.error) {
-                console.error(`Failed to send notification to token: ${tokens[idx]}`, resp.error);
-                if (resp.error.code === "messaging/invalid-registration-token" ||
-                    resp.error.code === "messaging/registration-token-not-registered") {
-                    console.log(`Token ${tokens[idx]} is invalid and should be removed.`);
+    console.log("[DIAGNOSTIC] Sending multicast message with payload:", JSON.stringify(message, null, 2));
+    try {
+        const response = await fcm.sendEachForMulticast(message);
+        console.log(`[DIAGNOSTIC] FCM response: ${response.successCount} success, ${response.failureCount} failure`);
+        if (response.failureCount > 0) {
+            response.responses.forEach((resp, idx) => {
+                if (!resp.success && resp.error) {
+                    console.error(`[DIAGNOSTIC] Failure for token: ${tokens[idx]}`, resp.error);
                 }
-            }
-        });
+            });
+        }
+    }
+    catch (error) {
+        console.error("[DIAGNOSTIC] Critical error sending FCM message:", error);
     }
 }
 // --- Trigger Firestore pour les nouveaux messages ---
@@ -77,7 +78,7 @@ exports.onNewMessage = functions.firestore
         console.log("No recipients to notify.");
         return;
     }
-    console.log(`Recipients identified: ${recipientIds.join(', ')}.`);
+    console.log(`[DIAGNOSTIC] Participants to notify: ${recipientIds.join(', ')}.`);
     const senderDoc = await db.collection("users").doc(senderId).get();
     const senderName = (_b = (_a = senderDoc.data()) === null || _a === void 0 ? void 0 : _a.firstName) !== null && _b !== void 0 ? _b : "Quelqu'un";
     const payload = {
@@ -89,7 +90,6 @@ exports.onNewMessage = functions.firestore
         android: {
             priority: "high",
             notification: {
-                // CORRECTION: Utilisation du bon channelId
                 channelId: "fcm_default_channel",
                 sound: "default",
             },
@@ -100,8 +100,14 @@ exports.onNewMessage = functions.firestore
         },
     };
     for (const recipientId of recipientIds) {
+        console.log(`[DIAGNOSTIC] Processing recipient: ${recipientId}`);
         const tokens = await getRecipientTokens(recipientId);
-        await sendFcmNotification(tokens, payload);
+        if (tokens.length > 0) {
+            await sendFcmNotification(tokens, payload);
+        }
+        else {
+            console.log(`[DIAGNOSTIC] Skipped recipient ${recipientId} because no tokens were found.`);
+        }
     }
 });
 // --- Fonction callable pour envoyer des notifications génériques ---

@@ -15,12 +15,12 @@ async function getRecipientTokens(userId: string): Promise<string[]> {
   const tokensSnapshot = await tokensRef.get();
 
   if (tokensSnapshot.empty) {
-    console.log(`No FCM tokens found for recipient: ${userId}`);
+    console.log(`[DIAGNOSTIC] No FCM tokens found for recipient: ${userId}`);
     return [];
   }
 
   const tokens = tokensSnapshot.docs.map((doc) => doc.id);
-  console.log(`Found tokens for ${userId}: ${tokens.join(", ")}`);
+  console.log(`[DIAGNOSTIC] Found tokens for ${userId}: ${tokens.join(", ")}`);
   return tokens;
 }
 
@@ -31,7 +31,7 @@ async function getRecipientTokens(userId: string): Promise<string[]> {
  */
 async function sendFcmNotification(tokens: string[], payload: {[key: string]: any}): Promise<void> {
   if (tokens.length === 0) {
-      console.log("Token list is empty, skipping FCM send.");
+      console.log("[DIAGNOSTIC] Token list is empty, skipping FCM send.");
       return;
   }
   
@@ -42,22 +42,20 @@ async function sendFcmNotification(tokens: string[], payload: {[key: string]: an
       data: payload.data,
   };
 
-  console.log("Sending multicast message:", JSON.stringify(message, null, 2));
-  const response = await fcm.sendEachForMulticast(message);
-  console.log(`${response.successCount} messages were sent successfully`);
+  console.log("[DIAGNOSTIC] Sending multicast message with payload:", JSON.stringify(message, null, 2));
+  try {
+    const response = await fcm.sendEachForMulticast(message);
+    console.log(`[DIAGNOSTIC] FCM response: ${response.successCount} success, ${response.failureCount} failure`);
 
-  if (response.failureCount > 0) {
-    response.responses.forEach((resp, idx) => {
-      if (!resp.success && resp.error) {
-        console.error(`Failed to send notification to token: ${tokens[idx]}`, resp.error);
-        if (
-          resp.error.code === "messaging/invalid-registration-token" ||
-          resp.error.code === "messaging/registration-token-not-registered"
-        ) {
-          console.log(`Token ${tokens[idx]} is invalid and should be removed.`);
+    if (response.failureCount > 0) {
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success && resp.error) {
+          console.error(`[DIAGNOSTIC] Failure for token: ${tokens[idx]}`, resp.error);
         }
-      }
-    });
+      });
+    }
+  } catch (error) {
+    console.error("[DIAGNOSTIC] Critical error sending FCM message:", error);
   }
 }
 
@@ -90,7 +88,7 @@ export const onNewMessage = functions.firestore
       console.log("No recipients to notify.");
       return;
     }
-    console.log(`Recipients identified: ${recipientIds.join(', ')}.`);
+    console.log(`[DIAGNOSTIC] Participants to notify: ${recipientIds.join(', ')}.`);
 
     const senderDoc = await db.collection("users").doc(senderId).get();
     const senderName = senderDoc.data()?.firstName ?? "Quelqu'un";
@@ -104,7 +102,6 @@ export const onNewMessage = functions.firestore
       android: {
         priority: "high" as const,
         notification: {
-          // CORRECTION: Utilisation du bon channelId
           channelId: "fcm_default_channel",
           sound: "default",
         },
@@ -116,8 +113,13 @@ export const onNewMessage = functions.firestore
     };
     
     for (const recipientId of recipientIds) {
+        console.log(`[DIAGNOSTIC] Processing recipient: ${recipientId}`);
         const tokens = await getRecipientTokens(recipientId);
-        await sendFcmNotification(tokens, payload);
+        if (tokens.length > 0) {
+            await sendFcmNotification(tokens, payload);
+        } else {
+            console.log(`[DIAGNOSTIC] Skipped recipient ${recipientId} because no tokens were found.`);
+        }
     }
   });
 
