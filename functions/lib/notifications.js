@@ -42,7 +42,6 @@ async function sendFcmNotification(tokens, payload) {
     console.log(`${response.successCount} messages were sent successfully`);
     if (response.failureCount > 0) {
         response.responses.forEach((resp, idx) => {
-            // CORRECTION: On vérifie que `resp.error` existe avant de l'utiliser.
             if (!resp.success && resp.error) {
                 console.error(`Failed to send notification to token: ${tokens[idx]}`, resp.error);
                 if (resp.error.code === "messaging/invalid-registration-token" ||
@@ -90,7 +89,8 @@ exports.onNewMessage = functions.firestore
         android: {
             priority: "high",
             notification: {
-                channelId: "messages",
+                // CORRECTION: Utilisation du bon channelId
+                channelId: "fcm_default_channel",
                 sound: "default",
             },
         },
