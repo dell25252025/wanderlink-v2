@@ -89,7 +89,9 @@ export const initPushNotifications = async (userId: string) => {
       console.log('Push action performed:', notification.notification.data);
       const chatId = notification.notification.data.chatId;
       if (chatId) {
-        console.log(`Should navigate to chat: ${chatId}`);
+        console.log(`Dispatching openChat event for chat: ${chatId}`);
+        const event = new CustomEvent('openChat', { detail: chatId });
+        window.dispatchEvent(event);
       }
     });
 

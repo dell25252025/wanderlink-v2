@@ -12,6 +12,7 @@ import { OnboardingProvider } from '@/context/OnboardingContext'; // Import Onbo
 import CapacitorSetup from '@/components/capacitor-setup';
 import AuthHandler from '@/components/auth-handler';
 import OnboardingOverlay from '@/components/OnboardingOverlay'; // Import OnboardingOverlay
+import NotificationHandler from '@/components/notification-handler';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -74,6 +75,7 @@ export default function RootLayout({
               <BackButtonHandler />
               <CallManager />
               <OnboardingOverlay /> {/* Add the overlay */}
+              <NotificationHandler />
               <main>{children}</main>
               <Toaster />
             </ThemeProvider>
