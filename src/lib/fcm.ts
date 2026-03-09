@@ -76,11 +76,11 @@ export const initPushNotifications = async (userId: string) => {
               schedule: { at: new Date(Date.now() + 100) },
               extra: notification.data,
               channelId: CHANNEL_ID,
-              smallIcon: 'ic_launcher' // <-- LA CORRECTION EST ICI
+              smallIcon: 'ic_dialog_info' // <-- NOUVELLE ICÔNE VALIDE
             }
           ]
         });
-        console.log("Local notification successfully scheduled.");
+        console.log("Local notification successfully scheduled with valid icon.");
       } catch (e) {
         console.error("Error scheduling local notification", e);
       }
