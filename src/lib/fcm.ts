@@ -3,6 +3,7 @@ import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { getFirestore, doc, setDoc } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications, Channel } from '@capacitor/push-notifications';
+import { LocalNotifications } from '@capacitor/local-notifications';
 
 // Assurez-vous que votre fichier firebase.ts exporte `app`
 import { app } from '@/lib/firebase'; 
@@ -58,8 +59,21 @@ export const initPushNotifications = async (userId: string) => {
       console.error('Error on registration:', error);
     });
 
-    PushNotifications.addListener('pushNotificationReceived', (notification) => {
+    PushNotifications.addListener('pushNotificationReceived', async (notification) => {
       console.log('Push received:', notification);
+      
+      // **LA SOLUTION : Créer une notification locale pour l'afficher**
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: Date.now(), // ID unique pour la notification
+            title: notification.data.title || "Nouveau message",
+            body: notification.data.body || "Vous avez reçu un message",
+            schedule: { at: new Date(Date.now() + 100) }, // Afficher immédiatement
+            extra: notification.data
+          }
+        ]
+      });
     });
 
     PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
