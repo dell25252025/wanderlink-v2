@@ -31,28 +31,27 @@ async function sendFcmNotification(tokens, payload) {
         console.log("Token list is empty, skipping FCM send.");
         return;
     }
-    console.log("Sending payload:", JSON.stringify(payload, null, 2));
-    const response = await fcm.sendToDevice(tokens, payload);
-    console.log("FCM response:", JSON.stringify(response, null, 2));
-    const tokensToRemove = [];
-    response.results.forEach((result, index) => {
-        const error = result.error;
-        if (error) {
-            console.error("Failed to send notification to token:", tokens[index], error);
-            // Si le token est invalide, on le supprime de la base de données.
-            if (error.code === "messaging/invalid-registration-token" ||
-                error.code === "messaging/registration-token-not-registered") {
-                // Note: This assumes the token is the document ID, which is a common pattern.
-                // The exact path might need adjustment based on your DB structure for tokens.
-                // Based on getRecipientTokens, this seems correct.
-                // The ref needs to be constructed carefully.
-                // Assuming getRecipientTokens was called for a single user, we can't easily get the userId here.
-                // For now, we log it. A more robust solution would be to pass userId down.
-                console.error(`Token ${tokens[index]} is invalid and should be removed.`);
+    const message = {
+        tokens,
+        notification: payload.notification,
+        android: payload.android,
+        data: payload.data,
+    };
+    console.log("Sending multicast message:", JSON.stringify(message, null, 2));
+    const response = await fcm.sendEachForMulticast(message);
+    console.log(`${response.successCount} messages were sent successfully`);
+    if (response.failureCount > 0) {
+        response.responses.forEach((resp, idx) => {
+            // CORRECTION: On vérifie que `resp.error` existe avant de l'utiliser.
+            if (!resp.success && resp.error) {
+                console.error(`Failed to send notification to token: ${tokens[idx]}`, resp.error);
+                if (resp.error.code === "messaging/invalid-registration-token" ||
+                    resp.error.code === "messaging/registration-token-not-registered") {
+                    console.log(`Token ${tokens[idx]} is invalid and should be removed.`);
+                }
             }
-        }
-    });
-    await Promise.all(tokensToRemove);
+        });
+    }
 }
 // --- Trigger Firestore pour les nouveaux messages ---
 exports.onNewMessage = functions.firestore
@@ -67,7 +66,6 @@ exports.onNewMessage = functions.firestore
     }
     const senderId = messageData.senderId;
     console.log(`New message from ${senderId} in chat ${chatId}.`);
-    // Pour un chat de groupe, on doit notifier tous les participants SAUF l'expéditeur.
     const chatRef = db.collection("groupChats").doc(chatId);
     const chatDoc = await chatRef.get();
     const chatData = chatDoc.data();
@@ -75,7 +73,6 @@ exports.onNewMessage = functions.firestore
         console.log("Chat data or participants not found.");
         return;
     }
-    // Exclure l'expéditeur de la liste des destinataires
     const recipientIds = chatData.participants.filter((p) => p !== senderId);
     if (recipientIds.length === 0) {
         console.log("No recipients to notify.");
@@ -88,12 +85,12 @@ exports.onNewMessage = functions.firestore
         notification: {
             title: `Nouveau message de ${senderName}`,
             body: messageData.content || "Vous a envoyé une image.",
-            tag: chatId, // Regroupe les notifications par chat sur Android
+            tag: chatId,
         },
         android: {
             priority: "high",
             notification: {
-                channelId: "messages", // Assurez-vous que ce canal est créé côté client
+                channelId: "messages",
                 sound: "default",
             },
         },
@@ -102,7 +99,6 @@ exports.onNewMessage = functions.firestore
             senderId: senderId,
         },
     };
-    // Envoyer la notification à chaque destinataire
     for (const recipientId of recipientIds) {
         const tokens = await getRecipientTokens(recipientId);
         await sendFcmNotification(tokens, payload);
@@ -110,7 +106,6 @@ exports.onNewMessage = functions.firestore
 });
 // --- Fonction callable pour envoyer des notifications génériques ---
 exports.sendNotification = functions.https.onCall(async (data, context) => {
-    // Vérifier l'authentification
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Vous devez être connecté.');
     }
