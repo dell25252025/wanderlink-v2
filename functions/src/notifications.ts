@@ -26,6 +26,9 @@ async function sendFcmNotification(tokens: string[], payload: admin.messaging.Da
   const message: admin.messaging.MulticastMessage = {
       tokens,
       data: payload,
+      android: {
+        priority: "high",
+      }
   };
 
   console.log("[DIAGNOSTIC] Sending DATA-ONLY multicast message with payload:", JSON.stringify(message, null, 2));
