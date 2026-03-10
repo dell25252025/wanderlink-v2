@@ -1,13 +1,16 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { SplashScreen } from '@capacitor/splash-screen';
-import { PushNotifications, Channel } from '@capacitor/push-notifications';
 
 const CapacitorSetup = () => {
+  const router = useRouter();
+
   useEffect(() => {
+    // --- Initialisation des services Capacitor ---
     if (Capacitor.isNativePlatform()) {
       // Initialisation de Google Auth
       GoogleAuth.initialize({
@@ -16,32 +19,27 @@ const CapacitorSetup = () => {
         grantOfflineAccess: true,
       });
 
-      // Masquer le splash screen
+      // Masquer le splash screen une fois l'app chargée
       SplashScreen.hide();
-
-      // --- NOUVEAU: Création du canal de notification au démarrage ---
-      const createNotificationChannel = async () => {
-        try {
-          const channel: Channel = {
-            id: "messages",
-            name: "Messages",
-            description: "Notifications for new messages",
-            importance: 5, // Importance maximale
-            visibility: 1, // Visible publiquement
-            sound: "default",
-            vibration: true,
-          };
-          await PushNotifications.createChannel(channel);
-          console.log('Notification channel "messages" created successfully at startup.');
-        } catch (e) {
-          console.error('Error creating notification channel at startup:', e);
-        }
-      };
-
-      createNotificationChannel();
-      // -------------------------------------------------------------
     }
-  }, []);
+
+    // --- Gestion de la redirection au clic sur une notification ---
+    const handleOpenChat = (event: Event) => {
+      const customEvent = event as CustomEvent<{ chatId: string }>;
+      const chatId = customEvent.detail.chatId;
+      if (chatId) {
+        console.log(`CapacitorSetup: Received openChat event for chat ${chatId}. Redirecting...`);
+        router.push(`/chat/${chatId}`);
+      }
+    };
+
+    window.addEventListener('openChat', handleOpenChat);
+
+    // --- Nettoyage ---
+    return () => {
+      window.removeEventListener('openChat', handleOpenChat);
+    };
+  }, [router]); // Ajout de router comme dépendance du useEffect
 
   return null;
 };

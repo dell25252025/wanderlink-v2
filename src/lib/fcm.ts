@@ -2,8 +2,8 @@ import { FirebaseApp } from 'firebase/app';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { getFirestore, doc, setDoc } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
-import { PushNotifications, Channel } from '@capacitor/push-notifications';
-import { LocalNotifications, PermissionStatus } from '@capacitor/local-notifications';
+import { PushNotifications } from '@capacitor/push-notifications';
+import { LocalNotifications, PermissionStatus, Channel } from '@capacitor/local-notifications';
 
 // Assurez-vous que votre fichier firebase.ts exporte `app`
 import { app } from '@/lib/firebase'; 
@@ -18,13 +18,14 @@ const createNotificationChannel = async () => {
     id: CHANNEL_ID,
     name: "Messages",
     description: "Notifications for new messages",
-    importance: 5, // Max importance
+    importance: 5, // Max importance pour garantir l'affichage en mode "Heads-up"
     visibility: 1, // Publicly visible
     sound: "default",
     vibration: true,
   };
-  await PushNotifications.createChannel(channel);
-  console.log(`Notification channel "${CHANNEL_ID}" created or already exists.`);
+  // Correction : Utiliser LocalNotifications pour créer le canal
+  await LocalNotifications.createChannel(channel);
+  console.log(`Notification channel "${CHANNEL_ID}" created or updated via LocalNotifications.`);
 };
 
 export const initPushNotifications = async (userId: string) => {
@@ -67,7 +68,6 @@ export const initPushNotifications = async (userId: string) => {
       console.log('Push received:', notification);
       
       try {
-        // CORRECTION : Suppression de la propriété "schedule" pour un affichage instantané
         await LocalNotifications.schedule({
           notifications: [
             {
@@ -76,7 +76,7 @@ export const initPushNotifications = async (userId: string) => {
               body: notification.data.body || "Vous avez reçu un message",
               extra: notification.data,
               channelId: CHANNEL_ID,
-              smallIcon: 'ic_dialog_info'
+              smallIcon: 'ic_dialog_info' // Assurez-vous que cette icône existe
             }
           ]
         });
