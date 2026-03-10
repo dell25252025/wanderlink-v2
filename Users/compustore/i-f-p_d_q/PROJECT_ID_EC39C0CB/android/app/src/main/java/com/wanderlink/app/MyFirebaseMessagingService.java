@@ -9,12 +9,10 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
-
 public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
     private static final String TAG = "MyFCMService";
     public static final String ACTION_END_CALL = "com.wanderlink.app.END_CALL";
-
 
     @Override
     public void onMessageReceived(RemoteMessage remoteMessage) {
@@ -40,7 +38,15 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                 Intent intent = new Intent(ACTION_END_CALL);
                 intent.putExtra("callId", data.get("callId"));
                 LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+            
+            } else {
+                // Si ce n'est pas un appel, passez le message au gestionnaire de Capacitor
+                Log.d(TAG, "Passing notification to Capacitor FirebaseMessagingService");
+                super.onMessageReceived(remoteMessage);
             }
+        } else {
+             Log.d(TAG, "Passing notification to Capacitor FirebaseMessagingService (no data)");
+             super.onMessageReceived(remoteMessage);
         }
     }
 }
