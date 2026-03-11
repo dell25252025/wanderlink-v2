@@ -3,30 +3,12 @@ import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { getFirestore, doc, setDoc } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
-import { LocalNotifications, PermissionStatus, Channel } from '@capacitor/local-notifications';
+import { LocalNotifications, PermissionStatus } from '@capacitor/local-notifications';
 
 // Assurez-vous que votre fichier firebase.ts exporte `app`
 import { app } from '@/lib/firebase'; 
 
 const db = getFirestore(app);
-
-const CHANNEL_ID = "messages";
-
-// Fonction pour créer le canal de notification
-const createNotificationChannel = async () => {
-  const channel: Channel = {
-    id: CHANNEL_ID,
-    name: "Messages",
-    description: "Notifications for new messages",
-    importance: 5, // Max importance pour garantir l'affichage en mode "Heads-up"
-    visibility: 1, // Publicly visible
-    sound: "default",
-    vibration: true,
-  };
-  // Correction : Utiliser LocalNotifications pour créer le canal
-  await LocalNotifications.createChannel(channel);
-  console.log(`Notification channel "${CHANNEL_ID}" created or updated via LocalNotifications.`);
-};
 
 export const initPushNotifications = async (userId: string) => {
   if (!Capacitor.isNativePlatform()) {
@@ -35,22 +17,12 @@ export const initPushNotifications = async (userId: string) => {
   }
 
   try {
-    await createNotificationChannel();
-
     let permStatus = await PushNotifications.checkPermissions();
     if (permStatus.receive === 'prompt') {
       permStatus = await PushNotifications.requestPermissions();
     }
     if (permStatus.receive !== 'granted') {
       throw new Error('User denied push permissions!');
-    }
-
-    let localPerms: PermissionStatus = await LocalNotifications.checkPermissions();
-    if (localPerms.display === 'prompt') {
-      localPerms = await LocalNotifications.requestPermissions();
-    }
-    if (localPerms.display !== 'granted') {
-      console.warn('User denied local notification permissions!');
     }
 
     await PushNotifications.register();
@@ -62,28 +34,6 @@ export const initPushNotifications = async (userId: string) => {
 
     PushNotifications.addListener('registrationError', (error) => {
       console.error('Error on registration:', error);
-    });
-
-    PushNotifications.addListener('pushNotificationReceived', async (notification) => {
-      console.log('Push received:', notification);
-      
-      try {
-        await LocalNotifications.schedule({
-          notifications: [
-            {
-              id: Math.floor(Math.random() * 1000000),
-              title: notification.data.title || "Nouveau message",
-              body: notification.data.body || "Vous avez reçu un message",
-              extra: notification.data,
-              channelId: CHANNEL_ID,
-              smallIcon: 'ic_dialog_info' // Assurez-vous que cette icône existe
-            }
-          ]
-        });
-        console.log("Local notification successfully scheduled for immediate display.");
-      } catch (e) {
-        console.error("Error scheduling local notification", e);
-      }
     });
 
     PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
