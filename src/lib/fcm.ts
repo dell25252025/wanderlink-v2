@@ -1,9 +1,6 @@
-import { FirebaseApp } from 'firebase/app';
-import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { getFirestore, doc, setDoc } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
-import { PushNotifications } from '@capacitor/push-notifications';
-import { LocalNotifications, PermissionStatus } from '@capacitor/local-notifications';
+import { PushNotifications, PermissionStatus } from '@capacitor/push-notifications';
 
 // Assurez-vous que votre fichier firebase.ts exporte `app`
 import { app } from '@/lib/firebase'; 
@@ -17,7 +14,8 @@ export const initPushNotifications = async (userId: string) => {
   }
 
   try {
-    let permStatus = await PushNotifications.checkPermissions();
+    // 1. Demander la permission
+    let permStatus: PermissionStatus = await PushNotifications.checkPermissions();
     if (permStatus.receive === 'prompt') {
       permStatus = await PushNotifications.requestPermissions();
     }
@@ -25,17 +23,22 @@ export const initPushNotifications = async (userId: string) => {
       throw new Error('User denied push permissions!');
     }
 
+    // 2. S'enregistrer auprès de FCM
     await PushNotifications.register();
 
+    // 3. Listener pour le token (succès de l'enregistrement)
     PushNotifications.addListener('registration', async (token) => {
       console.log('Push registration success, token:', token.value);
       await saveTokenToFirestore(userId, token.value);
     });
 
+    // 4. Listener pour les erreurs
     PushNotifications.addListener('registrationError', (error) => {
       console.error('Error on registration:', error);
     });
 
+    // 5. Listener pour l'ACTION de l'utilisateur (quand il tape sur la notif)
+    // C'EST LE SEUL LISTENER DONT NOUS AVONS BESOIN POUR LA LOGIQUE APPLICATIVE
     PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
       console.log('Push action performed:', notification.notification.data);
       const chatId = notification.notification.data.chatId;
