@@ -10,13 +10,10 @@ if (!admin.apps.length) {
 
 export const ai = genkit({
   plugins: [
-    // Configure le plugin Google AI avec la clé API des variables d'environnement.
-    // Assurez-vous d'avoir un fichier .env.local avec GEMINI_API_KEY défini.
     googleAI({
       apiKey: process.env.GEMINI_API_KEY,
     }),
   ],
-  // Utilise le modèle Gemini Pro comme demandé.
   model: 'googleai/gemini-pro',
 });
 
@@ -56,32 +53,48 @@ export const onMessageCreate = onMessage(
         return;
       }
 
-      const toUserDoc = await admin.firestore().collection('users').doc(toId).get();
-      if (!toUserDoc.exists) {
-        console.log(`Utilisateur destinataire ${toId} non trouvé.`);
+      // **LA CORRECTION EST ICI**
+      // 1. Lire les tokens depuis la sous-collection `fcmTokens`
+      const tokensSnapshot = await admin.firestore().collection(`users/${toId}/fcmTokens`).get();
+
+      if (tokensSnapshot.empty) {
+        console.log(`Aucun token FCM trouvé pour l'utilisateur ${toId}.`);
         return;
       }
 
-      const toUserData = toUserDoc.data();
-      const fcmToken = toUserData?.fcmToken;
+      const tokens = tokensSnapshot.docs.map(doc => doc.id);
 
-      if (fcmToken) {
+      if (tokens.length > 0) {
         const fromUserDoc = await admin.firestore().collection('users').doc(fromId).get();
         const fromUserName = fromUserDoc.exists() ? fromUserDoc.data()?.firstName : 'Quelqu\'un';
 
+        // 2. Construire la notification avec les données pour la navigation
         const payload = {
           notification: {
             title: `Nouveau message de ${fromUserName}`,
             body: messageData.text || 'Vous avez reçu un nouveau message.',
           },
-          token: fcmToken,
+          data: {
+            chatId: chatId, // Permet à l'app de savoir quel chat ouvrir
+          },
         };
 
-        console.log(`Envoi de la notification à ${toId} avec le token ${fcmToken}`);
-        await admin.messaging().send(payload);
-        console.log('Notification envoyée avec succès.');
-      } else {
-        console.log(`Aucun token FCM trouvé pour l'utilisateur ${toId}.`);
+        // 3. Envoyer à tous les appareils de l'utilisateur
+        console.log(`Envoi de la notification à ${toId} pour ${tokens.length} appareil(s).`);
+        const response = await admin.messaging().sendToDevice(tokens, payload);
+        console.log('Réponse de l'envoi de notification:', response);
+
+        // 4. (Optionnel) Nettoyer les tokens invalides
+        response.results.forEach((result, index) => {
+          const error = result.error;
+          if (error) {
+            console.error('Échec de l\'envoi au token', tokens[index], error);
+            if (error.code === 'messaging/invalid-registration-token' ||
+                error.code === 'messaging/registration-token-not-registered') {
+              admin.firestore().collection(`users/${toId}/fcmTokens`).doc(tokens[index]).delete();
+            }
+          }
+        });
       }
     } catch (error) {
       console.error("Erreur lors de l'envoi de la notification :", error);
