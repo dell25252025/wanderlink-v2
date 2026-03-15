@@ -1,69 +1,49 @@
-import { getFirestore, doc, setDoc } from 'firebase/firestore';
-import { Capacitor } from '@capacitor/core';
-import { PushNotifications, PermissionStatus } from '@capacitor/push-notifications';
-
-// Assurez-vous que votre fichier firebase.ts exporte `app`
-import { app } from '@/lib/firebase'; 
+import { getFirestore, doc, updateDoc, arrayUnion } from "firebase/firestore";
+import { Capacitor } from "@capacitor/core";
+import { PushNotifications, Token } from "@capacitor/push-notifications";
+import { app } from "@/lib/firebase";
 
 const db = getFirestore(app);
 
-export const initPushNotifications = async (userId: string) => {
+export const initPushNotifications = async (userId: string | null) => {
+  if (!userId) {
+    console.log("Push notifications not initialized: No user ID provided.");
+    return;
+  }
+
   if (!Capacitor.isNativePlatform()) {
-    console.log('Push notifications not initialized: Not a native platform.');
+    console.log("Push notifications not initialized: Not a native platform.");
     return;
   }
 
   try {
-    // 1. Demander la permission
-    let permStatus: PermissionStatus = await PushNotifications.checkPermissions();
-    if (permStatus.receive === 'prompt') {
-      permStatus = await PushNotifications.requestPermissions();
-    }
-    if (permStatus.receive !== 'granted') {
-      throw new Error('User denied push permissions!');
+    const permission = await PushNotifications.requestPermissions();
+
+    if (permission.receive !== "granted") {
+      console.log("User did not grant push notification permissions.");
+      return;
     }
 
-    // 2. S'enregistrer auprès de FCM
     await PushNotifications.register();
 
-    // 3. Listener pour le token (succès de l'enregistrement)
-    PushNotifications.addListener('registration', async (token) => {
-      console.log('Push registration success, token:', token.value);
-      await saveTokenToFirestore(userId, token.value);
-    });
-
-    // 4. Listener pour les erreurs
-    PushNotifications.addListener('registrationError', (error) => {
-      console.error('Error on registration:', error);
-    });
-
-    // 5. Listener pour l'ACTION de l'utilisateur (quand il tape sur la notif)
-    // C'EST LE SEUL LISTENER DONT NOUS AVONS BESOIN POUR LA LOGIQUE APPLICATIVE
-    PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
-      console.log('Push action performed:', notification.notification.data);
-      const chatId = notification.notification.data.chatId;
-      if (chatId) {
-        console.log(`Dispatching openChat event for chat: ${chatId}`);
-        const event = new CustomEvent('openChat', { detail: chatId });
-        window.dispatchEvent(event);
+    PushNotifications.addListener("registration", async (token: Token) => {
+      console.log(`FCM Token received: ${token.value}`);
+      try {
+        const userRef = doc(db, "users", userId);
+        await updateDoc(userRef, {
+          fcmTokens: arrayUnion(token.value)
+        });
+        console.log(`FCM token successfully saved for user ${userId}`);
+      } catch (error) {
+        console.error("Error saving FCM token to Firestore:", error);
       }
     });
 
-  } catch (e) {
-    console.error('Error initializing push notifications', e);
-  }
-};
+    PushNotifications.addListener("registrationError", (error: any) => {
+      console.error("Error during push notification registration:", error);
+    });
 
-const saveTokenToFirestore = async (userId: string, token: string) => {
-  if (!userId) {
-    console.error("User ID is not provided.");
-    return;
-  }
-  try {
-    const tokenRef = doc(db, `users/${userId}/fcmTokens/${token}`);
-    await setDoc(tokenRef, { createdAt: new Date() });
-    console.log(`Token ${token} saved for user ${userId}`);
-  } catch (e) {
-    console.error("Error saving token to Firestore", e);
+  } catch (error) {
+    console.error("Error initializing push notifications:", error);
   }
 };
