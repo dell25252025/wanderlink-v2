@@ -2,8 +2,30 @@ import * as functions from "firebase-functions";
 import { RtcTokenBuilder } from "agora-token";
 import * as cors from "cors";
 
-// On initialise le middleware CORS pour autoriser les requêtes depuis n'importe quelle origine.
-const corsHandler = cors({ origin: true });
+// Définir les origines autorisées
+const allowedOrigins = [
+  "https://wanderlink-v2--wanderlink-c1a35.us-east4.hosted.app", // Votre app déployée
+  "http://localhost:3000", // Pour le développement local web
+  "capacitor://localhost", // Pour Capacitor sur iOS
+  "http://localhost",      // Pour Capacitor sur Android
+];
+
+// Configurer le middleware CORS avec une politique plus stricte
+const corsHandler = cors({
+  origin: (origin, callback) => {
+    // Autoriser les requêtes sans origine (ex: Postman, apps mobiles natives)
+    if (!origin) {
+      return callback(null, true);
+    }
+    // Si l'origine est dans notre liste, on l'autorise
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    // Sinon, on la rejette
+    const msg = `L'origine ${origin} n'est pas autorisée par la politique CORS.`;
+    return callback(new Error(msg), false);
+  },
+});
 
 // On utilise la configuration des fonctions v1 (functions.config())
 const agoraConfig = functions.config().agora;
@@ -11,6 +33,11 @@ const agoraConfig = functions.config().agora;
 export const generateAgoraToken = functions.https.onRequest((req, res) => {
   // Le handler CORS s'occupe de la requête (y compris les requêtes pre-flight OPTIONS)
   corsHandler(req, res, async () => {
+    // Si corsHandler a passé une erreur, la requête est déjà terminée.
+    if (res.headersSent) {
+      return;
+    }
+
     if (req.method !== 'POST') {
       res.status(405).send('Method Not Allowed');
       return;
@@ -41,7 +68,6 @@ export const generateAgoraToken = functions.https.onRequest((req, res) => {
     functions.logger.info(`Génération du jeton pour le canal: ${channelName}, uid: ${uid}`);
 
     try {
-        // CORRECTION : La fonction attendait 7 arguments, j'en avais mis 6.
         const token = RtcTokenBuilder.buildTokenWithUid(
             appId,
             appCertificate,
@@ -49,7 +75,7 @@ export const generateAgoraToken = functions.https.onRequest((req, res) => {
             uid,
             role,
             privilegeExpiredTs,
-            privilegeExpiredTs // Le 7ème argument manquant
+            privilegeExpiredTs
         );
         
         res.status(200).json({ token });
