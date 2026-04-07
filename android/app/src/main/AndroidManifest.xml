@@ -14,9 +14,15 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
 
+        <!-- META-DATA POUR GOOGLE AUTH -->
         <meta-data
             android:name="com.codetrixstudio.capacitor.GoogleAuth.Theme"
             android:value="@style/TransparentTheme" />
+
+        <!-- NOUVELLE META-DATA POUR LE CANAL DE NOTIFICATION PAR DÉFAUT -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="messages" />
 
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"

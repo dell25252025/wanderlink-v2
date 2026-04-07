@@ -1,4 +1,3 @@
-
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
@@ -8,10 +7,11 @@ import { Playfair_Display, Poppins, PT_Sans } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { CallManager } from '@/components/call-manager';
 import { AuthProvider } from '@/context/AuthContext';
-import { OnboardingProvider } from '@/context/OnboardingContext'; // Import OnboardingProvider
+import { OnboardingProvider } from '@/context/OnboardingContext';
+import { NotificationProvider } from '@/context/NotificationContext'; // Import NotificationProvider
 import CapacitorSetup from '@/components/capacitor-setup';
 import AuthHandler from '@/components/auth-handler';
-import OnboardingOverlay from '@/components/OnboardingOverlay'; // Import OnboardingOverlay
+import OnboardingOverlay from '@/components/OnboardingOverlay';
 import NotificationHandler from '@/components/notification-handler';
 
 const poppins = Poppins({
@@ -45,7 +45,6 @@ export const viewport: Viewport = {
   userScalable: false,
 }
 
-
 export default function RootLayout({
   children,
 }: {
@@ -63,22 +62,24 @@ export default function RootLayout({
           }}
         />
         <AuthProvider>
-          <OnboardingProvider> {/* Wrap with OnboardingProvider */}
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-            >
-              <CapacitorSetup />
-              <AuthHandler />
-              <BackButtonHandler />
-              <CallManager />
-              <OnboardingOverlay /> {/* Add the overlay */}
-              <NotificationHandler />
-              <main>{children}</main>
-              <Toaster />
-            </ThemeProvider>
+          <OnboardingProvider>
+            <NotificationProvider> {/* Wrap with NotificationProvider */}
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+              >
+                <CapacitorSetup />
+                <AuthHandler />
+                <BackButtonHandler />
+                <CallManager />
+                <OnboardingOverlay />
+                <NotificationHandler />
+                <main>{children}</main>
+                <Toaster />
+              </ThemeProvider>
+            </NotificationProvider>
           </OnboardingProvider>
         </AuthProvider>
       </body>

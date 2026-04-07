@@ -2,45 +2,73 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { PushNotifications, PushNotificationSchema } from "@capacitor/push-notifications";
+import { PushNotifications, PushNotificationSchema, ActionPerformed } from "@capacitor/push-notifications";
 import { Capacitor } from '@capacitor/core';
+import { useNotification } from "@/context/NotificationContext";
+import { useToast } from "@/hooks/use-toast"; // Import du hook de toast
+import { ToastAction } from "@/components/ui/toast"; // Import du composant d'action
 
 export default function NotificationHandler() {
   const router = useRouter();
+  const { notification, setNotification } = useNotification();
+  const { toast } = useToast(); // Récupération de la fonction toast
+
+  // Ce useEffect gère la navigation lorsque le contexte est mis à jour
+  useEffect(() => {
+    if (notification?.chatId) {
+      console.log(`[NotificationContext] Navigation vers le chat: ${notification.chatId}`);
+      router.push(`/chat/${notification.chatId}`);
+      setNotification(null); // Nettoyage après navigation
+    }
+  }, [notification, router, setNotification]);
+
 
   useEffect(() => {
-    // --- Listener pour la navigation custom interne (déjà présent) ---
-    const handler = (event: Event) => {
-      const chatId = (event as CustomEvent).detail;
-      if (chatId) {
-        console.log(`Custom event 'openChat' received for chat: ${chatId}`);
-        router.push(`/chat/${chatId}`);
-      }
-    };
-    window.addEventListener("openChat", handler);
-
-    // --- Logique pour les notifications push, uniquement sur plateformes natives ---
     if (Capacitor.isNativePlatform()) {
-      console.log("\uD83D\uDCF1 Initialisation du listener de notifications Push (plateforme native détectée).");
+      console.log("📱 Initialisation des listeners de notifications Push.");
+
+      // Listener pour les notifications reçues quand l'app est au PREMIER PLAN
       PushNotifications.addListener(
         "pushNotificationReceived",
         (notification: PushNotificationSchema) => {
-          console.log("\uD83D\uDD14 [Capacitor Push] Notification reçue via le listener JS !");
-          console.log("Titre:", notification.title);
-          console.log("Message:", notification.body);
-          console.log("Data:", JSON.stringify(notification.data, null, 2));
+          console.log("🔔 [Push REÇUE en 1er plan]", notification);
+
+          // Afficher un toast au lieu d'une notification système
+          toast({
+            title: notification.title || "Nouveau Message",
+            description: notification.body,
+            action: (
+              <ToastAction
+                altText="Aller au chat"
+                onClick={() => setNotification({ chatId: notification.data.chatId })}
+              >
+                Voir
+              </ToastAction>
+            ),
+          });
+        }
+      );
+
+      // Listener pour l'action sur une notification (app en ARRIÈRE-PLAN ou TUÉE)
+      PushNotifications.addListener(
+        "pushNotificationActionPerformed",
+        (action: ActionPerformed) => {
+          const data = action.notification.data;
+          console.log("✅ [Push ACTION]", data);
+          if (data.chatId) {
+            setNotification({ chatId: data.chatId });
+          }
         }
       );
     }
 
-    // --- Nettoyage des listeners ---
     return () => {
-      window.removeEventListener("openChat", handler);
       if (Capacitor.isNativePlatform()) {
+        console.log("Suppression de tous les listeners de notification.");
         PushNotifications.removeAllListeners();
       }
     };
-  }, [router]);
+  }, [setNotification, toast]); // Ajout de toast aux dépendances
 
-  return null; // Ce composant ne rend rien
+  return null;
 }
