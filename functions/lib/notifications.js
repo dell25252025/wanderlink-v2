@@ -1,83 +1,91 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onNewMessage = void 0;
+exports.sendNewMessageNotification = void 0;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+// Assurer l'initialisation de Firebase Admin
+if (admin.apps.length === 0) {
+    admin.initializeApp();
+}
 const db = admin.firestore();
-exports.onNewMessage = functions.firestore
+exports.sendNewMessageNotification = functions.firestore
     .document("chats/{chatId}/messages/{messageId}")
     .onCreate(async (snapshot, context) => {
+    var _a, _b;
     const messageData = snapshot.data();
-    const chatId = context.params.chatId;
+    const { chatId } = context.params;
     if (!messageData) {
-        console.log("Message data is undefined. Exiting function.");
+        console.error("Aucune donnée dans le message. Fin de la fonction.");
         return;
     }
-    const senderId = messageData.senderId;
-    const text = messageData.text || "Nouveau message";
-    // 1. Get the chat document to find the recipient
+    // Récupérer les informations clés du message, y compris le nom de l'expéditeur
+    const { senderId, text, senderName } = messageData;
+    if (!senderId) {
+        console.error("L'ID de l'expéditeur est manquant. Fin de la fonction.");
+        return;
+    }
+    // 1. Obtenir le document du chat pour trouver le destinataire
     const chatDoc = await db.collection("chats").doc(chatId).get();
-    if (!chatDoc.exists) {
-        console.log(`Chat document ${chatId} not found.`);
+    if (!chatDoc.exists || !((_a = chatDoc.data()) === null || _a === void 0 ? void 0 : _a.participants)) {
+        console.log(`Document du chat ou participants non trouvés pour ${chatId}.`);
         return;
     }
-    const chatData = chatDoc.data();
-    if (!chatData) {
-        console.log(`Chat data for ${chatId} is undefined.`);
-        return;
-    }
-    const participants = chatData.participants || [];
-    // 2. Determine the recipient's ID (the other person in the chat)
+    const participants = chatDoc.data().participants;
+    // 2. Déterminer l'ID du destinataire
     const recipientId = participants.find(id => id !== senderId);
     if (!recipientId) {
-        console.log("Recipient could not be determined.");
+        console.log("Destinataire non trouvé (l'utilisateur est peut-être seul dans le chat).");
         return;
     }
-    // 3. Get the recipient's user document to find their FCM tokens
+    // 3. Obtenir les tokens FCM du destinataire
     const userDoc = await db.collection("users").doc(recipientId).get();
-    if (!userDoc.exists) {
-        console.log(`Recipient user document ${recipientId} not found.`);
+    if (!userDoc.exists || !((_b = userDoc.data()) === null || _b === void 0 ? void 0 : _b.fcmTokens)) {
+        console.log(`Document ou tokens FCM non trouvés pour l'utilisateur ${recipientId}.`);
         return;
     }
-    const userData = userDoc.data();
-    if (!userData) {
-        console.log(`User data for ${recipientId} is undefined.`);
-        return;
-    }
-    const tokens = userData.fcmTokens || [];
-    // 4. Check if there are any tokens to send to
+    const tokens = userDoc.data().fcmTokens;
     if (tokens.length === 0) {
-        console.log(`No FCM tokens found for user ${recipientId}.`);
+        console.log(`Aucun token FCM pour l'utilisateur ${recipientId}.`);
         return;
     }
-    // 5. Construct the notification payload
+    // 5. Construire le payload de notification "PRO"
     const payload = {
         tokens: tokens,
         notification: {
-            title: "Nouveau message", // You can customize this, e.g., `Nouveau message de ${senderName}`
-            body: text
+            title: senderName || "Nouveau message", // Titre dynamique
+            body: text || "Vous a envoyé un message",
         },
         data: {
-            chatId: chatId // Send chatId to allow navigation on notification click
+            type: "MESSAGE", // Pour une gestion future de différents types de notifs
+            chatId: chatId,
+            senderId: senderId,
+            senderName: senderName || "Un utilisateur",
         },
         android: {
-            priority: "high"
+            priority: "high",
+            notification: {
+                channelId: "messages", // Lien vers le canal créé sur Android
+                tag: chatId, // Regroupe les notifications du même chat
+                visibility: "public",
+                sound: "default",
+            },
         },
         apns: {
             payload: {
                 aps: {
-                    sound: "default"
-                }
-            }
-        }
+                    sound: "default",
+                    "content-available": 1, // Pour les mises à jour en arrière-plan sur iOS
+                },
+            },
+        },
     };
-    // 6. Send the notification
+    // 6. Envoyer la notification
     try {
         const response = await admin.messaging().sendEachForMulticast(payload);
-        console.log("Notifications sent successfully:", `${response.successCount} of ${tokens.length}`);
+        console.log("Notifications envoyées avec succès:", `${response.successCount} sur ${tokens.length}`);
     }
     catch (error) {
-        console.error("Error sending notifications:", error);
+        console.error("Erreur lors de l'envoi des notifications:", error);
     }
 });
 //# sourceMappingURL=notifications.js.map
