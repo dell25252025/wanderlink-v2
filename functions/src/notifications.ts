@@ -76,6 +76,8 @@ export const sendNewMessageNotification = functions.firestore
           tag: chatId, // Regroupe les notifications du même chat
           visibility: "public",
           sound: "default",
+          defaultSound: true,
+          defaultVibrateTimings: true,
           lightSettings: {
             color: "#4A90E2",
             lightOnDurationMillis: 500,
