@@ -1,74 +1,81 @@
 'use client'
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PushNotifications, PushNotificationSchema, ActionPerformed } from "@capacitor/push-notifications";
 import { Capacitor } from '@capacitor/core';
 import { useNotification } from "@/context/NotificationContext";
-import { useToast } from "@/hooks/use-toast"; // Import du hook de toast
-import { ToastAction } from "@/components/ui/toast"; // Import du composant d'action
+import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 
 export default function NotificationHandler() {
   const router = useRouter();
-  const { notification, setNotification } = useNotification();
-  const { toast } = useToast(); // Récupération de la fonction toast
+  const { setNotification } = useNotification(); 
+  const { toast } = useToast();
 
-  // Ce useEffect gère la navigation lorsque le contexte est mis à jour
+  // État pour la navigation différée afin de corriger la race condition
+  const [pendingNotificationRoute, setPendingNotificationRoute] = useState<string | null>(null);
+
+  // Ce useEffect gère la navigation différée en toute sécurité
   useEffect(() => {
-    if (notification?.chatId) {
-      console.log(`[NotificationContext] Navigation vers le chat: ${notification.chatId}`);
-      router.push(`/chat/${notification.chatId}`);
-      setNotification(null); // Nettoyage après navigation
+    if (pendingNotificationRoute) {
+      console.log(`[NotificationHandler] Exécution de la navigation différée vers : ${pendingNotificationRoute}`);
+      router.push(pendingNotificationRoute);
+      // Réinitialiser l'état pour éviter les re-navigations
+      setPendingNotificationRoute(null);
     }
-  }, [notification, router, setNotification]);
+  }, [pendingNotificationRoute, router]);
 
-
+  // useEffect principal pour configurer les listeners de Capacitor
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       console.log("📱 Initialisation des listeners de notifications Push.");
 
-      // Listener pour les notifications reçues quand l'app est au PREMIER PLAN
+      // Listener pour les notifications reçues lorsque l'application est au PREMIER PLAN
       PushNotifications.addListener(
         "pushNotificationReceived",
         (notification: PushNotificationSchema) => {
           console.log("🔔 [Push REÇUE en 1er plan]", notification);
+          
+          const chatId = notification.data?.chatId;
 
-          // Afficher un toast au lieu d'une notification système
+          // Affiche un toast pour informer l'utilisateur
           toast({
-            title: notification.title || "Nouveau Message",
+            title: notification.title || "Nouveau message",
             description: notification.body,
-            action: (
-              <ToastAction
-                altText="Aller au chat"
-                onClick={() => setNotification({ chatId: notification.data.chatId })}
-              >
+            action: chatId ? (
+              <ToastAction altText="Voir" onClick={() => router.push(`/chat/${chatId}`)}>
                 Voir
               </ToastAction>
-            ),
+            ) : undefined,
           });
         }
       );
 
-      // Listener pour l'action sur une notification (app en ARRIÈRE-PLAN ou TUÉE)
-      PushNotifications.addListener(
+      // Listener pour lorsqu'une notification est CLiquée par l'utilisateur
+      const actionListener = PushNotifications.addListener(
         "pushNotificationActionPerformed",
         (action: ActionPerformed) => {
-          const data = action.notification.data;
-          console.log("✅ [Push ACTION]", data);
-          if (data.chatId) {
-            setNotification({ chatId: data.chatId });
+          console.log("👉 [Push ACTION]", action);
+          const chatId = action.notification.data?.chatId;
+
+          if (chatId) {
+            // Au lieu de naviguer directement, on met la route en attente
+            console.log(`[NotificationHandler] Mise en attente de la navigation vers le chat: /chat/${chatId}`);
+            setPendingNotificationRoute(`/chat/${chatId}`);
           }
+          
+          // On peut toujours utiliser le contexte si d'autres parties de l'app en ont besoin
+          setNotification(action.notification.data); 
         }
       );
+
+      return () => {
+        console.log("Suppression des listeners de notification push");
+        PushNotifications.removeAllListeners().catch(e => console.error("Échec de la suppression des listeners", e));
+      };
     }
+  }, [router, setNotification, toast]);
 
-    return () => {
-      if (Capacitor.isNativePlatform()) {
-        console.log("Suppression de tous les listeners de notification.");
-        PushNotifications.removeAllListeners();
-      }
-    };
-  }, [setNotification, toast]); // Ajout de toast aux dépendances
-
-  return null;
+  return null; // Ce composant ne rend rien de visible
 }
