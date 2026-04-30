@@ -1,17 +1,17 @@
-'use client'
+'use client';
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { PushNotifications, PushNotificationSchema, ActionPerformed } from "@capacitor/push-notifications";
+import { PushNotifications, ActionPerformed, PushNotificationSchema } from "@capacitor/push-notifications";
 import { Capacitor } from '@capacitor/core';
-import { useNotification } from "@/context/NotificationContext";
+import { useNavigation } from "@/context/navigation-context";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
+import { useRouter } from 'next/navigation';
 
 export default function NotificationHandler() {
-  const router = useRouter();
-  const { setNotification } = useNotification(); 
+  const { setPendingRoute } = useNavigation();
   const { toast } = useToast();
+  const router = useRouter();
 
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
@@ -34,20 +34,16 @@ export default function NotificationHandler() {
         }
       );
 
-      const actionListener = PushNotifications.addListener(
+      PushNotifications.addListener(
         "pushNotificationActionPerformed",
         (action: ActionPerformed) => {
           console.log("👉 [Push ACTION]", action);
           const chatId = action.notification.data?.chatId;
-
           if (chatId) {
-            setTimeout(() => {
-              console.log(`[NotificationHandler] Exécution de la navigation différée vers le chat: /chat/${chatId}`);
-              router.push(`/chat/${chatId}`);
-            }, 1000); // Délai de 1 seconde pour assurer l'initialisation
+            const route = `/chat/${chatId}`;
+            console.log("[NotificationHandler] Route de navigation mise en attente:", route);
+            setPendingRoute(route);
           }
-          
-          setNotification(action.notification.data); 
         }
       );
 
@@ -56,7 +52,7 @@ export default function NotificationHandler() {
         PushNotifications.removeAllListeners().catch(e => console.error("Échec de la suppression des listeners", e));
       };
     }
-  }, [router, setNotification, toast]);
+  }, [setPendingRoute, toast, router]);
 
   return null;
 }

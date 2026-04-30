@@ -1,3 +1,4 @@
+
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
@@ -8,11 +9,13 @@ import { cn } from '@/lib/utils';
 import { CallManager } from '@/components/call-manager';
 import { AuthProvider } from '@/context/AuthContext';
 import { OnboardingProvider } from '@/context/OnboardingContext';
-import { NotificationProvider } from '@/context/NotificationContext'; // Import NotificationProvider
+import { NotificationProvider } from '@/context/NotificationContext';
 import CapacitorSetup from '@/components/capacitor-setup';
 import AuthHandler from '@/components/auth-handler';
 import OnboardingOverlay from '@/components/OnboardingOverlay';
 import NotificationHandler from '@/components/notification-handler';
+import { NavigationProvider } from '@/context/navigation-context';
+import NavigationExecutor from '@/components/navigation-executor';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -63,22 +66,25 @@ export default function RootLayout({
         />
         <AuthProvider>
           <OnboardingProvider>
-            <NotificationProvider> {/* Wrap with NotificationProvider */}
-              <ThemeProvider
-                attribute="class"
-                defaultTheme="system"
-                enableSystem
-                disableTransitionOnChange
-              >
-                <CapacitorSetup />
-                <AuthHandler />
-                <BackButtonHandler />
-                <CallManager />
-                <OnboardingOverlay />
-                <NotificationHandler />
-                <main>{children}</main>
-                <Toaster />
-              </ThemeProvider>
+            <NotificationProvider>
+              <NavigationProvider>
+                <ThemeProvider
+                  attribute="class"
+                  defaultTheme="system"
+                  enableSystem
+                  disableTransitionOnChange
+                >
+                  <CapacitorSetup />
+                  <AuthHandler />
+                  <BackButtonHandler />
+                  <CallManager />
+                  <OnboardingOverlay />
+                  <NotificationHandler />
+                  <NavigationExecutor />
+                  <main>{children}</main>
+                  <Toaster />
+                </ThemeProvider>
+              </NavigationProvider>
             </NotificationProvider>
           </OnboardingProvider>
         </AuthProvider>
