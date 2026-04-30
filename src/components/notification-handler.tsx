@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { PushNotifications, PushNotificationSchema, ActionPerformed } from "@capacitor/push-notifications";
 import { Capacitor } from '@capacitor/core';
@@ -13,20 +13,6 @@ export default function NotificationHandler() {
   const { setNotification } = useNotification(); 
   const { toast } = useToast();
 
-  // État pour la navigation différée afin de corriger la race condition
-  const [pendingNotificationRoute, setPendingNotificationRoute] = useState<string | null>(null);
-
-  // Ce useEffect gère la navigation différée en toute sécurité
-  useEffect(() => {
-    if (pendingNotificationRoute) {
-      console.log(`[NotificationHandler] Exécution de la navigation différée vers : ${pendingNotificationRoute}`);
-      router.push(pendingNotificationRoute);
-      // Réinitialiser l'état pour éviter les re-navigations
-      setPendingNotificationRoute(null);
-    }
-  }, [pendingNotificationRoute, router]);
-
-  // useEffect principal pour configurer les listeners de Capacitor
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       console.log("📱 Initialisation des listeners de notifications Push.");
@@ -60,12 +46,13 @@ export default function NotificationHandler() {
           const chatId = action.notification.data?.chatId;
 
           if (chatId) {
-            // Au lieu de naviguer directement, on met la route en attente
-            console.log(`[NotificationHandler] Mise en attente de la navigation vers le chat: /chat/${chatId}`);
-            setPendingNotificationRoute(`/chat/${chatId}`);
+            // On introduit un délai pour laisser le temps à l'app de se charger
+            setTimeout(() => {
+              console.log(`[NotificationHandler] Exécution de la navigation différée vers le chat: /chat/${chatId}`);
+              router.push(`/chat/${chatId}`);
+            }, 500); // 500ms de délai
           }
           
-          // On peut toujours utiliser le contexte si d'autres parties de l'app en ont besoin
           setNotification(action.notification.data); 
         }
       );
