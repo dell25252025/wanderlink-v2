@@ -17,15 +17,11 @@ export default function NotificationHandler() {
     if (Capacitor.isNativePlatform()) {
       console.log("📱 Initialisation des listeners de notifications Push.");
 
-      // Listener pour les notifications reçues lorsque l'application est au PREMIER PLAN
       PushNotifications.addListener(
         "pushNotificationReceived",
         (notification: PushNotificationSchema) => {
           console.log("🔔 [Push REÇUE en 1er plan]", notification);
-          
           const chatId = notification.data?.chatId;
-
-          // Affiche un toast pour informer l'utilisateur
           toast({
             title: notification.title || "Nouveau message",
             description: notification.body,
@@ -38,7 +34,6 @@ export default function NotificationHandler() {
         }
       );
 
-      // Listener pour lorsqu'une notification est CLiquée par l'utilisateur
       const actionListener = PushNotifications.addListener(
         "pushNotificationActionPerformed",
         (action: ActionPerformed) => {
@@ -46,11 +41,10 @@ export default function NotificationHandler() {
           const chatId = action.notification.data?.chatId;
 
           if (chatId) {
-            // On introduit un délai pour laisser le temps à l'app de se charger
             setTimeout(() => {
               console.log(`[NotificationHandler] Exécution de la navigation différée vers le chat: /chat/${chatId}`);
               router.push(`/chat/${chatId}`);
-            }, 500); // 500ms de délai
+            }, 1000); // Délai de 1 seconde pour assurer l'initialisation
           }
           
           setNotification(action.notification.data); 
@@ -64,5 +58,5 @@ export default function NotificationHandler() {
     }
   }, [router, setNotification, toast]);
 
-  return null; // Ce composant ne rend rien de visible
+  return null;
 }
