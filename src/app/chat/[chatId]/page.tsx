@@ -12,24 +12,24 @@ function ChatPageContent({ params }: { params: { chatId: string } }) {
     const [currentUser, loadingAuth] = useAuthState(auth);
     const router = useRouter();
 
-    if (loadingAuth) {
-        return <div className="flex h-screen w-full items-center justify-center"><Loader2 className="h-16 w-16 animate-spin" /></div>;
+    // Affiche un loader tant que l'authentification est en cours ou que l'utilisateur n'est pas encore chargé.
+    // Cela évite la redirection prématurée vers la page de connexion.
+    if (loadingAuth || !currentUser) {
+        return (
+            <div className="flex h-screen w-full items-center justify-center">
+                <Loader2 className="h-16 w-16 animate-spin" />
+            </div>
+        );
     }
 
-    if (!chatId || !currentUser) {
-        if (!loadingAuth) {
-             router.push('/login');
-        }
-        return <div className="flex h-screen w-full items-center justify-center"><Loader2 className="h-16 w-16 animate-spin" /></div>;
-    }
-
+    // A ce stade, nous sommes sûrs d'avoir un utilisateur connecté.
     const userIds = chatId.split('_');
     const otherUserId = userIds.find(id => id !== currentUser.uid);
 
     if (!otherUserId) {
-        console.error("Could not determine other user from chat ID:", chatId);
-        router.push('/inbox');
-        return <div className="flex h-screen w-full items-center justify-center"><p>ID de chat invalide. Redirection...</p></div>;
+        console.error("Impossible de déterminer l'autre utilisateur à partir de l'ID de chat:", chatId, "ID de l'utilisateur actuel:", currentUser.uid);
+        router.push('/inbox'); // Redirection sécurisée vers la boîte de réception
+        return <p>ID de chat invalide. Redirection...</p>;
     }
 
     return <ChatClientPage otherUserId={otherUserId} />;
