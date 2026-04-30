@@ -12,9 +12,10 @@ function ChatPageContent({ params }: { params: { chatId: string } }) {
     const [currentUser, loadingAuth] = useAuthState(auth);
     const router = useRouter();
 
-    // Affiche un loader tant que l'authentification est en cours ou que l'utilisateur n'est pas encore chargé.
-    // Cela évite la redirection prématurée vers la page de connexion.
-    if (loadingAuth || !currentUser) {
+    // Affiche un loader tant que l'authentification est en cours, que l'utilisateur n'est pas encore chargé,
+    // ou que le chatId de l'URL n'est pas encore disponible.
+    // Cela évite la redirection prématurée et les crashs dus à un chatId indéfini.
+    if (loadingAuth || !currentUser || !chatId) {
         return (
             <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-16 w-16 animate-spin" />
@@ -22,7 +23,7 @@ function ChatPageContent({ params }: { params: { chatId: string } }) {
         );
     }
 
-    // A ce stade, nous sommes sûrs d'avoir un utilisateur connecté.
+    // A ce stade, nous sommes sûrs d'avoir un utilisateur connecté ET un chatId.
     const userIds = chatId.split('_');
     const otherUserId = userIds.find(id => id !== currentUser.uid);
 
