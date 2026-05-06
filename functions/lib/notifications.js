@@ -3,7 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendNewMessageNotification = void 0;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-// Assurer l'initialisation de Firebase Admin
 if (admin.apps.length === 0) {
     admin.initializeApp();
 }
@@ -18,26 +17,38 @@ exports.sendNewMessageNotification = functions.firestore
         console.error("Aucune donnée dans le message. Fin de la fonction.");
         return;
     }
-    // Récupérer les informations clés du message, y compris le nom de l'expéditeur
     const { senderId, text, senderName } = messageData;
     if (!senderId) {
         console.error("L'ID de l'expéditeur est manquant. Fin de la fonction.");
         return;
     }
-    // 1. Obtenir le document du chat pour trouver le destinataire
     const chatDoc = await db.collection("chats").doc(chatId).get();
     if (!chatDoc.exists || !((_a = chatDoc.data()) === null || _a === void 0 ? void 0 : _a.participants)) {
         console.log(`Document du chat ou participants non trouvés pour ${chatId}.`);
         return;
     }
     const participants = chatDoc.data().participants;
-    // 2. Déterminer l'ID du destinataire
     const recipientId = participants.find(id => id !== senderId);
     if (!recipientId) {
         console.log("Destinataire non trouvé (l'utilisateur est peut-être seul dans le chat).");
         return;
     }
-    // 3. Obtenir les tokens FCM du destinataire
+    // ÉTAPE 2 : Création de la notification dans Firestore
+    try {
+        await db.collection(`users/${recipientId}/notifications`).add({
+            type: "message",
+            chatId: chatId,
+            senderId: senderId,
+            senderName: senderName || "Un utilisateur",
+            text: text || "Vous a envoyé un message",
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            read: false,
+        });
+        console.log(`Notification pour ${recipientId} créée avec succès.`);
+    }
+    catch (error) {
+        console.error("Erreur lors de la création de la notification dans Firestore:", error);
+    }
     const userDoc = await db.collection("users").doc(recipientId).get();
     if (!userDoc.exists || !((_b = userDoc.data()) === null || _b === void 0 ? void 0 : _b.fcmTokens)) {
         console.log(`Document ou tokens FCM non trouvés pour l'utilisateur ${recipientId}.`);
@@ -48,15 +59,14 @@ exports.sendNewMessageNotification = functions.firestore
         console.log(`Aucun token FCM pour l'utilisateur ${recipientId}.`);
         return;
     }
-    // 5. Construire le payload de notification "PRO"
     const payload = {
         tokens: tokens,
         notification: {
-            title: senderName || "Nouveau message", // Titre dynamique
+            title: senderName || "Nouveau message",
             body: text || "Vous a envoyé un message",
         },
         data: {
-            type: "MESSAGE", // Pour une gestion future de différents types de notifs
+            type: "MESSAGE",
             chatId: chatId,
             senderId: senderId,
             senderName: senderName || "Un utilisateur",
@@ -64,8 +74,8 @@ exports.sendNewMessageNotification = functions.firestore
         android: {
             priority: "high",
             notification: {
-                channelId: "messages", // Lien vers le canal créé sur Android
-                tag: chatId, // Regroupe les notifications du même chat
+                channelId: "messages",
+                tag: chatId,
                 visibility: "public",
                 sound: "default",
                 defaultSound: true,
@@ -81,12 +91,11 @@ exports.sendNewMessageNotification = functions.firestore
             payload: {
                 aps: {
                     sound: "default",
-                    "content-available": 1, // Pour les mises à jour en arrière-plan sur iOS
+                    "content-available": 1,
                 },
             },
         },
     };
-    // 6. Envoyer la notification
     try {
         const response = await admin.messaging().sendEachForMulticast(payload);
         console.log("Notifications envoyées avec succès:", `${response.successCount} sur ${tokens.length}`);
