@@ -3,13 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, writeBatch, where } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { SettingsHeader } from '@/components/settings/settings-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-import Link from 'next/link';
 
 interface Notification {
     id: string;
@@ -27,6 +26,7 @@ export default function NotificationsPage() {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const router = useRouter();
 
+    // Étape 1: Récupérer les notifications en temps réel
     useEffect(() => {
         if (!user) return;
 
@@ -41,16 +41,27 @@ export default function NotificationsPage() {
         return () => unsubscribe();
     }, [user]);
 
-    const handleNotificationClick = async (notification: Notification) => {
+    // Étape 2: Marquer toutes les notifications comme lues à l'ouverture de la page
+    useEffect(() => {
+        if (!user || notifications.length === 0) return;
+
+        const unreadNotifications = notifications.filter(n => !n.read);
+
+        if (unreadNotifications.length > 0) {
+            const batch = writeBatch(db);
+            unreadNotifications.forEach(notif => {
+                const notifRef = doc(db, `users/${user.uid}/notifications`, notif.id);
+                batch.update(notifRef, { read: true });
+            });
+
+            batch.commit().catch(console.error);
+        }
+    }, [notifications, user]); // Se déclenche quand les notifications sont chargées
+
+    const handleNotificationClick = (notification: Notification) => {
+        // La redirection se produit, et le useEffect ci-dessus s'occupe déjà de marquer comme lu.
         if (notification.type === 'message') {
             router.push(`/chat/${notification.chatId}`);
-        }
-        // Pour d'autres types de notifications, la navigation peut être différente
-        // Par exemple: router.push(`/profile/${notification.senderId}`);
-
-        if (!notification.read) {
-            const notifRef = doc(db, `users/${user!.uid}/notifications`, notification.id);
-            await updateDoc(notifRef, { read: true });
         }
     };
 
@@ -62,14 +73,13 @@ export default function NotificationsPage() {
                     {notifications.length > 0 ? (
                         <ul className="space-y-2">
                             {notifications.map((notif) => (
-                                <li key={notif.id} onClick={() => handleNotificationClick(notif)}>
+                                <li key={notif.id} onClick={() => handleNotificationClick(notif)} className="cursor-pointer">
                                    <Card className={cn(
                                         "transition-colors hover:bg-card/80",
                                         !notif.read ? "bg-card" : "bg-card/60"
                                     )}>
                                         <CardContent className="p-3 flex items-start gap-3 relative">
                                             <Avatar className="h-10 w-10">
-                                                {/* Idéalement, vous auriez l'URL de l'avatar de l'expéditeur ici */}
                                                 <AvatarFallback>{notif.senderName.charAt(0)}</AvatarFallback>
                                             </Avatar>
                                             <div className="flex-1 text-sm">
@@ -78,12 +88,10 @@ export default function NotificationsPage() {
                                                     {' '}{notif.text}
                                                 </p>
                                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                                    {new Date(notif.createdAt?.toDate()).toLocaleString()}
+                                                    {notif.createdAt?.toDate ? new Date(notif.createdAt.toDate()).toLocaleString() : ''}
                                                 </p>
                                             </div>
-                                            {!notif.read && (
-                                                <div className="absolute top-1/2 -translate-y-1/2 right-3 h-2 w-2 rounded-full bg-primary" />
-                                            )}
+                                            {/* Le point bleu n'est plus nécessaire car tout est lu immédiatement */}
                                         </CardContent>
                                     </Card>
                                 </li>
