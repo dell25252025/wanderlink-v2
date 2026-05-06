@@ -33,7 +33,7 @@ exports.sendNewMessageNotification = functions.firestore
         console.log("Destinataire non trouvé (l'utilisateur est peut-être seul dans le chat).");
         return;
     }
-    // ÉTAPE 2 : Création de la notification dans Firestore
+    // Création de la notification dans Firestore pour la cloche
     try {
         await db.collection(`users/${recipientId}/notifications`).add({
             type: "message",
@@ -61,32 +61,31 @@ exports.sendNewMessageNotification = functions.firestore
     }
     const payload = {
         tokens: tokens,
+        // Notification générique pour iOS et Web
         notification: {
             title: senderName || "Nouveau message",
             body: text || "Vous a envoyé un message",
         },
+        // Données pour la navigation
         data: {
             type: "MESSAGE",
             chatId: chatId,
-            senderId: senderId,
-            senderName: senderName || "Un utilisateur",
         },
+        // Configuration spécifique pour Android pour les notifications flottantes
         android: {
             priority: "high",
             notification: {
-                channelId: "messages",
-                tag: chatId,
+                title: senderName || "Nouveau message",
+                body: text || "Vous a envoyé un message",
+                channelId: "messages", // Canal configuré sur le client pour la haute priorité
+                tag: chatId, // Regroupe les notifications par conversation
                 visibility: "public",
                 sound: "default",
                 defaultSound: true,
                 defaultVibrateTimings: true,
-                lightSettings: {
-                    color: "#4A90E2",
-                    lightOnDurationMillis: 500,
-                    lightOffDurationMillis: 2000,
-                },
             },
         },
+        // Configuration spécifique pour iOS
         apns: {
             payload: {
                 aps: {
