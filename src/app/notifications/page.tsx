@@ -1,19 +1,25 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, writeBatch, where } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, writeBatch } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
-import { SettingsHeader } from '@/components/settings/settings-header';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { Loader2, BellOff, MessageSquare, Heart } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 interface Notification {
     id: string;
-    type: string;
-    chatId: string;
+    type: 'message' | 'like'; // Type a été élargi
+    chatId?: string; // Optionnel
+    photoUrl?: string; // Optionnel, pour les likes
     senderId: string;
     senderName: string;
     text: string;
@@ -24,86 +30,118 @@ interface Notification {
 export default function NotificationsPage() {
     const [user] = useAuthState(auth);
     const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [loading, setLoading] = useState(true);
     const router = useRouter();
 
-    // Étape 1: Récupérer les notifications en temps réel
     useEffect(() => {
-        if (!user) return;
+        if (!user) {
+            setLoading(false);
+            return;
+        }
 
-        const notificationsRef = collection(db, `users/${user.uid}/notifications`);
-        const q = query(notificationsRef, orderBy('createdAt', 'desc'));
-
+        const q = query(collection(db, `users/${user.uid}/notifications`), orderBy('createdAt', 'desc'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const notifs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Notification));
             setNotifications(notifs);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching notifications: ", error);
+            setLoading(false);
         });
 
         return () => unsubscribe();
     }, [user]);
 
-    // Étape 2: Marquer toutes les notifications comme lues à l'ouverture de la page
-    useEffect(() => {
-        if (!user || notifications.length === 0) return;
+    const handleNotificationClick = async (notif: Notification) => {
+        const notifRef = doc(db, `users/${user!.uid}/notifications`, notif.id);
+        const batch = writeBatch(db);
+        batch.update(notifRef, { read: true });
+        await batch.commit();
 
-        const unreadNotifications = notifications.filter(n => !n.read);
-
-        if (unreadNotifications.length > 0) {
-            const batch = writeBatch(db);
-            unreadNotifications.forEach(notif => {
-                const notifRef = doc(db, `users/${user.uid}/notifications`, notif.id);
-                batch.update(notifRef, { read: true });
-            });
-
-            batch.commit().catch(console.error);
-        }
-    }, [notifications, user]); // Se déclenche quand les notifications sont chargées
-
-    const handleNotificationClick = (notification: Notification) => {
-        // La redirection se produit, et le useEffect ci-dessus s'occupe déjà de marquer comme lu.
-        if (notification.type === 'message') {
-            router.push(`/chat/${notification.chatId}`);
+        if (notif.type === 'message' && notif.chatId) {
+            router.push(`/chat/${notif.chatId}`);
+        } else if (notif.type === 'like' && notif.photoUrl) {
+            // Pour les likes, on pourrait rediriger vers la photo
+            // Pour l'instant, on redirige vers le profil de l'expéditeur
+            router.push(`/profile?id=${notif.senderId}`);
         }
     };
 
+    const markAllAsRead = async () => {
+        if (!user || notifications.length === 0) return;
+        const batch = writeBatch(db);
+        notifications.forEach(notif => {
+            if (!notif.read) {
+                const notifRef = doc(db, `users/${user.uid}/notifications`, notif.id);
+                batch.update(notifRef, { read: true });
+            }
+        });
+        await batch.commit();
+    };
+
+    const renderIcon = (type: 'message' | 'like') => {
+        switch (type) {
+            case 'message':
+                return <MessageSquare className="h-5 w-5 text-primary" />;
+            case 'like':
+                return <Heart className="h-5 w-5 text-red-500" />;
+            default:
+                return null;
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-[80vh]">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
+
     return (
-        <div className="min-h-screen bg-secondary/30">
-            <SettingsHeader title="Notifications" />
-            <main className="px-2 py-4 md:px-4 pt-16">
-                <div className="mx-auto max-w-2xl space-y-2">
-                    {notifications.length > 0 ? (
-                        <ul className="space-y-2">
-                            {notifications.map((notif) => (
-                                <li key={notif.id} onClick={() => handleNotificationClick(notif)} className="cursor-pointer">
-                                   <Card className={cn(
-                                        "transition-colors hover:bg-card/80",
-                                        !notif.read ? "bg-card" : "bg-card/60"
-                                    )}>
-                                        <CardContent className="p-3 flex items-start gap-3 relative">
-                                            <Avatar className="h-10 w-10">
-                                                <AvatarFallback>{notif.senderName.charAt(0)}</AvatarFallback>
-                                            </Avatar>
-                                            <div className="flex-1 text-sm">
-                                                <p className="text-foreground">
-                                                    <span className="font-semibold">{notif.senderName}</span>
-                                                    {' '}{notif.text}
-                                                </p>
-                                                <p className="text-xs text-muted-foreground mt-0.5">
-                                                    {notif.createdAt?.toDate ? new Date(notif.createdAt.toDate()).toLocaleString() : ''}
-                                                </p>
-                                            </div>
-                                            {/* Le point bleu n'est plus nécessaire car tout est lu immédiatement */}
-                                        </CardContent>
-                                    </Card>
-                                </li>
-                            ))}
-                        </ul>
-                    ) : (
-                        <div className="text-center py-16">
-                            <p className="text-muted-foreground">Vous n'avez aucune notification.</p>
-                        </div>
-                    )}
-                </div>
-            </main>
-        </div>
+        <Card className="w-full max-w-2xl mx-auto my-4 shadow-none border-0">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle>Notifications</CardTitle>
+                <Button variant="ghost" size="sm" onClick={markAllAsRead} disabled={notifications.every(n => n.read)}>
+                    Tout marquer comme lu
+                </Button>
+            </CardHeader>
+            <CardContent>
+                {notifications.length === 0 ? (
+                    <div className="text-center py-20">
+                        <BellOff className="mx-auto h-12 w-12 text-muted-foreground" />
+                        <h3 className="mt-2 text-sm font-medium">Aucune notification</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">Les nouvelles notifications apparaîtront ici.</p>
+                    </div>
+                ) : (
+                    <ul className="divide-y divide-border">
+                        {notifications.map((notif) => (
+                            <li
+                                key={notif.id}
+                                onClick={() => handleNotificationClick(notif)}
+                                className={cn(
+                                    'p-3 flex items-start space-x-3 cursor-pointer hover:bg-muted/50',
+                                    !notif.read && 'bg-primary/5'
+                                )}
+                            >
+                                <div className="mt-1">{renderIcon(notif.type)}</div>
+                                <div className="flex-1">
+                                    <p className="text-sm">
+                                        <span className="font-semibold">{notif.senderName}</span>{' '}
+                                        {notif.text}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        {notif.createdAt && formatDistanceToNow(notif.createdAt.toDate(), { addSuffix: true, locale: fr })}
+                                    </p>
+                                </div>
+                                {!notif.read && (
+                                    <div className="mt-2 w-2 h-2 rounded-full bg-primary"></div>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </CardContent>
+        </Card>
     );
 }

@@ -4,7 +4,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getUserProfile, addProfilePicture, removeProfilePicture, addFriend, removeFriend, signOutFromGoogle } from '@/lib/firebase-actions';
-import type { DocumentData } from 'firestore';
+import { type DocumentData, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { Loader2, Plane, MapPin, Languages, Backpack, Cigarette, Wine, Calendar, Camera, Trash2, PlusCircle, LogOut, Edit, Ruler, Scale, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, X, Sparkles, BriefcaseBusiness, Coins, Users, MoreVertical, ShieldAlert, Ban, Send, UserPlus, Heart, UserCheck, UserX, CheckCircle, ShieldCheck } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +13,7 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import type { User } from 'firebase/auth';
 import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -44,7 +44,7 @@ const intentionMap: { [key: string]: { icon: React.ElementType, color: string, t
 
 const MAX_PHOTOS = 6;
 
-const PhotoViewer = ({ images, startIndex, onClose }: { images: string[], startIndex: number, onClose: () => void }) => {
+const PhotoViewer = ({ images, startIndex, onClose, profile, currentUser }: { images: string[], startIndex: number, onClose: () => void, profile: DocumentData | null, currentUser: User | null }) => {
     const [currentIndex, setCurrentIndex] = useState(startIndex);
     const [scale, setScale] = useState(1);
     const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -61,7 +61,6 @@ const PhotoViewer = ({ images, startIndex, onClose }: { images: string[], startI
     };
     
     useEffect(() => {
-        // Reset like status when image changes
         setIsLiked(false);
     }, [currentIndex]);
 
@@ -76,12 +75,37 @@ const PhotoViewer = ({ images, startIndex, onClose }: { images: string[], startI
         resetZoom();
     };
     
-    const handleLike = () => {
+    const handleLike = async () => {
         const newLikedState = !isLiked;
         setIsLiked(newLikedState);
         toast({
             title: newLikedState ? "Photo aimée !" : "J'aime retiré",
         });
+
+        if (newLikedState) {
+            if (!currentUser || !profile || currentUser.uid === profile.id) {
+                return;
+            }
+
+            try {
+                await addDoc(collection(db, `users/${profile.id}/notifications`), {
+                    type: "like",
+                    senderId: currentUser.uid,
+                    senderName: currentUser.displayName || "Un utilisateur",
+                    photoUrl: images[currentIndex], // Ajout de l'URL de la photo
+                    text: "a aimé votre photo ❤️",
+                    createdAt: serverTimestamp(),
+                    read: false,
+                });
+            } catch (error) {
+                console.error("Error creating like notification:", error);
+                toast({
+                    variant: "destructive",
+                    title: "Erreur",
+                    description: "Impossible d'envoyer la notification de like.",
+                });
+            }
+        }
     };
 
     useEffect(() => {
@@ -512,7 +536,13 @@ export default function ProfileClientPage() {
                         </Carousel>
                         <Dialog open={photoViewerIndex !== null} onOpenChange={(open) => !open && setPhotoViewerIndex(null)}>
                             {isClient && photoViewerIndex !== null && (
-                                <PhotoViewer images={profilePictures} startIndex={photoViewerIndex} onClose={() => setPhotoViewerIndex(null)} />
+                                <PhotoViewer 
+                                    images={profilePictures} 
+                                    startIndex={photoViewerIndex} 
+                                    onClose={() => setPhotoViewerIndex(null)}
+                                    profile={profile}
+                                    currentUser={currentUser}
+                                />
                             )}
                         </Dialog>
                     </>
