@@ -19,11 +19,23 @@ export const sendNewMessageNotification = functions.firestore
       return;
     }
 
-    const { senderId, text, senderName } = messageData;
+    // On ne récupère plus senderName, on va le chercher nous-mêmes
+    const { senderId, text } = messageData;
 
     if (!senderId) {
         console.error("L'ID de l'expéditeur est manquant. Fin de la fonction.");
         return;
+    }
+
+    // NOUVELLE LOGIQUE : Récupérer le nom de l'expéditeur depuis son profil
+    let senderName = "Un utilisateur"; // Nom par défaut
+    try {
+        const senderDoc = await db.collection("users").doc(senderId).get();
+        if (senderDoc.exists) {
+            senderName = senderDoc.data()?.displayName || senderName;
+        }
+    } catch (error) {
+        console.error("Erreur lors de la récupération du profil de l'expéditeur:", error);
     }
 
     const chatDoc = await db.collection("chats").doc(chatId).get();
@@ -46,7 +58,7 @@ export const sendNewMessageNotification = functions.firestore
             type: "message",
             chatId: chatId,
             senderId: senderId,
-            senderName: senderName || "Un utilisateur",
+            senderName: senderName, // On utilise le nom récupéré
             text: text || "Vous a envoyé un message",
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             read: false,
@@ -70,31 +82,25 @@ export const sendNewMessageNotification = functions.firestore
 
     const payload: admin.messaging.MulticastMessage = {
       tokens: tokens,
-      // Notification générique pour iOS et Web
       notification: {
-        title: senderName || "Nouveau message",
+        title: senderName, // On utilise le nom récupéré
         body: text || "Vous a envoyé un message",
       },
-      // Données pour la navigation
       data: {
         type: "MESSAGE",
         chatId: chatId,
       },
-      // Configuration spécifique pour Android pour les notifications flottantes
       android: {
         priority: "high",
         notification: {
-          title: senderName || "Nouveau message",
+          title: senderName, // On utilise le nom récupéré
           body: text || "Vous a envoyé un message",
-          channelId: "messages", // Canal configuré sur le client pour la haute priorité
-          tag: chatId, // Regroupe les notifications par conversation
+          channelId: "messages",
+          tag: chatId,
           visibility: "public",
           sound: "default",
-          defaultSound: true,
-          defaultVibrateTimings: true,
         },
       },
-      // Configuration spécifique pour iOS
       apns: {
         payload: {
           aps: {
@@ -106,9 +112,10 @@ export const sendNewMessageNotification = functions.firestore
     };
 
     try {
-      const response = await admin.messaging().sendEachForMulticast(payload);
-      console.log("Notifications envoyées avec succès:", `${response.successCount} sur ${tokens.length}`);
+      await admin.messaging().sendEachForMulticast(payload);
+      console.log("Notifications envoyées avec succès.");
     } catch (error) {
       console.error("Erreur lors de l'envoi des notifications:", error);
     }
   });
+
