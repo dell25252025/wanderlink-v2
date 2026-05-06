@@ -1,20 +1,20 @@
 'use client';
 
 import { Suspense } from 'react';
+import { useParams } from 'next/navigation';
 import ChatClientPage from '../chat-client-page';
 import { Loader2 } from 'lucide-react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth } from '@/lib/firebase';
 
-function ChatPageContent({ params }: { params: { chatId: string } }) {
-    const { chatId } = params;
+function ChatPageContent() {
+    const params = useParams();
+    const chatId = params.chatId as string;
     const [currentUser, loadingAuth] = useAuthState(auth);
 
-    // --- DEBUG CRITIQUE ---
-    console.log("[ChatPage] rendu avec chatId:", chatId);
-    console.log("[ChatPage] loadingAuth:", loadingAuth);
-    console.log("[ChatPage] currentUser:", currentUser?.uid);
-    // ---------------------
+    console.log("[ChatPageContent] rendu avec chatId depuis useParams:", chatId);
+    console.log("[ChatPageContent] loadingAuth:", loadingAuth);
+    console.log("[ChatPageContent] currentUser:", currentUser?.uid);
 
     if (loadingAuth) {
         return (
@@ -42,15 +42,13 @@ function ChatPageContent({ params }: { params: { chatId: string } }) {
         );
     }
 
-    // --- FIX MAJEUR: Extraction sécurisée de otherUserId ---
     let otherUserId = null;
     const parts = chatId.split("_");
 
     if (parts.length === 2) {
       otherUserId = parts[0] === currentUser.uid ? parts[1] : parts[0];
-      console.log(`[ChatPage] otherUserId extrait: ${otherUserId}`);
+      console.log(`[ChatPageContent] otherUserId extrait: ${otherUserId}`);
     }
-    // --------------------------------------------------------
 
     if (!otherUserId) {
         return (
@@ -63,14 +61,14 @@ function ChatPageContent({ params }: { params: { chatId: string } }) {
     return <ChatClientPage otherUserId={otherUserId} />;
 }
 
-export default function ChatPage({ params }: { params: { chatId: string } }) {
+export default function ChatPage() {
     return (
         <Suspense fallback={
             <div className="flex h-screen w-full items-center justify-center">
                 <Loader2 className="h-16 w-16 animate-spin" />
             </div>
         }>
-            <ChatPageContent params={params} />
+            <ChatPageContent />
         </Suspense>
     );
 }
