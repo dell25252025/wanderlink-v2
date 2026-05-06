@@ -10,20 +10,32 @@ const db = admin.firestore();
 exports.sendNewMessageNotification = functions.firestore
     .document("chats/{chatId}/messages/{messageId}")
     .onCreate(async (snapshot, context) => {
-    var _a, _b;
+    var _a, _b, _c;
     const messageData = snapshot.data();
     const { chatId } = context.params;
     if (!messageData) {
         console.error("Aucune donnée dans le message. Fin de la fonction.");
         return;
     }
-    const { senderId, text, senderName } = messageData;
+    // On ne récupère plus senderName, on va le chercher nous-mêmes
+    const { senderId, text } = messageData;
     if (!senderId) {
         console.error("L'ID de l'expéditeur est manquant. Fin de la fonction.");
         return;
     }
+    // NOUVELLE LOGIQUE : Récupérer le nom de l'expéditeur depuis son profil
+    let senderName = "Un utilisateur"; // Nom par défaut
+    try {
+        const senderDoc = await db.collection("users").doc(senderId).get();
+        if (senderDoc.exists) {
+            senderName = ((_a = senderDoc.data()) === null || _a === void 0 ? void 0 : _a.displayName) || senderName;
+        }
+    }
+    catch (error) {
+        console.error("Erreur lors de la récupération du profil de l'expéditeur:", error);
+    }
     const chatDoc = await db.collection("chats").doc(chatId).get();
-    if (!chatDoc.exists || !((_a = chatDoc.data()) === null || _a === void 0 ? void 0 : _a.participants)) {
+    if (!chatDoc.exists || !((_b = chatDoc.data()) === null || _b === void 0 ? void 0 : _b.participants)) {
         console.log(`Document du chat ou participants non trouvés pour ${chatId}.`);
         return;
     }
@@ -39,7 +51,7 @@ exports.sendNewMessageNotification = functions.firestore
             type: "message",
             chatId: chatId,
             senderId: senderId,
-            senderName: senderName || "Un utilisateur",
+            senderName: senderName, // On utilise le nom récupéré
             text: text || "Vous a envoyé un message",
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
             read: false,
@@ -50,7 +62,7 @@ exports.sendNewMessageNotification = functions.firestore
         console.error("Erreur lors de la création de la notification dans Firestore:", error);
     }
     const userDoc = await db.collection("users").doc(recipientId).get();
-    if (!userDoc.exists || !((_b = userDoc.data()) === null || _b === void 0 ? void 0 : _b.fcmTokens)) {
+    if (!userDoc.exists || !((_c = userDoc.data()) === null || _c === void 0 ? void 0 : _c.fcmTokens)) {
         console.log(`Document ou tokens FCM non trouvés pour l'utilisateur ${recipientId}.`);
         return;
     }
@@ -61,31 +73,25 @@ exports.sendNewMessageNotification = functions.firestore
     }
     const payload = {
         tokens: tokens,
-        // Notification générique pour iOS et Web
         notification: {
-            title: senderName || "Nouveau message",
+            title: senderName, // On utilise le nom récupéré
             body: text || "Vous a envoyé un message",
         },
-        // Données pour la navigation
         data: {
             type: "MESSAGE",
             chatId: chatId,
         },
-        // Configuration spécifique pour Android pour les notifications flottantes
         android: {
             priority: "high",
             notification: {
-                title: senderName || "Nouveau message",
+                title: senderName, // On utilise le nom récupéré
                 body: text || "Vous a envoyé un message",
-                channelId: "messages", // Canal configuré sur le client pour la haute priorité
-                tag: chatId, // Regroupe les notifications par conversation
+                channelId: "messages",
+                tag: chatId,
                 visibility: "public",
                 sound: "default",
-                defaultSound: true,
-                defaultVibrateTimings: true,
             },
         },
-        // Configuration spécifique pour iOS
         apns: {
             payload: {
                 aps: {
@@ -96,8 +102,8 @@ exports.sendNewMessageNotification = functions.firestore
         },
     };
     try {
-        const response = await admin.messaging().sendEachForMulticast(payload);
-        console.log("Notifications envoyées avec succès:", `${response.successCount} sur ${tokens.length}`);
+        await admin.messaging().sendEachForMulticast(payload);
+        console.log("Notifications envoyées avec succès.");
     }
     catch (error) {
         console.error("Erreur lors de l'envoi des notifications:", error);
