@@ -4,8 +4,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getUserProfile, addProfilePicture, removeProfilePicture, addFriend, removeFriend, signOutFromGoogle } from '@/lib/firebase-actions';
-import { type DocumentData, addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { Loader2, Plane, MapPin, Languages, Backpack, Cigarette, Wine, Calendar, Camera, Trash2, PlusCircle, LogOut, Edit, Ruler, Scale, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, X, Sparkles, BriefcaseBusiness, Coins, Users, MoreVertical, ShieldAlert, Ban, Send, UserPlus, Heart, UserCheck, UserX, CheckCircle, ShieldCheck } from 'lucide-react';
+import { type DocumentData, addDoc, collection, serverTimestamp, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { Loader2, Plane, MapPin, Languages, Backpack, Cigarette, Wine, Calendar, Camera, Trash2, PlusCircle, LogOut, Edit, Ruler, Scale, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, X, Sparkles, BriefcaseBusiness, Coins, Users, MoreVertical, ShieldAlert, Ban, Send, UserPlus, Heart, UserCheck, UserX, CheckCircle, ShieldCheck, History } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,6 +43,8 @@ const intentionMap: { [key: string]: { icon: React.ElementType, color: string, t
 };
 
 const MAX_PHOTOS = 6;
+
+type FriendStatus = 'add' | 'pending' | 'friends';
 
 const PhotoViewer = ({ images, startIndex, onClose, profile, currentUser }: { images: string[], startIndex: number, onClose: () => void, profile: DocumentData | null, currentUser: User | null }) => {
     const [currentIndex, setCurrentIndex] = useState(startIndex);
@@ -236,7 +238,7 @@ export default function ProfileClientPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const [isClient, setIsClient] = useState(false);
-  const [isFriend, setIsFriend] = useState(false);
+  const [friendStatus, setFriendStatus] = useState<FriendStatus>('add');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isFriendActionLoading, setIsFriendActionLoading] = useState(false);
   const [photoViewerIndex, setPhotoViewerIndex] = useState<number | null>(null);
@@ -244,6 +246,41 @@ export default function ProfileClientPage() {
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+
+
+  useEffect(() => {
+    if (!profileId || !currentUser) {
+        return;
+    }
+
+    const checkFriendship = async () => {
+        const userProfileData = await getUserProfile(currentUser.uid);
+        if (userProfileData?.friends?.includes(profileId)) {
+            setFriendStatus('friends');
+            return;
+        }
+
+        const requestsRef = collection(db, "friend_requests");
+        const q = query(requestsRef, 
+                        where("senderId", "in", [currentUser.uid, profileId]), 
+                        where("receiverId", "in", [currentUser.uid, profileId]),
+                        where("status", "==", "pending"));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            if (!snapshot.empty) {
+                setFriendStatus('pending');
+            } else {
+                setFriendStatus('add');
+            }
+        });
+
+        return unsubscribe; 
+    };
+    
+    checkFriendship();
+
+}, [profileId, currentUser]);
 
    useEffect(() => {
     if (!profileId) {
@@ -258,12 +295,6 @@ export default function ProfileClientPage() {
             setIsOwner(true);
           } else {
             setIsOwner(false);
-            const userProfileData = await getUserProfile(user.uid);
-            if (userProfileData?.friends?.includes(profileId)) {
-              setIsFriend(true);
-            } else {
-              setIsFriend(false);
-            }
           }
         } else {
             setIsOwner(false);
@@ -438,33 +469,33 @@ export default function ProfileClientPage() {
     setIsFriendActionLoading(true);
 
     try {
-        if (isFriend) {
+        if (friendStatus === 'friends') {
             const result = await removeFriend(currentUser.uid, profileId);
             if (result.success) {
-                setIsFriend(false);
+                setFriendStatus('add');
                 toast({ title: 'Ami retiré' });
             } else {
                 toast({ variant: 'destructive', title: 'Erreur', description: result.error });
             }
-        } else {
-            const result = await addFriend(currentUser.uid, profileId);
-            if (result.success) {
-                setIsFriend(true);
-                toast({ title: 'Ami ajouté !' });
-                
-                // Étape 2: Création de la notification
-                await addDoc(collection(db, `users/${profileId}/notifications`), {
-                    type: "friend_request",
-                    senderId: currentUser.uid,
-                    senderName: currentUser.displayName || "Un utilisateur",
-                    text: "vous a envoyé une demande d’ami 👥",
-                    createdAt: serverTimestamp(),
-                    read: false,
-                });
+        } else if (friendStatus === 'add') {
+             await addDoc(collection(db, "friend_requests"), {
+                senderId: currentUser.uid,
+                receiverId: profileId,
+                status: "pending",
+                createdAt: serverTimestamp(),
+            });
+            
+            await addDoc(collection(db, `users/${profileId}/notifications`), {
+                type: "friend_request",
+                senderId: currentUser.uid,
+                senderName: currentUser.displayName || "Un utilisateur",
+                text: "vous a envoyé une demande d’ami 👥",
+                createdAt: serverTimestamp(),
+                read: false,
+            });
 
-            } else {
-                toast({ variant: 'destructive', title: 'Erreur', description: result.error });
-            }
+            setFriendStatus('pending');
+            toast({ title: 'Demande d\'ami envoyée !' });
         }
     } catch (error) {
         console.error("Friend action error:", error);
@@ -473,6 +504,46 @@ export default function ProfileClientPage() {
         setIsFriendActionLoading(false);
     }
   };
+
+  const renderFriendButton = () => {
+    switch (friendStatus) {
+        case 'friends':
+            return (
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="secondary" size="sm" className="h-8">
+                            <UserCheck className="mr-2 h-4 w-4 text-green-500" /> Amis
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Retirer {profile?.firstName} de vos amis ?</AlertDialogTitle>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Annuler</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleFriendAction} className="bg-destructive hover:bg-destructive/90">
+                                <UserX className="mr-2 h-4 w-4" /> Retirer
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            );
+        case 'pending':
+            return (
+                <Button variant="secondary" size="sm" className="h-8" disabled>
+                    <History className="mr-2 h-4 w-4" /> Demande envoyée
+                </Button>
+            );
+        case 'add':
+        default:
+            return (
+                <Button onClick={handleFriendAction} size="sm" variant="secondary" disabled={isFriendActionLoading}>
+                    {isFriendActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
+                    Ajouter
+                </Button>
+            );
+    }
+};
 
 
   if (loading || !isClient) {
@@ -655,31 +726,7 @@ export default function ProfileClientPage() {
                         )}
                         {!isOwner && (
                           <div className="flex items-center gap-2">
-                              {isFriend ? (
-                                  <AlertDialog>
-                                      <AlertDialogTrigger asChild>
-                                          <Button variant="secondary" size="sm" className="h-8">
-                                              <UserCheck className="mr-2 h-4 w-4 text-green-500" /> Amis
-                                          </Button>
-                                      </AlertDialogTrigger>
-                                      <AlertDialogContent>
-                                          <AlertDialogHeader>
-                                              <AlertDialogTitle>Retirer {profile.firstName} de vos amis ?</AlertDialogTitle>
-                                          </AlertDialogHeader>
-                                          <AlertDialogFooter>
-                                              <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                              <AlertDialogAction onClick={handleFriendAction} className="bg-destructive hover:bg-destructive/90">
-                                                  <UserX className="mr-2 h-4 w-4" /> Retirer
-                                              </AlertDialogAction>
-                                          </AlertDialogFooter>
-                                      </AlertDialogContent>
-                                  </AlertDialog>
-                              ) : (
-                                  <Button onClick={handleFriendAction} size="sm" variant="secondary" disabled={isFriendActionLoading}>
-                                      {isFriendActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
-                                      Ajouter
-                                  </Button>
-                              )}
+                            {renderFriendButton()}
                           </div>
                         )}
                         {isOwner && !profile.isVerified && (

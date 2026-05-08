@@ -4,16 +4,16 @@
 import { useEffect, useState } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, doc, writeBatch } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, writeBatch, where, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Loader2, BellOff, MessageSquare, Heart, UserPlus } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import Link from 'next/link';
+import { addFriend } from '@/lib/firebase-actions';
+import { useToast } from "@/hooks/use-toast";
 
 interface Notification {
     id: string;
@@ -25,6 +25,7 @@ interface Notification {
     text: string;
     createdAt: any;
     read: boolean;
+    requestId?: string; 
 }
 
 export default function NotificationsPage() {
@@ -32,6 +33,8 @@ export default function NotificationsPage() {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [loading, setLoading] = useState(true);
     const router = useRouter();
+    const { toast } = useToast();
+    const [handlingRequest, setHandlingRequest] = useState<string | null>(null);
 
     useEffect(() => {
         if (!user) {
@@ -53,20 +56,59 @@ export default function NotificationsPage() {
     }, [user]);
 
     const handleNotificationClick = async (notif: Notification) => {
+        // Empêcher la navigation si on clique sur les boutons
+        if (notif.type === 'friend_request') return;
+
         if (!user) return;
         const notifRef = doc(db, `users/${user.uid}/notifications`, notif.id);
         if (!notif.read) {
-            const batch = writeBatch(db);
-            batch.update(notifRef, { read: true });
-            await batch.commit();
+            await updateDoc(notifRef, { read: true });
         }
 
         if (notif.type === 'message' && notif.chatId) {
             router.push(`/chat?id=${notif.chatId}`);
         } else if (notif.type === 'like') {
             router.push(`/profile?id=${notif.senderId}`);
-        } else if (notif.type === 'friend_request') {
-            router.push(`/profile?id=${notif.senderId}`);
+        } 
+    };
+    
+    const handleFriendRequest = async (notif: Notification, action: 'accept' | 'decline') => {
+        if (!user || handlingRequest) return;
+        setHandlingRequest(notif.id);
+
+        try {
+            const requestsRef = collection(db, "friend_requests");
+            const q = query(requestsRef, 
+                            where("senderId", "==", notif.senderId),
+                            where("receiverId", "==", user.uid),
+                            where("status", "==", "pending"));
+            const requestSnapshot = await getDocs(q);
+
+            if (requestSnapshot.empty) {
+                toast({ title: "Demande introuvable", description: "Cette demande d’ami n’existe plus.", variant: "destructive" });
+                return;
+            }
+            
+            const requestDoc = requestSnapshot.docs[0];
+
+            if (action === 'accept') {
+                // Utilise la fonction centralisée pour ajouter des amis
+                await addFriend(user.uid, notif.senderId);
+                await updateDoc(requestDoc.ref, { status: 'accepted' });
+                toast({ title: "Ami ajouté!", description: `Vous et ${notif.senderName} êtes maintenant amis.` });
+            } else {
+                await updateDoc(requestDoc.ref, { status: 'rejected' });
+                toast({ title: "Demande refusée" });
+            }
+            
+            const notifRef = doc(db, `users/${user.uid}/notifications`, notif.id);
+            await updateDoc(notifRef, { read: true });
+
+        } catch(error) {
+            console.error("Erreur lors du traitement de la demande d’ami:", error);
+            toast({ title: "Erreur", description: "Une erreur est survenue.", variant: "destructive"});
+        } finally {
+            setHandlingRequest(null);
         }
     };
 
@@ -125,19 +167,30 @@ export default function NotificationsPage() {
                                 key={notif.id}
                                 onClick={() => handleNotificationClick(notif)}
                                 className={cn(
-                                    'p-3 flex items-start space-x-3 cursor-pointer hover:bg-muted/50',
-                                    !notif.read && 'bg-primary/5'
+                                    'p-3 flex items-start space-x-3',
+                                    !notif.read && 'bg-primary/5',
+                                    notif.type !== 'friend_request' && 'cursor-pointer hover:bg-muted/50'
                                 )}
                             >
-                                <div className="mt-1">{renderIcon(notif.type)}</div>
+                                <div className="mt-1 cursor-pointer" onClick={() => router.push(`/profile?id=${notif.senderId}`)}>{renderIcon(notif.type)}</div>
                                 <div className="flex-1">
-                                    <p className="text-sm">
+                                     <p className="text-sm cursor-pointer" onClick={() => router.push(`/profile?id=${notif.senderId}`)}>
                                         <span className="font-semibold">{notif.senderName}</span>{' '}
                                         {notif.text}
                                     </p>
                                     <p className="text-xs text-muted-foreground mt-0.5">
                                         {notif.createdAt && formatDistanceToNow(notif.createdAt.toDate(), { addSuffix: true, locale: fr })}
                                     </p>
+                                     {notif.type === 'friend_request' && !notif.read && (
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <Button size="sm" className="h-7 px-2" onClick={() => handleFriendRequest(notif, 'accept')} disabled={handlingRequest === notif.id}>
+                                                {handlingRequest === notif.id ? <Loader2 className="h-4 w-4 animate-spin"/> : 'Accepter'}
+                                            </Button>
+                                            <Button size="sm" className="h-7 px-2" variant="ghost" onClick={() => handleFriendRequest(notif, 'decline')} disabled={handlingRequest === notif.id}>
+                                                Refuser
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                                 {!notif.read && (
                                     <div className="mt-2 w-2 h-2 rounded-full bg-primary"></div>
