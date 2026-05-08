@@ -92,7 +92,7 @@ const PhotoViewer = ({ images, startIndex, onClose, profile, currentUser }: { im
                     type: "like",
                     senderId: currentUser.uid,
                     senderName: currentUser.displayName || "Un utilisateur",
-                    photoUrl: images[currentIndex], // Ajout de l'URL de la photo
+                    photoUrl: images[currentIndex], 
                     text: "a aimé votre photo ❤️",
                     createdAt: serverTimestamp(),
                     read: false,
@@ -434,27 +434,44 @@ export default function ProfileClientPage() {
   };
   
   const handleFriendAction = async () => {
-    if (!currentUser || !profileId || isFriendActionLoading) return;
+    if (!currentUser || !profileId || isFriendActionLoading || currentUser.uid === profileId) return;
     setIsFriendActionLoading(true);
 
-    if (isFriend) {
-      const result = await removeFriend(currentUser.uid, profileId);
-      if (result.success) {
-        setIsFriend(false);
-        toast({ title: 'Ami retiré' });
-      } else {
-        toast({ variant: 'destructive', title: 'Erreur', description: result.error });
-      }
-    } else {
-      const result = await addFriend(currentUser.uid, profileId);
-      if (result.success) {
-        setIsFriend(true);
-        toast({ title: 'Ami ajouté !' });
-      } else {
-        toast({ variant: 'destructive', title: 'Erreur', description: result.error });
-      }
+    try {
+        if (isFriend) {
+            const result = await removeFriend(currentUser.uid, profileId);
+            if (result.success) {
+                setIsFriend(false);
+                toast({ title: 'Ami retiré' });
+            } else {
+                toast({ variant: 'destructive', title: 'Erreur', description: result.error });
+            }
+        } else {
+            const result = await addFriend(currentUser.uid, profileId);
+            if (result.success) {
+                setIsFriend(true);
+                toast({ title: 'Ami ajouté !' });
+                
+                // Étape 2: Création de la notification
+                await addDoc(collection(db, `users/${profileId}/notifications`), {
+                    type: "friend_request",
+                    senderId: currentUser.uid,
+                    senderName: currentUser.displayName || "Un utilisateur",
+                    text: "vous a envoyé une demande d’ami 👥",
+                    createdAt: serverTimestamp(),
+                    read: false,
+                });
+
+            } else {
+                toast({ variant: 'destructive', title: 'Erreur', description: result.error });
+            }
+        }
+    } catch (error) {
+        console.error("Friend action error:", error);
+        toast({ variant: 'destructive', title: 'Erreur', description: "Une erreur est survenue."}) 
+    } finally {
+        setIsFriendActionLoading(false);
     }
-    setIsFriendActionLoading(false);
   };
 
 

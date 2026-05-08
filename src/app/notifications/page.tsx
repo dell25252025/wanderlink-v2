@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Loader2, BellOff, MessageSquare, Heart } from 'lucide-react';
+import { Loader2, BellOff, MessageSquare, Heart, UserPlus } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -17,9 +17,9 @@ import Link from 'next/link';
 
 interface Notification {
     id: string;
-    type: 'message' | 'like'; // Type a été élargi
-    chatId?: string; // Optionnel
-    photoUrl?: string; // Optionnel, pour les likes
+    type: 'message' | 'like' | 'friend_request';
+    chatId?: string; 
+    photoUrl?: string;
     senderId: string;
     senderName: string;
     text: string;
@@ -53,16 +53,19 @@ export default function NotificationsPage() {
     }, [user]);
 
     const handleNotificationClick = async (notif: Notification) => {
-        const notifRef = doc(db, `users/${user!.uid}/notifications`, notif.id);
-        const batch = writeBatch(db);
-        batch.update(notifRef, { read: true });
-        await batch.commit();
+        if (!user) return;
+        const notifRef = doc(db, `users/${user.uid}/notifications`, notif.id);
+        if (!notif.read) {
+            const batch = writeBatch(db);
+            batch.update(notifRef, { read: true });
+            await batch.commit();
+        }
 
         if (notif.type === 'message' && notif.chatId) {
-            router.push(`/chat/${notif.chatId}`);
-        } else if (notif.type === 'like' && notif.photoUrl) {
-            // Pour les likes, on pourrait rediriger vers la photo
-            // Pour l'instant, on redirige vers le profil de l'expéditeur
+            router.push(`/chat?id=${notif.chatId}`);
+        } else if (notif.type === 'like') {
+            router.push(`/profile?id=${notif.senderId}`);
+        } else if (notif.type === 'friend_request') {
             router.push(`/profile?id=${notif.senderId}`);
         }
     };
@@ -79,12 +82,14 @@ export default function NotificationsPage() {
         await batch.commit();
     };
 
-    const renderIcon = (type: 'message' | 'like') => {
+    const renderIcon = (type: 'message' | 'like' | 'friend_request') => {
         switch (type) {
             case 'message':
                 return <MessageSquare className="h-5 w-5 text-primary" />;
             case 'like':
                 return <Heart className="h-5 w-5 text-red-500" />;
+            case 'friend_request':
+                return <UserPlus className="h-5 w-5 text-blue-500" />;
             default:
                 return null;
         }
