@@ -4,7 +4,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getUserProfile, addProfilePicture, removeProfilePicture, addFriend, removeFriend, signOutFromGoogle } from '@/lib/firebase-actions';
-import { type DocumentData, addDoc, collection, serverTimestamp, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { type DocumentData, addDoc, collection, serverTimestamp, query, where, getDocs, onSnapshot, updateDoc } from 'firebase/firestore';
 import { Loader2, Plane, MapPin, Languages, Backpack, Cigarette, Wine, Calendar, Camera, Trash2, PlusCircle, LogOut, Edit, Ruler, Scale, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, X, Sparkles, BriefcaseBusiness, Coins, Users, MoreVertical, ShieldAlert, Ban, Send, UserPlus, Heart, UserCheck, UserX, CheckCircle, ShieldCheck, History } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
@@ -44,7 +44,7 @@ const intentionMap: { [key: string]: { icon: React.ElementType, color: string, t
 
 const MAX_PHOTOS = 6;
 
-type FriendStatus = 'add' | 'pending' | 'friends';
+type FriendStatus = 'add' | 'pending_sent' | 'pending_received' | 'friends';
 
 const PhotoViewer = ({ images, startIndex, onClose, profile, currentUser }: { images: string[], startIndex: number, onClose: () => void, profile: DocumentData | null, currentUser: User | null }) => {
     const [currentIndex, setCurrentIndex] = useState(startIndex);
@@ -247,8 +247,6 @@ export default function ProfileClientPage() {
     setIsClient(true);
   }, []);
 
-
-
   useEffect(() => {
     if (!profileId || !currentUser) {
         return;
@@ -263,15 +261,30 @@ export default function ProfileClientPage() {
 
         const requestsRef = collection(db, "friend_requests");
         const q = query(requestsRef, 
-                        where("senderId", "in", [currentUser.uid, profileId]), 
-                        where("receiverId", "in", [currentUser.uid, profileId]),
-                        where("status", "==", "pending"));
+            where("status", "==", "pending"),
+            where("senderId", "in", [currentUser.uid, profileId]), 
+            where("receiverId", "in", [currentUser.uid, profileId])
+        );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             if (!snapshot.empty) {
-                setFriendStatus('pending');
+                const request = snapshot.docs[0].data();
+                if (request.senderId === currentUser.uid) {
+                    setFriendStatus('pending_sent');
+                } else {
+                    setFriendStatus('pending_received');
+                }
             } else {
-                setFriendStatus('add');
+                 // Si aucune demande en attente, vérifier s'ils sont déjà amis
+                const checkAgain = async () => {
+                    const updatedUserProfile = await getUserProfile(currentUser.uid);
+                     if (updatedUserProfile?.friends?.includes(profileId)) {
+                        setFriendStatus('friends');
+                    } else {
+                        setFriendStatus('add');
+                    }
+                }
+                checkAgain();
             }
         });
 
@@ -464,38 +477,76 @@ export default function ProfileClientPage() {
     toast({ title: `Le profil de ${profile?.firstName} a été signalé.` });
   };
   
-  const handleFriendAction = async () => {
+  const handleFriendAction = async (action: 'add' | 'remove' | 'accept' | 'decline') => {
     if (!currentUser || !profileId || isFriendActionLoading || currentUser.uid === profileId) return;
     setIsFriendActionLoading(true);
 
     try {
-        if (friendStatus === 'friends') {
-            const result = await removeFriend(currentUser.uid, profileId);
-            if (result.success) {
-                setFriendStatus('add');
-                toast({ title: 'Ami retiré' });
-            } else {
-                toast({ variant: 'destructive', title: 'Erreur', description: result.error });
-            }
-        } else if (friendStatus === 'add') {
-             await addDoc(collection(db, "friend_requests"), {
-                senderId: currentUser.uid,
-                receiverId: profileId,
-                status: "pending",
-                createdAt: serverTimestamp(),
-            });
-            
-            await addDoc(collection(db, `users/${profileId}/notifications`), {
-                type: "friend_request",
-                senderId: currentUser.uid,
-                senderName: currentUser.displayName || "Un utilisateur",
-                text: "vous a envoyé une demande d’ami 👥",
-                createdAt: serverTimestamp(),
-                read: false,
-            });
+        switch (action) {
+            case 'remove':
+                 const result = await removeFriend(currentUser.uid, profileId);
+                if (result.success) {
+                    setFriendStatus('add');
+                    toast({ title: 'Ami retiré' });
+                } else {
+                    toast({ variant: 'destructive', title: 'Erreur', description: result.error });
+                }
+                break;
+            case 'add':
+                await addDoc(collection(db, "friend_requests"), {
+                    senderId: currentUser.uid,
+                    receiverId: profileId,
+                    status: "pending",
+                    createdAt: serverTimestamp(),
+                });
+                
+                await addDoc(collection(db, `users/${profileId}/notifications`), {
+                    type: "friend_request",
+                    senderId: currentUser.uid,
+                    senderName: currentUser.displayName || "Un utilisateur",
+                    text: "vous a envoyé une demande d’ami 👥",
+                    createdAt: serverTimestamp(),
+                    read: false,
+                });
 
-            setFriendStatus('pending');
-            toast({ title: 'Demande d\'ami envoyée !' });
+                setFriendStatus('pending_sent');
+                toast({ title: 'Demande d\'ami envoyée !' });
+                break;
+            case 'accept':
+            case 'decline':
+                 const requestsRef = collection(db, "friend_requests");
+                 const q = query(requestsRef, 
+                                where("senderId", "==", profileId), 
+                                where("receiverId", "==", currentUser.uid),
+                                where("status", "==", "pending"));
+                const requestSnapshot = await getDocs(q);
+
+                if (requestSnapshot.empty) {
+                    toast({ title: "Demande introuvable", variant: "destructive" });
+                    setFriendStatus('add');
+                    return;
+                }
+                const requestDoc = requestSnapshot.docs[0];
+
+                if (action === 'accept') {
+                    await addFriend(currentUser.uid, profileId);
+                    await updateDoc(requestDoc.ref, { status: 'accepted' });
+                     await addDoc(collection(db, `users/${profileId}/notifications`), {
+                        type: "friend_accept",
+                        senderId: currentUser.uid,
+                        senderName: currentUser.displayName || "Un utilisateur",
+                        text: "a accepté votre demande d’ami.",
+                        createdAt: serverTimestamp(),
+                        read: false,
+                    });
+                    setFriendStatus('friends');
+                    toast({ title: 'Ami ajouté !'});
+                } else { // decline
+                    await updateDoc(requestDoc.ref, { status: 'rejected' });
+                    setFriendStatus('add');
+                    toast({ title: 'Demande refusée' });
+                }
+                break;
         }
     } catch (error) {
         console.error("Friend action error:", error);
@@ -521,23 +572,34 @@ export default function ProfileClientPage() {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel>Annuler</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleFriendAction} className="bg-destructive hover:bg-destructive/90">
+                            <AlertDialogAction onClick={() => handleFriendAction('remove')} className="bg-destructive hover:bg-destructive/90">
                                 <UserX className="mr-2 h-4 w-4" /> Retirer
                             </AlertDialogAction>
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
             );
-        case 'pending':
+        case 'pending_sent':
             return (
                 <Button variant="secondary" size="sm" className="h-8" disabled>
                     <History className="mr-2 h-4 w-4" /> Demande envoyée
                 </Button>
             );
+        case 'pending_received':
+             return (
+                <div className="flex items-center gap-2">
+                    <Button onClick={() => handleFriendAction('accept')} size="sm" className="h-8" disabled={isFriendActionLoading}>
+                         {isFriendActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Accepter'}
+                    </Button>
+                     <Button onClick={() => handleFriendAction('decline')} size="sm" variant="ghost" className="h-8" disabled={isFriendActionLoading}>
+                        Refuser
+                    </Button>
+                </div>
+            );
         case 'add':
         default:
             return (
-                <Button onClick={handleFriendAction} size="sm" variant="secondary" disabled={isFriendActionLoading}>
+                <Button onClick={() => handleFriendAction('add')} size="sm" variant="secondary" disabled={isFriendActionLoading}>
                     {isFriendActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
                     Ajouter
                 </Button>
