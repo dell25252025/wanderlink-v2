@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -8,7 +7,7 @@ import { collection, query, orderBy, onSnapshot, doc, writeBatch, where, getDocs
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, BellOff, MessageSquare, Heart, UserPlus, UserCheck } from 'lucide-react';
+import { Loader2, BellOff, MessageSquare, Heart, UserPlus, UserCheck, Eye } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -17,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 
 interface Notification {
     id: string;
-    type: 'message' | 'like' | 'friend_request' | 'friend_accept';
+    type: 'message' | 'like' | 'friend_request' | 'friend_accept' | 'profile_visit';
     chatId?: string; 
     photoUrl?: string;
     senderId: string;
@@ -66,7 +65,7 @@ export default function NotificationsPage() {
 
         if (notif.type === 'message' && notif.chatId) {
             router.push(`/chat?id=${notif.chatId}`);
-        } else if (notif.type === 'like' || notif.type === 'friend_request' || notif.type === 'friend_accept') {
+        } else if (notif.type === 'like' || notif.type === 'friend_request' || notif.type === 'friend_accept' || notif.type === 'profile_visit') {
             router.push(`/profile?id=${notif.senderId}`);
         }
     };
@@ -145,6 +144,8 @@ export default function NotificationsPage() {
                 return <UserPlus className="h-5 w-5 text-blue-500" />;
             case 'friend_accept':
                 return <UserCheck className="h-5 w-5 text-green-500" />;
+            case 'profile_visit':
+                return <Eye className="h-5 w-5 text-purple-500" />;
             default:
                 return null;
         }

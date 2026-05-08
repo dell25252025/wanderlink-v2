@@ -1,10 +1,9 @@
-
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getUserProfile, addProfilePicture, removeProfilePicture, addFriend, removeFriend, signOutFromGoogle } from '@/lib/firebase-actions';
-import { type DocumentData, addDoc, collection, serverTimestamp, query, where, getDocs, onSnapshot, updateDoc } from 'firebase/firestore';
+import { type DocumentData, addDoc, collection, serverTimestamp, query, where, getDocs, onSnapshot, updateDoc, Timestamp, orderBy, limit } from 'firebase/firestore';
 import { Loader2, Plane, MapPin, Languages, Backpack, Cigarette, Wine, Calendar, Camera, Trash2, PlusCircle, LogOut, Edit, Ruler, Scale, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, X, Sparkles, BriefcaseBusiness, Coins, Users, MoreVertical, ShieldAlert, Ban, Send, UserPlus, Heart, UserCheck, UserX, CheckCircle, ShieldCheck, History } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
@@ -246,6 +245,53 @@ export default function ProfileClientPage() {
   useEffect(() => {
     setIsClient(true);
   }, []);
+  
+  useEffect(() => {
+    if (profileId && currentUser && profileId !== currentUser.uid) {
+      const recordVisit = async () => {
+        try {
+          const visitsRef = collection(db, "profile_visits");
+          const q = query(
+            visitsRef,
+            where("visitorId", "==", currentUser.uid),
+            where("profileOwnerId", "==", profileId),
+            orderBy("visitedAt", "desc"),
+            limit(1)
+          );
+
+          const visitSnapshot = await getDocs(q);
+          const twentyFourHoursAgo = Timestamp.fromMillis(
+            Date.now() - 24 * 60 * 60 * 1000
+          );
+
+          if (visitSnapshot.empty || visitSnapshot.docs[0].data().visitedAt < twentyFourHoursAgo) {
+            // Create notification
+            await addDoc(collection(db, `users/${profileId}/notifications`), {
+              type: "profile_visit",
+              senderId: currentUser.uid,
+              senderName: currentUser.displayName || "Un utilisateur",
+              text: "a visité votre profil 👀",
+              createdAt: serverTimestamp(),
+              read: false,
+            });
+
+            // Record new visit
+            await addDoc(visitsRef, {
+              visitorId: currentUser.uid,
+              profileOwnerId: profileId,
+              visitedAt: serverTimestamp(),
+            });
+          } else {
+            console.log("Visite récente, pas de nouvelle notification.");
+          }
+        } catch (error) {
+          console.error("Erreur lors de l'enregistrement de la visite:", error);
+        }
+      };
+
+      recordVisit();
+    }
+  }, [profileId, currentUser]);
 
   useEffect(() => {
     if (!profileId || !currentUser) {
