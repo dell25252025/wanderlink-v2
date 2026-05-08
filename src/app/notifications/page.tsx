@@ -4,11 +4,11 @@
 import { useEffect, useState } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
-import { collection, query, orderBy, onSnapshot, doc, writeBatch, where, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, writeBatch, where, getDocs, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, BellOff, MessageSquare, Heart, UserPlus } from 'lucide-react';
+import { Loader2, BellOff, MessageSquare, Heart, UserPlus, UserCheck } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 
 interface Notification {
     id: string;
-    type: 'message' | 'like' | 'friend_request';
+    type: 'message' | 'like' | 'friend_request' | 'friend_accept';
     chatId?: string; 
     photoUrl?: string;
     senderId: string;
@@ -56,8 +56,7 @@ export default function NotificationsPage() {
     }, [user]);
 
     const handleNotificationClick = async (notif: Notification) => {
-        // Empêcher la navigation si on clique sur les boutons
-        if (notif.type === 'friend_request') return;
+        if (notif.type === 'friend_request' && !notif.read) return;
 
         if (!user) return;
         const notifRef = doc(db, `users/${user.uid}/notifications`, notif.id);
@@ -67,9 +66,9 @@ export default function NotificationsPage() {
 
         if (notif.type === 'message' && notif.chatId) {
             router.push(`/chat?id=${notif.chatId}`);
-        } else if (notif.type === 'like') {
+        } else if (notif.type === 'like' || notif.type === 'friend_request' || notif.type === 'friend_accept') {
             router.push(`/profile?id=${notif.senderId}`);
-        } 
+        }
     };
     
     const handleFriendRequest = async (notif: Notification, action: 'accept' | 'decline') => {
@@ -86,15 +85,27 @@ export default function NotificationsPage() {
 
             if (requestSnapshot.empty) {
                 toast({ title: "Demande introuvable", description: "Cette demande d’ami n’existe plus.", variant: "destructive" });
+                 const notifRef = doc(db, `users/${user.uid}/notifications`, notif.id);
+                await updateDoc(notifRef, { read: true });
                 return;
             }
             
             const requestDoc = requestSnapshot.docs[0];
 
             if (action === 'accept') {
-                // Utilise la fonction centralisée pour ajouter des amis
                 await addFriend(user.uid, notif.senderId);
                 await updateDoc(requestDoc.ref, { status: 'accepted' });
+                
+                // Envoyer une notification à l'expéditeur initial
+                await addDoc(collection(db, `users/${notif.senderId}/notifications`), {
+                    type: "friend_accept",
+                    senderId: user.uid,
+                    senderName: user.displayName || "Un utilisateur",
+                    text: "a accepté votre demande d’ami.",
+                    createdAt: serverTimestamp(),
+                    read: false,
+                });
+
                 toast({ title: "Ami ajouté!", description: `Vous et ${notif.senderName} êtes maintenant amis.` });
             } else {
                 await updateDoc(requestDoc.ref, { status: 'rejected' });
@@ -124,7 +135,7 @@ export default function NotificationsPage() {
         await batch.commit();
     };
 
-    const renderIcon = (type: 'message' | 'like' | 'friend_request') => {
+    const renderIcon = (type: Notification['type']) => {
         switch (type) {
             case 'message':
                 return <MessageSquare className="h-5 w-5 text-primary" />;
@@ -132,6 +143,8 @@ export default function NotificationsPage() {
                 return <Heart className="h-5 w-5 text-red-500" />;
             case 'friend_request':
                 return <UserPlus className="h-5 w-5 text-blue-500" />;
+            case 'friend_accept':
+                return <UserCheck className="h-5 w-5 text-green-500" />;
             default:
                 return null;
         }
@@ -169,12 +182,12 @@ export default function NotificationsPage() {
                                 className={cn(
                                     'p-3 flex items-start space-x-3',
                                     !notif.read && 'bg-primary/5',
-                                    notif.type !== 'friend_request' && 'cursor-pointer hover:bg-muted/50'
+                                    !((notif.type === 'friend_request' && !notif.read)) && 'cursor-pointer hover:bg-muted/50'
                                 )}
                             >
-                                <div className="mt-1 cursor-pointer" onClick={() => router.push(`/profile?id=${notif.senderId}`)}>{renderIcon(notif.type)}</div>
+                                <div className="mt-1">{renderIcon(notif.type)}</div>
                                 <div className="flex-1">
-                                     <p className="text-sm cursor-pointer" onClick={() => router.push(`/profile?id=${notif.senderId}`)}>
+                                     <p className="text-sm">
                                         <span className="font-semibold">{notif.senderName}</span>{' '}
                                         {notif.text}
                                     </p>
@@ -183,17 +196,17 @@ export default function NotificationsPage() {
                                     </p>
                                      {notif.type === 'friend_request' && !notif.read && (
                                         <div className="flex items-center gap-2 mt-2">
-                                            <Button size="sm" className="h-7 px-2" onClick={() => handleFriendRequest(notif, 'accept')} disabled={handlingRequest === notif.id}>
+                                            <Button size="sm" className="h-7 px-2" onClick={(e) => {e.stopPropagation(); handleFriendRequest(notif, 'accept');}} disabled={handlingRequest === notif.id}>
                                                 {handlingRequest === notif.id ? <Loader2 className="h-4 w-4 animate-spin"/> : 'Accepter'}
                                             </Button>
-                                            <Button size="sm" className="h-7 px-2" variant="ghost" onClick={() => handleFriendRequest(notif, 'decline')} disabled={handlingRequest === notif.id}>
+                                            <Button size="sm" className="h-7 px-2" variant="ghost" onClick={(e) => {e.stopPropagation(); handleFriendRequest(notif, 'decline');}} disabled={handlingRequest === notif.id}>
                                                 Refuser
                                             </Button>
                                         </div>
                                     )}
                                 </div>
                                 {!notif.read && (
-                                    <div className="mt-2 w-2 h-2 rounded-full bg-primary"></div>
+                                    <div className="w-2 h-2 mt-2 rounded-full bg-primary shrink-0"></div>
                                 )}
                             </li>
                         ))}
