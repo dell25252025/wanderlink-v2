@@ -38,9 +38,16 @@ export default function NotificationHandler() {
         "pushNotificationActionPerformed",
         (action: ActionPerformed) => {
           console.log("👉 [Push ACTION]", action);
-          const chatId = action.notification.data?.chatId;
-          if (chatId) {
-            const route = `/chat/${chatId}`;
+          const data = action.notification.data;
+          let route: string | null = null;
+
+          if (data?.type === 'friend_request' && data.senderId) {
+              route = `/profile?id=${data.senderId}`;
+          } else if (data?.chatId) {
+              route = `/chat/${data.chatId}`;
+          }
+
+          if (route) {
             console.log("[NotificationHandler] Route de navigation mise en attente:", route);
             setPendingRoute(route);
           }
