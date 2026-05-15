@@ -245,11 +245,14 @@ export default function ProfileClientPage() {
   useEffect(() => {
     setIsClient(true);
   }, []);
-  
+
   useEffect(() => {
+    console.log("[Visit-Debug] Profile visit effect triggered. profileId:", profileId, "currentUser:", !!currentUser);
+
     if (profileId && currentUser && profileId !== currentUser.uid) {
       const recordVisit = async () => {
         try {
+          console.log(`[Visit-Debug] Recording visit from ${currentUser.uid} to ${profileId}`);
           const visitsRef = collection(db, "profile_visits");
           const q = query(
             visitsRef,
@@ -259,12 +262,16 @@ export default function ProfileClientPage() {
             limit(1)
           );
 
+          console.log("[Visit-Debug] Querying for last visit...");
           const visitSnapshot = await getDocs(q);
+          console.log(`[Visit-Debug] Found ${visitSnapshot.size} previous visits.`);
+
           const twentyFourHoursAgo = Timestamp.fromMillis(
             Date.now() - 24 * 60 * 60 * 1000
           );
 
           if (visitSnapshot.empty || visitSnapshot.docs[0].data().visitedAt < twentyFourHoursAgo) {
+            console.log("[Visit-Debug] Conditions met. Creating notification and recording visit.");
             // Create notification
             await addDoc(collection(db, `users/${profileId}/notifications`), {
               type: "profile_visit",
@@ -281,15 +288,25 @@ export default function ProfileClientPage() {
               profileOwnerId: profileId,
               visitedAt: serverTimestamp(),
             });
+            console.log("[Visit-Debug] Notification and visit recorded successfully.");
           } else {
-            console.log("Visite récente, pas de nouvelle notification.");
+            console.log("[Visit-Debug] Visit was within the last 24 hours. No notification sent.");
           }
-        } catch (error) {
-          console.error("Erreur lors de l'enregistrement de la visite:", error);
+        } catch (error: any) {
+          console.error("[Visit-Debug] Error recording visit:", error);
+          if (error.code === 'failed-precondition') {
+            console.error("[Visit-Debug] CRITICAL: Firestore index missing for 'profile_visits' collection. Query: visitorId ASC, profileOwnerId ASC, visitedAt DESC.");
+          }
         }
       };
 
       recordVisit();
+    } else {
+        console.log("[Visit-Debug] Conditions for recording visit not met.", {
+            hasProfileId: !!profileId,
+            hasCurrentUser: !!currentUser,
+            isNotOwnProfile: profileId !== currentUser?.uid
+        });
     }
   }, [profileId, currentUser]);
 
