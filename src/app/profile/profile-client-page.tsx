@@ -23,6 +23,7 @@ import { Drawer, DrawerContent, DrawerTrigger, DrawerClose, DrawerHeader as Draw
 import { cn } from '@/lib/utils';
 import { countries } from '@/lib/countries';
 import { travelIntentions, travelStyles, travelActivities } from '@/lib/options';
+import { useProfileVisitNotification } from '@/hooks/useProfileVisitNotification';
 
 const CannabisIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -246,69 +247,8 @@ export default function ProfileClientPage() {
     setIsClient(true);
   }, []);
 
-  useEffect(() => {
-    console.log("[Visit-Debug] Profile visit effect triggered. profileId:", profileId, "currentUser:", !!currentUser);
-
-    if (profileId && currentUser && profileId !== currentUser.uid) {
-      const recordVisit = async () => {
-        try {
-          console.log(`[Visit-Debug] Recording visit from ${currentUser.uid} to ${profileId}`);
-          const visitsRef = collection(db, "profile_visits");
-          const q = query(
-            visitsRef,
-            where("visitorId", "==", currentUser.uid),
-            where("profileOwnerId", "==", profileId),
-            orderBy("visitedAt", "desc"),
-            limit(1)
-          );
-
-          console.log("[Visit-Debug] Querying for last visit...");
-          const visitSnapshot = await getDocs(q);
-          console.log(`[Visit-Debug] Found ${visitSnapshot.size} previous visits.`);
-
-          const twentyFourHoursAgo = Timestamp.fromMillis(
-            Date.now() - 24 * 60 * 60 * 1000
-          );
-
-          if (visitSnapshot.empty || visitSnapshot.docs[0].data().visitedAt < twentyFourHoursAgo) {
-            console.log("[Visit-Debug] Conditions met. Creating notification and recording visit.");
-            // Create notification
-            await addDoc(collection(db, `users/${profileId}/notifications`), {
-              type: "profile_visit",
-              senderId: currentUser.uid,
-              senderName: currentUser.displayName || "Un utilisateur",
-              text: "a visité votre profil 👀",
-              createdAt: serverTimestamp(),
-              read: false,
-            });
-
-            // Record new visit
-            await addDoc(visitsRef, {
-              visitorId: currentUser.uid,
-              profileOwnerId: profileId,
-              visitedAt: serverTimestamp(),
-            });
-            console.log("[Visit-Debug] Notification and visit recorded successfully.");
-          } else {
-            console.log("[Visit-Debug] Visit was within the last 24 hours. No notification sent.");
-          }
-        } catch (error: any) {
-          console.error("[Visit-Debug] Error recording visit:", error);
-          if (error.code === 'failed-precondition') {
-            console.error("[Visit-Debug] CRITICAL: Firestore index missing for 'profile_visits' collection. Query: visitorId ASC, profileOwnerId ASC, visitedAt DESC.");
-          }
-        }
-      };
-
-      recordVisit();
-    } else {
-        console.log("[Visit-Debug] Conditions for recording visit not met.", {
-            hasProfileId: !!profileId,
-            hasCurrentUser: !!currentUser,
-            isNotOwnProfile: profileId !== currentUser?.uid
-        });
-    }
-  }, [profileId, currentUser]);
+  // Remplacement de l'ancien useEffect par le hook sécurisé
+  useProfileVisitNotification(profileId, currentUser);
 
   useEffect(() => {
     if (!profileId || !currentUser) {
