@@ -243,12 +243,11 @@ export default function ProfileClientPage() {
   const [isFriendActionLoading, setIsFriendActionLoading] = useState(false);
   const [photoViewerIndex, setPhotoViewerIndex] = useState<number | null>(null);
 
+  useProfileVisitNotification(profileId, currentUser);
+
   useEffect(() => {
     setIsClient(true);
   }, []);
-
-  // Remplacement de l'ancien useEffect par le hook sécurisé
-  useProfileVisitNotification(profileId, currentUser);
 
   useEffect(() => {
     if (!profileId || !currentUser) {
