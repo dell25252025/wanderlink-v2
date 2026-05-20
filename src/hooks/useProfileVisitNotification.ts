@@ -10,7 +10,6 @@ import {
   getDocs, 
   Timestamp, 
   limit, 
-  orderBy, 
   doc,
   setDoc
 } from 'firebase/firestore';
@@ -58,9 +57,10 @@ export function useProfileVisitNotification(profileId: string | null, currentUse
         // Si aucune visite récente, on crée la notification et on enregistre la visite
         await addDoc(collection(db, `users/${profileId}/notifications`), {
           type: 'profile_visit',
-          visitorId: currentUser.uid,
-          visitorName: currentUser.displayName || 'Un utilisateur',
-          visitorPhotoURL: currentUser.photoURL || null,
+          senderId: currentUser.uid,
+          senderName: currentUser.displayName || 'Un utilisateur',
+          senderPhotoURL: currentUser.photoURL || null,
+          text: "a visité votre profil 👀", // Champ de texte standardisé
           createdAt: serverTimestamp(),
           read: false
         });
@@ -71,7 +71,7 @@ export function useProfileVisitNotification(profileId: string | null, currentUse
           visitedAt: serverTimestamp(),
         });
 
-        console.log('[Profile Visit] notification created');
+        console.log('[Profile Visit] notification created with standardized format');
 
       } catch (error) {
         console.error('[Profile Visit Error]', error);
