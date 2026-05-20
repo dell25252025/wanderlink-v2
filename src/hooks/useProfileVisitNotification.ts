@@ -4,20 +4,13 @@ import { useEffect, useRef } from 'react';
 import { 
   addDoc, 
   collection, 
-  serverTimestamp, 
-  query, 
-  where, 
-  getDocs, 
-  Timestamp, 
-  limit, 
-  doc,
-  setDoc
+  serverTimestamp
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { User } from 'firebase/auth';
 
 /**
- * Hook isolé pour envoyer une notification de visite de profil.
+ * Hook isolé pour envoyer une notification de visite de profil à chaque visite.
  * N'a aucun effet sur le state ou le rendu du composant qui l'utilise.
  * @param profileId - L'ID du profil visité.
  * @param currentUser - L'objet de l'utilisateur actuellement connecté.
@@ -31,30 +24,13 @@ export function useProfileVisitNotification(profileId: string | null, currentUse
       return;
     }
     
-    // Marquer comme exécuté pour éviter les doublons (ex: React.StrictMode)
+    // Marquer comme exécuté pour éviter les doublons dans le même rendu (ex: React.StrictMode)
     hasExecutedRef.current = true;
-    console.log('[Profile Visit] started');
+    console.log('[Profile Visit] Hook triggered for every visit.');
 
-    const recordVisitAndNotify = async () => {
+    const createNotification = async () => {
       try {
-        // Clé unique pour le document de visite
-        const visitDocId = `${currentUser.uid}_${profileId}`;
-        const visitDocRef = doc(db, 'profile_visits', visitDocId);
-        
-        const visitSnapshot = await getDocs(query(collection(db, 'profile_visits'), where('__name__', '==', visitDocId), limit(1)));
-
-        const twentyFourHoursAgo = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
-
-        // Vérifier si une visite récente a déjà eu lieu
-        if (!visitSnapshot.empty) {
-          const lastVisit = visitSnapshot.docs[0].data();
-          if (lastVisit.visitedAt > twentyFourHoursAgo) {
-            // Visite trop récente, on ne fait rien.
-            return;
-          }
-        }
-
-        // Si aucune visite récente, on crée la notification et on enregistre la visite
+        // Crée la notification à chaque fois.
         await addDoc(collection(db, `users/${profileId}/notifications`), {
           type: 'profile_visit',
           senderId: currentUser.uid,
@@ -65,13 +41,7 @@ export function useProfileVisitNotification(profileId: string | null, currentUse
           read: false
         });
 
-        await setDoc(visitDocRef, {
-          visitorId: currentUser.uid,
-          profileOwnerId: profileId,
-          visitedAt: serverTimestamp(),
-        });
-
-        console.log('[Profile Visit] notification created with standardized format');
+        console.log('[Profile Visit] Notification created successfully.');
 
       } catch (error) {
         console.error('[Profile Visit Error]', error);
@@ -79,7 +49,7 @@ export function useProfileVisitNotification(profileId: string | null, currentUse
     };
 
     // Exécuter la logique
-    recordVisitAndNotify();
+    createNotification();
 
   }, [profileId, currentUser]); // Dépendances du useEffect
 }
