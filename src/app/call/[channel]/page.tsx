@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import AgoraRTC, { type IAgoraRTCClient, type ICameraVideoTrack, type IMicrophoneAudioTrack, type IAgoraRTCRemoteUser } from 'agora-rtc-sdk-ng';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 
 import { agoraConfig } from '@/lib/agora-config';
 import { useToast } from '@/hooks/use-toast';
@@ -74,6 +74,25 @@ export default function CallPage() {
     ringingSound.pause();
     ringingSound.currentTime = 0;
 
+    // --- Début de la logique de notification d'appel manqué ---
+    if (updateStatus && callData && currentUser && callData.callerId === currentUser.uid && callData.status === 'ringing') {
+        try {
+            await addDoc(collection(db, `users/${callData.receiverId}/notifications`), {
+                type: 'missed_call',
+                senderId: currentUser.uid,
+                senderName: currentUser.displayName || 'Un utilisateur',
+                senderPhotoURL: currentUser.photoURL || null,
+                chatId: channelName,
+                text: 'a essayé de vous appeler 📞',
+                createdAt: serverTimestamp(),
+                read: false
+            });
+        } catch (error) {
+            console.error('[Missed Call Notification Error]', error);
+        }
+    }
+    // --- Fin de la logique de notification d'appel manqué ---
+
     try {
         for (const track of localTracks) {
             track.stop();
@@ -95,7 +114,7 @@ export default function CallPage() {
         setRemoteUsers([]);
         router.back();
     }
-}, [localTracks, channelName, router]);
+}, [localTracks, channelName, router, callData, currentUser]);
 
 
   const joinChannel = useCallback(async (isVideoCall: boolean) => {

@@ -7,7 +7,7 @@ import { collection, query, orderBy, onSnapshot, doc, writeBatch, where, getDocs
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, BellOff, MessageSquare, Heart, UserPlus, UserCheck, Eye } from 'lucide-react';
+import { Loader2, BellOff, MessageSquare, Heart, UserPlus, UserCheck, Eye, Video, PhoneMissed } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 
 interface Notification {
     id: string;
-    type: 'message' | 'like' | 'friend_request' | 'friend_accept' | 'profile_visit';
+    type: 'message' | 'like' | 'friend_request' | 'friend_accept' | 'profile_visit' | 'video_call' | 'missed_call';
     chatId?: string; 
     photoUrl?: string;
     senderId: string;
@@ -63,8 +63,8 @@ export default function NotificationsPage() {
             await updateDoc(notifRef, { read: true });
         }
 
-        if (notif.type === 'message' && notif.chatId) {
-            router.push(`/chat?id=${notif.chatId}`);
+        if ((notif.type === 'message' || notif.type === 'video_call' || notif.type === 'missed_call') && notif.chatId) {
+            router.push(`/chat?id=${notif.senderId}`);
         } else if (notif.type === 'like' || notif.type === 'friend_request' || notif.type === 'friend_accept' || notif.type === 'profile_visit') {
             router.push(`/profile?id=${notif.senderId}`);
         }
@@ -146,6 +146,10 @@ export default function NotificationsPage() {
                 return <UserCheck className="h-5 w-5 text-green-500" />;
             case 'profile_visit':
                 return <Eye className="h-5 w-5 text-purple-500" />;
+            case 'video_call':
+                return <Video className="h-5 w-5 text-green-600" />;
+            case 'missed_call':
+                return <PhoneMissed className="h-5 w-5 text-red-600" />;
             default:
                 return null;
         }

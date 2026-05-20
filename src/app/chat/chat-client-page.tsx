@@ -566,7 +566,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
 
 
   const handleStartCall = useCallback(async (isVideo: boolean) => {
-    if (!currentUser) return;
+    if (!currentUser || !otherUser) return;
     const audioOk = await requestMicrophonePermission();
     if (!audioOk) return;
 
@@ -578,6 +578,25 @@ const takePicture = useCallback(async (source: CameraSource) => {
     const result = await initiateCall(currentUser.uid, otherUserId, isVideo);
 
     if (result.success && result.channelId) {
+        // --- Début de la logique de notification ---
+        try {
+            const chatId = getChatId(currentUser.uid, otherUserId);
+            await addDoc(collection(db, `users/${otherUserId}/notifications`), {
+                type: 'video_call',
+                senderId: currentUser.uid,
+                senderName: currentUser.displayName || 'Un utilisateur',
+                senderPhotoURL: currentUser.photoURL || null,
+                chatId: chatId,
+                text: 'vous appelle en vidéo 📹',
+                createdAt: serverTimestamp(),
+                read: false
+            });
+        } catch (error) {
+            console.error('[Call Notification Error]', error);
+            // Ne pas bloquer l'appel si la notification échoue
+        }
+        // --- Fin de la logique de notification ---
+
         router.push(`/call/${result.channelId}`);
     } else {
         toast({
@@ -586,7 +605,8 @@ const takePicture = useCallback(async (source: CameraSource) => {
             variant: "destructive"
         });
     }
-  }, [requestMicrophonePermission, requestCameraPermission, currentUser, otherUserId, router, toast]);
+}, [requestMicrophonePermission, requestCameraPermission, currentUser, otherUserId, router, toast, otherUser]);
+
 
   const handleStartRecording = useCallback(async () => {
     const hasPermission = await requestMicrophonePermission(); 
