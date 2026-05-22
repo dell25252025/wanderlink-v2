@@ -1,4 +1,3 @@
-
 package com.wanderlink.app;
 
 import android.app.Notification;
@@ -9,135 +8,100 @@ import android.app.Service;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.media.AudioAttributes;
+import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
-import android.os.Handler;
 import android.os.IBinder;
-import android.os.Looper;
+import android.os.PowerManager;
 import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
 
-import com.getcapacitor.BridgeActivity;
-
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
 public class CallForegroundService extends Service {
 
     private static final String TAG = "CallForegroundService";
-    public static final String CHANNEL_ID = "IncomingCallChannel";
-    public static final int NOTIFICATION_ID = 1123;
-
-    public static final String ACTION_INCOMING_CALL = "com.wanderlink.app.ACTION_INCOMING_CALL";
+    public static final String CHANNEL_ID = "incoming_call_channel";
+    private static final int NOTIFICATION_ID = 999;
     public static final String ACTION_DISMISS_CALL = "com.wanderlink.app.ACTION_DISMISS_CALL";
+
+    private PowerManager.WakeLock wakeLock;
 
     @Override
     public void onCreate() {
         super.onCreate();
-        Log.d(TAG, "CallForegroundService onCreate");
-        createNotificationChannel();
+        Log.d(TAG, "Service onCreate");
+
+        PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "WanderLink::CallWakeLock");
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.d(TAG, "onStartCommand received");
-        if (intent != null && ACTION_INCOMING_CALL.equals(intent.getAction())) {
-            Log.d(TAG, "Handling ACTION_INCOMING_CALL");
-
-            String callerName = intent.getStringExtra("callerName");
-            String callerPhotoUrl = intent.getStringExtra("callerPhotoUrl");
-            String channelId = intent.getStringExtra("channelId");
-
-            // Utiliser un Handler pour exécuter le code réseau sur un thread différent
-            Handler handler = new Handler(Looper.getMainLooper());
-            handler.post(() -> {
-                Bitmap callerPhotoBitmap = null;
-                if (callerPhotoUrl != null && !callerPhotoUrl.isEmpty()) {
-                    callerPhotoBitmap = getBitmapFromURL(callerPhotoUrl);
-                }
-                startForeground(NOTIFICATION_ID, createNotification(callerName, callerPhotoUrl, channelId));
-            });
-        } else if (intent != null && ACTION_DISMISS_CALL.equals(intent.getAction())) {
-            Log.d(TAG, "Handling ACTION_DISMISS_CALL");
-            stopForeground(true);
-            stopSelf();
+        Log.d(TAG, "Service onStartCommand");
+        if (wakeLock != null && !wakeLock.isHeld()) {
+            wakeLock.acquire(30*1000L /* 30 seconds timeout */);
+            Log.d(TAG, "Wakelock acquired");
         }
+
+        String callerName = intent.getStringExtra("callerName");
+        String callerPhotoUrl = intent.getStringExtra("callerPhotoUrl");
+        String channelId = intent.getStringExtra("channelId");
+
+        createNotificationChannel();
+
+        Notification notification = createNotification(callerName, callerPhotoUrl, channelId);
+        startForeground(NOTIFICATION_ID, notification);
+
         return START_NOT_STICKY;
     }
 
-    private Notification createNotification(String callerName, String callerPhotoUrl, String channelId) {
-        Log.d(TAG, "Creating notification for " + callerName);
-
-        // L'Intent plein écran qui ouvrira notre CallActivity
-        Intent fullScreenIntent = new Intent(this, CallActivity.class);
-        fullScreenIntent.putExtra("callerName", callerName);
-        fullScreenIntent.putExtra("callerPhotoUrl", callerPhotoUrl);
-        fullScreenIntent.putExtra("channelId", channelId);
-        PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(this, 0, fullScreenIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-        // Intent pour le bouton "Refuser"
-        Intent dismissIntent = new Intent(this, CallNotificationActionReceiver.class);
-        dismissIntent.setAction(ACTION_DISMISS_CALL);
-        dismissIntent.putExtra("channelId", channelId);
-        PendingIntent dismissPendingIntent = PendingIntent.getBroadcast(this, 1, dismissIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-        // Intent pour le bouton "Répondre"
-        Intent answerIntent = new Intent(this, CallNotificationActionReceiver.class);
-        answerIntent.setAction(ACTION_INCOMING_CALL); // On peut réutiliser l'action pour ouvrir l'app
-        answerIntent.putExtra("channelId", channelId);
-        PendingIntent answerPendingIntent = PendingIntent.getBroadcast(this, 2, answerIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle((callerName != null ? callerName : "Quelqu'un") + " vous appelle")
-                .setContentText("Appel vidéo entrant...")
-                .setSmallIcon(R.drawable.ic_notification) // Assurez-vous que cette icône existe
-                .setPriority(NotificationCompat.PRIORITY_MAX)
-                .setCategory(NotificationCompat.CATEGORY_CALL)
-                .setOngoing(true)
-                .setAutoCancel(false)
-                .setFullScreenIntent(fullScreenPendingIntent, true)
-                .addAction(new NotificationCompat.Action(R.drawable.ic_call_end_white_24dp, "Refuser", dismissPendingIntent))
-                .addAction(new NotificationCompat.Action(R.drawable.ic_call_white_24dp, "Répondre", answerPendingIntent));
-        
-        // Si on a l'URL de la photo, on la charge en arrière-plan pour la notification (mais l'Activity la chargera aussi)
-        Handler handler = new Handler(Looper.getMainLooper());
-        handler.post(() -> {
-            Bitmap callerPhotoBitmap = null;
-            if (callerPhotoUrl != null && !callerPhotoUrl.isEmpty()) {
-                callerPhotoBitmap = getBitmapFromURL(callerPhotoUrl);
-                if(callerPhotoBitmap != null) {
-                     builder.setLargeIcon(callerPhotoBitmap);
-                }
-            }
-        });
-
-        return builder.build();
-    }
-
-
-    public Bitmap getBitmapFromURL(String src) {
-        try {
-            URL url = new URL(src);
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setDoInput(true);
-            connection.connect();
-            InputStream input = connection.getInputStream();
-            return BitmapFactory.decodeStream(input);
-        } catch (Exception e) {
-            Log.e(TAG, "Error getting bitmap from URL: " + e.getMessage());
-            return null;
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        Log.d(TAG, "Service onDestroy");
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
+            Log.d(TAG, "Wakelock released");
         }
     }
 
     @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    private Notification createNotification(String callerName, String callerPhotoUrl, String channelId) {
+        // Intent pour quand l'utilisateur appuie sur "Répondre"
+        Intent answerIntent = new Intent(this, CallActivity.class);
+        answerIntent.putExtra("channelId", channelId);
+        answerIntent.putExtra("callerName", callerName);
+        answerIntent.putExtra("callerPhotoUrl", callerPhotoUrl);
+        answerIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        PendingIntent answerPendingIntent = PendingIntent.getActivity(this, 1, answerIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        // Intent pour quand l'utilisateur appuie sur "Refuser"
+        Intent dismissIntent = new Intent(this, CallNotificationActionReceiver.class);
+        dismissIntent.setAction(ACTION_DISMISS_CALL);
+        dismissIntent.putExtra("channelId", channelId);
+        PendingIntent dismissPendingIntent = PendingIntent.getBroadcast(this, 2, dismissIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        // L'intent plein écran qui ouvre CallActivity
+        PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(this, 3, answerIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle((callerName != null ? callerName : "Quelqu'un") + " vous appelle")
+                .setContentText("Appel vidéo entrant...")
+                .setSmallIcon(android.R.drawable.ic_menu_call) // CORRIGÉ: Utilise une icône système
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setOngoing(true)
+                .setAutoCancel(false) // L'utilisateur doit répondre ou refuser
+                .setFullScreenIntent(fullScreenPendingIntent, true) // Affiche l'activité en plein écran
+                .addAction(new NotificationCompat.Action(R.drawable.ic_call_end_white_24dp, "Refuser", dismissPendingIntent))
+                .addAction(new NotificationCompat.Action(R.drawable.ic_call_white_24dp, "Répondre", answerPendingIntent));
+
+        return builder.build();
     }
 
     private void createNotificationChannel() {
@@ -148,19 +112,16 @@ public class CallForegroundService extends Service {
             NotificationChannel channel = new NotificationChannel(CHANNEL_ID, name, importance);
             channel.setDescription(description);
 
-            Uri soundUri = Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + getPackageName() + "/" + R.raw.ringtone);
+            // CORRIGÉ: Utilise la sonnerie par défaut du téléphone
+            Uri soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
             AudioAttributes audioAttributes = new AudioAttributes.Builder()
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                .build();
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                    .build();
             channel.setSound(soundUri, audioAttributes);
-
-            channel.enableVibration(true);
-            channel.setVibrationPattern(new long[]{0, 1000, 500, 1000, 500, 1000});
 
             NotificationManager notificationManager = getSystemService(NotificationManager.class);
             notificationManager.createNotificationChannel(channel);
-            Log.d(TAG, "Notification channel created with custom sound.");
         }
     }
 }
