@@ -23,6 +23,9 @@ public class CallForegroundService extends Service {
     private static final String TAG = "CallForegroundService";
     public static final String CHANNEL_ID = "incoming_call_channel";
     private static final int NOTIFICATION_ID = 999;
+
+    // Ajout des constantes d'action
+    public static final String ACTION_INCOMING_CALL = "com.wanderlink.app.ACTION_INCOMING_CALL";
     public static final String ACTION_DISMISS_CALL = "com.wanderlink.app.ACTION_DISMISS_CALL";
 
     private PowerManager.WakeLock wakeLock;
@@ -38,20 +41,24 @@ public class CallForegroundService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.d(TAG, "Service onStartCommand");
-        if (wakeLock != null && !wakeLock.isHeld()) {
-            wakeLock.acquire(30*1000L /* 30 seconds timeout */);
-            Log.d(TAG, "Wakelock acquired");
+        String action = intent.getAction();
+        Log.d(TAG, "Service onStartCommand with action: " + action);
+
+        if (ACTION_INCOMING_CALL.equals(action)) {
+            if (wakeLock != null && !wakeLock.isHeld()) {
+                wakeLock.acquire(30 * 1000L /* 30 seconds timeout */);
+                Log.d(TAG, "Wakelock acquired");
+            }
+
+            String callerName = intent.getStringExtra("callerName");
+            String callerPhotoUrl = intent.getStringExtra("callerPhotoUrl");
+            String channelId = intent.getStringExtra("channelId");
+
+            createNotificationChannel();
+
+            Notification notification = createNotification(callerName, callerPhotoUrl, channelId);
+            startForeground(NOTIFICATION_ID, notification);
         }
-
-        String callerName = intent.getStringExtra("callerName");
-        String callerPhotoUrl = intent.getStringExtra("callerPhotoUrl");
-        String channelId = intent.getStringExtra("channelId");
-
-        createNotificationChannel();
-
-        Notification notification = createNotification(callerName, callerPhotoUrl, channelId);
-        startForeground(NOTIFICATION_ID, notification);
 
         return START_NOT_STICKY;
     }
