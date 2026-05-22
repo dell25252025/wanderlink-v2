@@ -19,6 +19,16 @@ const client: IAgoraRTCClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8
 const ringingSound = new Audio('https://ik.imagekit.io/fip3ktm2p/telephone-tonalite-Europe-retour-appel-425Hz.mp3');
 ringingSound.loop = true;
 
+// Fonction pour mettre à jour le statut de l'appel à 'active'
+const acceptCall = async (channelName: string) => {
+  const callDocRef = doc(db, 'calls', channelName);
+  try {
+    await updateDoc(callDocRef, { status: 'active' });
+  } catch (error) {
+    console.error("Error accepting call:", error);
+  }
+};
+
 const getAgoraToken = async (channelName: string, uid: string) => {
   const user = auth.currentUser;
   if (!user) throw new Error('User not authenticated for token generation.');
@@ -66,6 +76,11 @@ export default function CallPage() {
  
   const isJoinedRef = useRef(false);
   const isLeavingRef = useRef(false);
+  const callDataRef = useRef(callData);
+
+  useEffect(() => {
+      callDataRef.current = callData;
+  }, [callData]);
 
   const leaveCall = useCallback(async (updateStatus: boolean) => {
     if (isLeavingRef.current) return;
@@ -74,11 +89,12 @@ export default function CallPage() {
     ringingSound.pause();
     ringingSound.currentTime = 0;
 
-    if (updateStatus && callData && currentUser && callData.callerId === currentUser.uid && callData.status === 'ringing') {
-        const { callerId, receiverId } = callData;
+    const currentCallData = callDataRef.current;
+
+    if (updateStatus && currentCallData && currentUser && currentCallData.callerId === currentUser.uid && currentCallData.status === 'ringing') {
+        const { callerId, receiverId } = currentCallData;
         const chatId = [callerId, receiverId].sort().join('_');
         
-        // Envoyer le message système et la notification en parallèle
         try {
             await Promise.all([
                 sendCallSystemMessage(chatId, callerId, receiverId, 'missed_call'),
@@ -117,16 +133,17 @@ export default function CallPage() {
     } finally {
         setLocalTracks([]);
         setRemoteUsers([]);
-        router.back();
+        if (router) {
+            router.back();
+        }
     }
-}, [localTracks, channelName, router, callData, currentUser]);
-
+}, [localTracks, channelName, router, currentUser]);
 
   const joinChannel = useCallback(async (isVideoCall: boolean) => {
     if (!channelName || !currentUser || isJoinedRef.current) return;
 
     try {
-      isJoinedRef.current = true; 
+      isJoinedRef.current = true;
       ringingSound.pause();
       ringingSound.currentTime = 0;
 
@@ -176,37 +193,34 @@ export default function CallPage() {
 
     const callDocRef = doc(db, 'calls', channelName);
 
-    const unsubscribe = onSnapshot(callDocRef, async (doc) => {
-      if (doc.exists()) {
-        const data = doc.data() as CallData;
+    const unsubscribe = onSnapshot(callDocRef, async (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data() as CallData;
         setCallData(data);
-        
-        if (data.status === 'ringing' && data.callerId === currentUser.uid) {
+
+        if (data.status === 'ringing' && data.callerId === currentUser.uid && !isJoinedRef.current) {
             ringingSound.play().catch(e => console.error("Ringing sound play failed", e));
-        } else {
-            ringingSound.pause();
-            ringingSound.currentTime = 0;
         }
 
         if (!otherUserData) {
             const otherId = data.callerId === currentUser.uid ? data.receiverId : data.callerId;
-            const profile = await getUserProfile(otherId);
-            setOtherUserData(profile);
+            getUserProfile(otherId).then(setOtherUserData);
         }
 
         switch(data.status) {
             case 'active':
+                ringingSound.pause();
                 if (!isJoinedRef.current) {
                     joinChannel(data.isVideo);
                 }
                 break;
             case 'rejected':
                 toast({ title: "Appel refusé", description: "L\'utilisateur a refusé l\'appel.", variant: 'destructive' });
-                leaveCall(false); 
+                leaveCall(false);
                 break;
             case 'ended':
                 toast({ title: "Appel terminé" });
-                leaveCall(false); 
+                leaveCall(false);
                 break;
         }
       } else {
@@ -219,8 +233,11 @@ export default function CallPage() {
         unsubscribe();
         ringingSound.pause();
         ringingSound.currentTime = 0;
+        if (isLeavingRef.current) {
+          leaveCall(true);
+        }
     }
-  }, [channelName, currentUser, router, toast, joinChannel, leaveCall, otherUserData]);
+  }, [channelName, currentUser, router, toast, joinChannel, leaveCall]);
 
   const toggleAudio = async () => {
     if (localTracks[0]) {
@@ -247,6 +264,7 @@ export default function CallPage() {
   }
 
   if (callData.status === 'ringing') {
+      const isReceiver = currentUser && callData.receiverId === currentUser.uid;
       return (
           <div className="flex h-screen w-full flex-col items-center justify-between bg-gray-900 text-white py-20">
                 <div className="text-center space-y-4">
@@ -255,9 +273,19 @@ export default function CallPage() {
                         <AvatarFallback className="text-4xl bg-gray-700">{otherUserData?.firstName?.charAt(0)}</AvatarFallback>
                     </Avatar>
                     <h1 className="text-3xl font-bold">{otherUserData?.firstName}</h1>
-                    <p className="text-lg text-white/70">Sonnerie en cours...</p>
+                    <p className="text-lg text-white/70">
+                        {isReceiver ? 'Appel entrant...' : 'Sonnerie en cours...'}
+                    </p>
                 </div>
-                <CallControls onHangUp={() => leaveCall(true)} isRinging={true} onToggleMic={()=>{}} onToggleCamera={()=>{}} isMicMuted={false} isCameraOff={false} />
+                <CallControls 
+                    onHangUp={() => leaveCall(true)} 
+                    onAccept={isReceiver ? () => acceptCall(channelName) : undefined}
+                    isRinging={true} 
+                    onToggleMic={()=>{}} 
+                    onToggleCamera={()=>{}} 
+                    isMicMuted={false} 
+                    isCameraOff={false} 
+                />
           </div>
       )
   }

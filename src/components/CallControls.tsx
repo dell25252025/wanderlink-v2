@@ -1,9 +1,9 @@
 
 import React from 'react';
 
-// Props updated to remove speaker controls
 interface CallControlsProps {
   onHangUp: () => void;
+  onAccept?: () => void; // Nouvelle prop pour accepter l'appel
   onToggleMic: () => void;
   onToggleCamera: () => void;
   isMicMuted: boolean;
@@ -35,8 +35,16 @@ const HangUpIcon = () => (
     </svg>
 );
 
+// Icône pour accepter l'appel
+const AcceptIcon = () => (
+  <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+  </svg>
+);
+
 export const CallControls: React.FC<CallControlsProps> = ({
   onHangUp,
+  onAccept,
   onToggleMic,
   onToggleCamera,
   isMicMuted,
@@ -44,17 +52,10 @@ export const CallControls: React.FC<CallControlsProps> = ({
   isRinging,
   isVideoCall,
 }) => {
-  const ControlButton = ({ onClick, children, active, ariaLabel, danger, size = 'w-14 h-14' }: any) => (
+  const ControlButton = ({ onClick, children, className, ariaLabel, size = 'w-14 h-14' }: any) => (
     <button
         onClick={onClick}
-        className={`${size} flex items-center justify-center rounded-full transition-all duration-300 text-white
-                    ${
-                      danger
-                        ? 'bg-red-500 hover:bg-red-600'
-                        : active
-                          ? 'bg-white/40 hover:bg-white/50'
-                          : 'bg-white/20 hover:bg-white/30'
-                    }`}
+        className={`${size} flex items-center justify-center rounded-full transition-all duration-300 text-white ${className}`}
         aria-label={ariaLabel}
     >
         {children}
@@ -63,8 +64,15 @@ export const CallControls: React.FC<CallControlsProps> = ({
 
   if (isRinging) {
     return (
-        <div className="fixed bottom-16 left-0 right-0 p-4 z-50 flex justify-center">
-            <ControlButton onClick={onHangUp} danger ariaLabel="Hang Up" size="w-16 h-16"><HangUpIcon /></ControlButton>
+        <div className="fixed bottom-16 left-0 right-0 p-4 z-50 flex justify-around items-center max-w-xs mx-auto">
+            <ControlButton onClick={onHangUp} className="bg-red-500 hover:bg-red-600" ariaLabel="Hang Up" size="w-16 h-16">
+                <HangUpIcon />
+            </ControlButton>
+            {onAccept && (
+                <ControlButton onClick={onAccept} className="bg-green-500 hover:bg-green-600 animate-pulse" ariaLabel="Accept Call" size="w-16 h-16">
+                    <AcceptIcon />
+                </ControlButton>
+            )}
         </div>
     )
   }
@@ -74,17 +82,17 @@ export const CallControls: React.FC<CallControlsProps> = ({
       <div className="max-w-md mx-auto bg-black/30 backdrop-blur-sm rounded-full shadow-lg">
         <div className="flex justify-evenly items-center p-2">
 
-          <ControlButton onClick={onToggleMic} active={!isMicMuted} ariaLabel={isMicMuted ? 'Unmute' : 'Mute'}>
+          <ControlButton onClick={onToggleMic} className={isMicMuted ? 'bg-white/20 hover:bg-white/30' : 'bg-white/40 hover:bg-white/50'} ariaLabel={isMicMuted ? 'Unmute' : 'Mute'}>
             {isMicMuted ? <MicOffIcon /> : <MicOnIcon />}
           </ControlButton>
 
           {isVideoCall && (
-            <ControlButton onClick={onToggleCamera} active={!isCameraOff} ariaLabel={isCameraOff ? 'Camera On' : 'Camera Off'}>
-              {isCameraOff ? <CameraOnIcon /> : <CameraOnIcon />}
+            <ControlButton onClick={onToggleCamera} className={isCameraOff ? 'bg-white/20 hover:bg-white/30' : 'bg-white/40 hover:bg-white/50'} ariaLabel={isCameraOff ? 'Turn Camera On' : 'Turn Camera Off'}>
+              {isCameraOff ? <CameraOffIcon /> : <CameraOnIcon />}
             </ControlButton>
           )}
 
-          <ControlButton onClick={onHangUp} danger ariaLabel="Hang Up" size="w-16 h-16">
+          <ControlButton onClick={onHangUp} className="bg-red-500 hover:bg-red-600" ariaLabel="Hang Up" size="w-16 h-16">
             <HangUpIcon />
           </ControlButton>
 
