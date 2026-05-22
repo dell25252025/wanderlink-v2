@@ -10,7 +10,7 @@ import { doc, onSnapshot, updateDoc, addDoc, collection, serverTimestamp } from 
 import { agoraConfig } from '@/lib/agora-config';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { getUserProfile } from '@/lib/firebase-actions';
+import { getUserProfile, sendCallSystemMessage } from '@/lib/firebase-actions';
 
 import { Loader2 } from 'lucide-react';
 import CallControls from '@/components/CallControls';
@@ -30,7 +30,7 @@ const getAgoraToken = async (channelName: string, uid: string) => {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${idToken}`,
     },
-    body: JSON.stringify({ channelName, uid, role: 'publisher' }), // CORRECTION: L'objet data est implicite
+    body: JSON.stringify({ channelName, uid, role: 'publisher' }),
   });
 
   if (!response.ok) {
@@ -39,7 +39,7 @@ const getAgoraToken = async (channelName: string, uid: string) => {
   }
 
   const result = await response.json();
-  return result.token; // CORRECTION: Le token est directement à la racine de la réponse
+  return result.token;
 };
 
 interface CallData {
@@ -74,24 +74,29 @@ export default function CallPage() {
     ringingSound.pause();
     ringingSound.currentTime = 0;
 
-    // --- Début de la logique de notification d'appel manqué ---
     if (updateStatus && callData && currentUser && callData.callerId === currentUser.uid && callData.status === 'ringing') {
+        const { callerId, receiverId } = callData;
+        const chatId = [callerId, receiverId].sort().join('_');
+        
+        // Envoyer le message système et la notification en parallèle
         try {
-            await addDoc(collection(db, `users/${callData.receiverId}/notifications`), {
-                type: 'missed_call',
-                senderId: currentUser.uid,
-                senderName: currentUser.displayName || 'Un utilisateur',
-                senderPhotoURL: currentUser.photoURL || null,
-                chatId: channelName,
-                text: 'a essayé de vous appeler 📞',
-                createdAt: serverTimestamp(),
-                read: false
-            });
+            await Promise.all([
+                sendCallSystemMessage(chatId, callerId, receiverId, 'missed_call'),
+                addDoc(collection(db, `users/${receiverId}/notifications`), {
+                    type: 'missed_call',
+                    senderId: callerId,
+                    senderName: currentUser.displayName || 'Un utilisateur',
+                    senderPhotoURL: currentUser.photoURL || null,
+                    chatId: chatId,
+                    text: 'a essayé de vous appeler 📞',
+                    createdAt: serverTimestamp(),
+                    read: false
+                })
+            ]);
         } catch (error) {
-            console.error('[Missed Call Notification Error]', error);
+            console.error('[Missed Call Actions Error]', error);
         }
     }
-    // --- Fin de la logique de notification d'appel manqué ---
 
     try {
         for (const track of localTracks) {

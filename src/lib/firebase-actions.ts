@@ -133,6 +133,42 @@ function sanitizeData(obj: any): any {
   return newObj;
 }
 
+export async function sendCallSystemMessage(chatId: string, callerId: string, receiverId: string, type: 'video_call' | 'missed_call') {
+    try {
+        const chatDocRef = doc(db, 'chats', chatId);
+        const messagesColRef = collection(chatDocRef, 'messages');
+
+        const text = type === 'video_call' ? 'Appel vidéo' : 'Appel manqué';
+
+        const messageData = {
+            text: text,
+            senderId: callerId, // L'initiateur de l'action
+            timestamp: serverTimestamp(),
+            type: type,
+        };
+
+        const newDocRef = await addDoc(messagesColRef, messageData);
+
+        await setDoc(chatDocRef, { 
+            participants: [callerId, receiverId],
+            lastMessage: { 
+                id: newDocRef.id, 
+                text: text, 
+                senderId: callerId, 
+                timestamp: serverTimestamp(), 
+                read: false 
+            }
+        }, { merge: true });
+
+        return { success: true };
+    } catch (error) {
+        console.error("Erreur lors de l'envoi du message système d'appel:", error);
+        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+        return { success: false, error: errorMessage };
+    }
+}
+
+
 export async function generateAgoraToken(channelName: string, uid: number | string) {
   console.warn("Generation de token simulée (Client Side). Assurez-vous d'être en mode Test sur Agora.");
   return { success: true, token: null };

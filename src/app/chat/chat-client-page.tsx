@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useRef, memo, useCallback, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Video, Loader2, CheckCircle, PlusCircle, Trash2, CameraIcon, Mic, Image as ImageIcon, Copy } from 'lucide-react';
+import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Video, Loader2, CheckCircle, PlusCircle, Trash2, CameraIcon, Mic, Image as ImageIcon, Copy, PhoneMissed } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getUserProfile, initiateCall } from '@/lib/firebase-actions';
@@ -35,6 +35,7 @@ interface Message {
   text: string;
   senderId: string;
   timestamp: Timestamp;
+  type?: 'text' | 'image' | 'audio' | 'video_call' | 'missed_call';
   imageUrl?: string | null;
   audioUrl?: string | null;
   audioDuration?: number;
@@ -172,6 +173,24 @@ const MessageItem = memo<MessageItemProps>(({
     showReactionPopoverFor, setShowReactionPopoverFor
 }) => {
     const reactions = message.reactions ? Object.entries(message.reactions) : [];
+
+    // --- System Message for Calls ---
+    if (message.type === 'video_call' || message.type === 'missed_call') {
+        const isMissed = message.type === 'missed_call';
+        const Icon = isMissed ? PhoneMissed : Video;
+        const text = isSender
+            ? (isMissed ? 'Appel manqué' : 'Appel vidéo sortant')
+            : (isMissed ? 'Appel manqué' : 'Appel vidéo entrant');
+
+        return (
+            <div className="flex justify-center items-center my-2">
+                <div className="text-xs text-muted-foreground bg-secondary px-3 py-1 rounded-full flex items-center gap-2">
+                    <Icon className={cn("h-4 w-4", isSender ? (isMissed ? 'text-red-500' : 'text-primary') : (isMissed ? 'text-red-500' : 'text-green-500'))} />
+                    <span>{text}</span>
+                </div>
+            </div>
+        );
+    }
 
     const renderContent = () => {
         if (message.imageUrl) {
@@ -393,22 +412,25 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     scrollToBottom();
   }, [messages, loadingMessages]);
 
-  const handleSendMessage = useCallback(async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, messageData: Partial<Omit<Message, 'id' | 'senderId' | 'timestamp' | 'reactions'>> = {}) => {
-    if(e) e.preventDefault();
+ const handleSendMessage = useCallback(async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, messageData: Partial<Omit<Message, 'id' | 'senderId' | 'timestamp' | 'reactions'> & { type?: Message['type'] }> = {}) => {
+    if (e) e.preventDefault();
     const text = newMessage.trim();
-    if ((!text && !messageData.imageUrl && !messageData.audioUrl) || !currentUser || !otherUser) return;
+    if ((!text && !messageData.imageUrl && !messageData.audioUrl && messageData.type !== 'video_call' && messageData.type !== 'missed_call') || !currentUser || !otherUser) return;
 
     const chatId = getChatId(currentUser.uid, otherUserId);
     const chatDocRef = doc(db, 'chats', chatId);
     const messagesColRef = collection(chatDocRef, 'messages');
     
-    setNewMessage('');
+    if (messageData.type !== 'video_call' && messageData.type !== 'missed_call') {
+        setNewMessage('');
+    }
 
     try {
         const finalMessageData = {
-            text: text,
+            text: text || messageData.text || '',
             senderId: currentUser.uid,
             timestamp: serverTimestamp(),
+            type: messageData.type || 'text',
             imageUrl: messageData.imageUrl || null,
             audioUrl: messageData.audioUrl || null,
             audioDuration: messageData.audioDuration || null,
@@ -416,15 +438,19 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
       const newDocRef = await addDoc(messagesColRef, finalMessageData);
       
-      let lastMessageText = '📷 Photo';
-      if(finalMessageData.audioUrl) lastMessageText = '🎤 Message vocal';
-      else if(text) lastMessageText = text;
+      let lastMessageText = finalMessageData.text;
+      if(finalMessageData.type === 'video_call') lastMessageText = 'Appel vidéo';
+      else if(finalMessageData.type === 'missed_call') lastMessageText = 'Appel manqué';
+      else if(finalMessageData.imageUrl) lastMessageText = '📷 Photo';
+      else if(finalMessageData.audioUrl) lastMessageText = '🎤 Message vocal';
 
       await setDoc(chatDocRef, { participants: [currentUser.uid, otherUserId], lastMessage: { id: newDocRef.id, text: lastMessageText, senderId: currentUser.uid, timestamp: serverTimestamp(), read: false } }, { merge: true });
     } catch (error) {
       console.error("Erreur lors de l'envoi du message:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
-      setNewMessage(text);
+      if (messageData.type !== 'video_call' && messageData.type !== 'missed_call') {
+          setNewMessage(text);
+      }
     }
   }, [newMessage, currentUser, otherUser, toast]);
 
@@ -533,7 +559,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
     try {
         const chatId = getChatId(currentUser.uid, otherUserId);
         const fileName = `${new Date().getTime()}.webm`;
-        const storageRef = ref(storage, `chat_audio/${chatId}/${fileName}`);
+        const storageRef = ref(storage, `chat_audio/${chatId}/${fileName}`)
         const uploadTask = uploadBytesResumable(storageRef, blob);
         
         await new Promise((resolve, reject) => {
@@ -567,6 +593,8 @@ const takePicture = useCallback(async (source: CameraSource) => {
 
   const handleStartCall = useCallback(async (isVideo: boolean) => {
     if (!currentUser || !otherUser) return;
+
+    // Demander les permissions AVANT de créer le message dans le chat
     const audioOk = await requestMicrophonePermission();
     if (!audioOk) return;
 
@@ -575,10 +603,14 @@ const takePicture = useCallback(async (source: CameraSource) => {
         if (!videoOk) return;
     }
 
+    // Créer le message d'appel dans le chat en PREMIER
+    await handleSendMessage(undefined, { type: 'video_call', text: 'Appel vidéo' });
+
+    // Ensuite, initier l'appel via Agora
     const result = await initiateCall(currentUser.uid, otherUserId, isVideo);
 
     if (result.success && result.channelId) {
-        // --- Début de la logique de notification ---
+        // Envoyer la notification push APRES avoir initié l'appel
         try {
             const chatId = getChatId(currentUser.uid, otherUserId);
             await addDoc(collection(db, `users/${otherUserId}/notifications`), {
@@ -593,19 +625,31 @@ const takePicture = useCallback(async (source: CameraSource) => {
             });
         } catch (error) {
             console.error('[Call Notification Error]', error);
-            // Ne pas bloquer l'appel si la notification échoue
         }
-        // --- Fin de la logique de notification ---
 
+        // Finalement, naviguer vers la page d'appel
         router.push(`/call/${result.channelId}`);
+
     } else {
+        // En cas d'erreur avec Agora, on pourrait envisager de supprimer le message d'appel
+        // ou de le mettre à jour pour indiquer une erreur. Pour l'instant, on notifie l'utilisateur.
         toast({
             title: "Erreur lors du lancement de l'appel",
             description: result.error ?? "Une erreur inconnue est survenue.",
             variant: "destructive"
         });
     }
-}, [requestMicrophonePermission, requestCameraPermission, currentUser, otherUserId, router, toast, otherUser]);
+}, [
+    requestMicrophonePermission, 
+    requestCameraPermission, 
+    currentUser, 
+    otherUserId, 
+    router, 
+    toast, 
+    otherUser, 
+    handleSendMessage, // Ajout de handleSendMessage comme dépendance
+    initiateCall       // Ajout de initiateCall comme dépendance
+]);
 
 
   const handleStartRecording = useCallback(async () => {
@@ -616,6 +660,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
   }, [requestMicrophonePermission]);
   
   const handleMessageLongPress = useCallback((message: Message) => {
+    if (message.type && (message.type === 'video_call' || message.type === 'missed_call')) return;
     setShowReactionPopoverFor(message.id);
   }, []);
 
