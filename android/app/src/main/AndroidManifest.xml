@@ -2,7 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.wanderlink.app">
 
-    <!-- Permission obligatoire pour afficher les notifications sur Android 13+ -->
+    <!-- Permissions pour l'écran de verrouillage et les notifications -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
@@ -39,7 +41,16 @@
             </intent-filter>
 
         </activity>
-
+        
+        <!-- DÉCLARATION DE NOTRE NOUVELLE ACTIVITÉ D'APPEL -->
+        <activity
+            android:name=".CallActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.AppCompat.NoActionBar"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true" />
+            
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -49,6 +60,12 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Service pour les appels en avant-plan -->
+        <service android:name=".CallForegroundService" android:foregroundServiceType="camera|microphone"/>
+
+        <!-- Broadcast Receiver pour les actions de notification -->
+        <receiver android:name=".CallNotificationActionReceiver" android:enabled="true" android:exported="false"/>
 
     </application>
 

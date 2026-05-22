@@ -6,6 +6,7 @@ import android.app.NotificationManager;
 import android.os.Build;
 
 import com.getcapacitor.BridgeActivity;
+import java.util.ArrayList;
 
 public class MainActivity extends BridgeActivity {
     @Override
@@ -24,5 +25,11 @@ public class MainActivity extends BridgeActivity {
                 manager.createNotificationChannel(channel);
             }
         }
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        registerPlugin(CallKitPlugin.class);
     }
 }

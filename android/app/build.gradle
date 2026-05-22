@@ -34,6 +34,8 @@ repositories {
     flatDir{
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
     }
+    // Ajout de MavenCentral pour les nouvelles dépendances
+    mavenCentral()
 }
 
 dependencies {
@@ -53,6 +55,10 @@ dependencies {
     // Dépendance pour Firebase Cloud Messaging (Nécessaire pour les notifications)
     implementation 'com.google.firebase:firebase-messaging'
     implementation 'com.google.firebase:firebase-analytics'
+
+    // Ajout de la dépendance pour CircleImageView
+    implementation 'de.hdodenhof:circleimageview:3.1.0'
+    implementation 'com.google.android.material:material:1.5.0'
 }
 
 apply from: 'capacitor.build.gradle'
