@@ -18,7 +18,7 @@
             android:id="@+id/callerPhotoImageView"
             android:layout_width="120dp"
             android:layout_height="120dp"
-            android:src="@drawable/ic_notification"
+            android:src="@android:drawable/ic_menu_myplaces" 
             app:civ_border_color="#FFFFFF"
             app:civ_border_width="2dp" />
 
