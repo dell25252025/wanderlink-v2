@@ -167,7 +167,7 @@ export default function DiscoverPage() {
               strictSearchOptions.aroundRadius = 50000; // 50km
             }
     
-            console.log('[Algolia] Strict filters:', strictSearchOptions);
+            console.log('[Algolia] Strict filters query: ' + JSON.stringify(strictSearchOptions, null, 2));
             let { hits } = await index.search('', strictSearchOptions);
             console.log(`[Algolia] Phase 1 (Strict) results: ${hits.length}`);
     
@@ -191,7 +191,7 @@ export default function DiscoverPage() {
                     numericFilters: fallbackNumericFilters.join(' AND '),
                 };
                 
-                console.log('[Algolia] Fallback filters:', fallbackSearchOptions);
+                console.log('[Algolia] Fallback filters query: ' + JSON.stringify(fallbackSearchOptions, null, 2));
                 const fallbackResults = await index.search('', fallbackSearchOptions);
                 hits = fallbackResults.hits; // Re-assign hits from the fallback result
                 console.log(`[Algolia] Phase 2 (Fallback) results: ${hits.length}`);
