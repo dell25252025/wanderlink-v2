@@ -142,76 +142,65 @@ export default function DiscoverPage() {
         setIsSearching(true);
     
         try {
-            // PHASE 1: Recherche stricte
-            let filters = [];
-            if (showMe) filters.push(`gender:"${showMe}"`);
-            if (country && !nearby) filters.push(`location:"${country}"`);
-            filters.push(`NOT objectID:${currentUser.uid}`);
+            // --- PHASE 1: Strict Search ---
+            const strictFilters: string[] = [];
+            if (showMe) strictFilters.push(`gender:"${showMe}"`);
+            if (country && !nearby) strictFilters.push(`location:"${country}"`);
+            if (destination && destination !== 'Toutes') strictFilters.push(`destination:"${destination}"`);
+            if (intention) strictFilters.push(`intention:"${intention}"`);
+            if (travelStyle && travelStyle !== 'Tous') strictFilters.push(`travelStyle:"${travelStyle}"`);
+            if (activities && activities !== 'Toutes') strictFilters.push(`activities:"${activities}"`);
+            strictFilters.push(`NOT objectID:${currentUser.uid}`);
     
-            let numericFilters = [
+            const numericFilters = [
                 `age >= ${ageRange[0]}`,
                 `age <= ${ageRange[1]}`,
             ];
     
-            let searchOptions: any = {
-                filters: filters.join(' AND '),
+            const strictSearchOptions: any = {
+                filters: strictFilters.join(' AND '),
                 numericFilters: numericFilters.join(' AND '),
             };
 
             if (nearby && userProfile.latitude && userProfile.longitude) {
-              searchOptions.aroundLatLng = `${userProfile.latitude}, ${userProfile.longitude}`;
-              searchOptions.aroundRadius = 50000; // 50km
+              strictSearchOptions.aroundLatLng = `${userProfile.latitude}, ${userProfile.longitude}`;
+              strictSearchOptions.aroundRadius = 50000; // 50km
             }
     
-            console.log("🔍 Algolia search – Phase 1 (strict)", {
-                filters: searchOptions.filters,
-                numericFilters: searchOptions.numericFilters,
-            });
+            console.log('[Algolia] Strict filters:', strictSearchOptions);
+            let { hits } = await index.search('', strictSearchOptions);
+            console.log(`[Algolia] Phase 1 (Strict) results: ${hits.length}`);
     
-            let results = await index.search('', searchOptions);
-            console.log("📦 Phase 1 results:", results.hits.length);
+            // --- PHASE 2: Fallback Search (if no strict results) ---
+            if (hits.length === 0) {
+                console.warn("⚠️ No results found with strict filters – applying fallback strategy.");
     
-            // PHASE 2: Fallback (âge élargi) si 0 résultat
-            if (results.hits.length === 0) {
-                console.warn("⚠️ No results found – applying fallback strategy");
+                // Fallback MUST keep gender and age. Other filters are dropped.
+                const fallbackFiltersList: string[] = [];
+                if (showMe) fallbackFiltersList.push(`gender:"${showMe}"`); // KEEP GENDER
+                fallbackFiltersList.push(`NOT objectID:${currentUser.uid}`);
     
-                const expandedAgeMin = Math.max(18, ageRange[0] - 5);
-                const expandedAgeMax = Math.min(99, ageRange[1] + 5);
-                
-                numericFilters = [
-                  `age >= ${expandedAgeMin}`,
-                  `age <= ${expandedAgeMax}`,
+                // KEEP ORIGINAL AGE RANGE
+                const fallbackNumericFilters = [
+                    `age >= ${ageRange[0]}`,
+                    `age <= ${ageRange[1]}`,
                 ];
     
-                searchOptions = {
-                    filters: `NOT objectID:${currentUser.uid}`,
-                    numericFilters: numericFilters.join(' AND '),
+                const fallbackSearchOptions: any = {
+                    filters: fallbackFiltersList.join(' AND '),
+                    numericFilters: fallbackNumericFilters.join(' AND '),
                 };
-                 if (nearby && userProfile.latitude && userProfile.longitude) {
-                    searchOptions.aroundLatLng = `${userProfile.latitude}, ${userProfile.longitude}`;
-                    searchOptions.aroundRadius = 50000;
-                }
-    
-                console.log("🔍 Algolia search – Phase 2 (expanded age)", {
-                    numericFilters: searchOptions.numericFilters,
-                });
-    
-                results = await index.search('', searchOptions);
-                console.log("📦 Phase 2 results:", results.hits.length);
+                
+                console.log('[Algolia] Fallback filters:', fallbackSearchOptions);
+                const fallbackResults = await index.search('', fallbackSearchOptions);
+                hits = fallbackResults.hits; // Re-assign hits from the fallback result
+                console.log(`[Algolia] Phase 2 (Fallback) results: ${hits.length}`);
             }
     
-            // PHASE 3: Dernier recours (tout retourner) si toujours 0 résultat
-            if (results.hits.length === 0) {
-                console.warn("🆘 No results after fallback – returning all profiles");
-                searchOptions = {
-                    filters: `NOT objectID:${currentUser.uid}`,
-                };
-                results = await index.search('', searchOptions);
-            }
+            // Phase 3 (last resort) is removed. If hits is empty, it remains empty.
+            console.log('[Algolia] Final results:', hits.length);
     
-            console.log("✅ Final Algolia results returned:", results.hits.length);
-    
-            const searchResults = results.hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined }));
+            const searchResults = hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined }));
             localStorage.setItem('searchResults', JSON.stringify(searchResults));
             router.push('/');
     
@@ -305,7 +294,7 @@ export default function DiscoverPage() {
                                 <Separator />
                                 <div className="flex items-center justify-between py-1 px-1 text-sm">
                                     <span className='text-muted-foreground'>Activités</span>
-                                    <GenericSelect className={uniformSelectClass} value={activities} onValue-change={setActivities} options={travelActivities} placeholder="Toutes" />
+                                    <GenericSelect className={uniformSelectClass} value={activities} onValueChange={setActivities} options={travelActivities} placeholder="Toutes" />
                                 </div>
                             </div>
                         </div>
