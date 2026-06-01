@@ -9,6 +9,7 @@ export const useUserPresence = () => {
   const { user } = useAuth();
 
   useEffect(() => {
+    console.log('[Presence] Hook initialized'); // AI-ADDED LOG
     const uid = user?.uid;
     if (!uid) return;
 
