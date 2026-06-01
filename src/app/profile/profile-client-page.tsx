@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { addProfilePicture, removeProfilePicture, addFriend, removeFriend, signOutFromGoogle } from '@/lib/firebase-actions';
+import { getUserProfile, addProfilePicture, removeProfilePicture, addFriend, removeFriend, signOutFromGoogle } from '@/lib/firebase-actions';
 import { type DocumentData, addDoc, collection, serverTimestamp, query, where, getDocs, onSnapshot, updateDoc, Timestamp, orderBy, limit, doc } from 'firebase/firestore';
 import { Loader2, Plane, MapPin, Languages, Backpack, Cigarette, Wine, Calendar, Camera, Trash2, PlusCircle, LogOut, Edit, Ruler, Scale, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, X, Sparkles, BriefcaseBusiness, Coins, Users, MoreVertical, ShieldAlert, Ban, Send, UserPlus, Heart, UserCheck, UserX, CheckCircle, ShieldCheck, History } from 'lucide-react';
 import Image from 'next/image';
@@ -885,7 +885,7 @@ export default function ProfileClientPage() {
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-2">
-                                    <Backpack className="h-4 w-4 md:h-4 md:w-4 text-primary mt-0.5" />
+                                    <Backpack className="h-4 w-4 md:h-4 md-w-4 text-primary mt-0.5" />
                                     <div>
                                         <p className="font-semibold text-xs md:text-xs">Style de voyage</p>
                                         <p className="text-muted-foreground text-sm md:text-sm flex items-center gap-2">
