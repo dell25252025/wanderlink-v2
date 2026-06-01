@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import { countries } from '@/lib/countries';
 import { travelIntentions, travelStyles, travelActivities } from '@/lib/options';
 import { useProfileVisitNotification } from '@/hooks/useProfileVisitNotification';
+import { formatDistanceToNow, fromUnixTime } from 'date-fns';
 
 const CannabisIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -646,6 +647,19 @@ export default function ProfileClientPage() {
   const travelActivityOption = travelActivities.find(a => a.value === profile.activities);
   const intention = profile.intention ? intentionMap[profile.intention] : null;
 
+  const isOnline = profile.online;
+  const lastSeenTimestamp = profile.lastSeen;
+  let lastSeenText = '';
+  if (!isOnline && lastSeenTimestamp) {
+    try {
+      const lastSeenDate = fromUnixTime(lastSeenTimestamp.seconds);
+      lastSeenText = `Vu ${formatDistanceToNow(lastSeenDate, { addSuffix: true, locale: fr })}`;
+    } catch (e) {
+      console.error("Erreur de formatage de la date lastSeen:", e);
+      lastSeenText = 'Vu récemment';
+    }
+  }
+
   return (
     <div className="flex min-h-screen w-full flex-col bg-secondary/30">
         <header className="fixed top-0 left-0 z-30 w-full p-2">
@@ -723,6 +737,19 @@ export default function ProfileClientPage() {
                                 {profile.isVerified && <CheckCircle className="h-5 w-5 text-blue-500 shrink-0" />}
                             </div>
                             <div className="flex items-center gap-2 mt-1 text-sm md:text-sm text-muted-foreground">
+                                {isOnline ? (
+                                    <>
+                                        <div className="h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse" />
+                                        <span>En ligne</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="h-2.5 w-2.5 rounded-full bg-gray-400" />
+                                        <span>{lastSeenText || 'Hors ligne'}</span>
+                                    </>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-2 text-sm md:text-sm text-muted-foreground">
                                 <MapPin className="h-4 w-4 md:h-4 md:w-4" />
                                 {locationCountry && <span className={`fi fi-${locationCountry.code.toLowerCase()} mr-1`}></span>}
                                 <span>{profile.location}</span>
