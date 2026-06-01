@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { getUserProfile, addProfilePicture, removeProfilePicture, addFriend, removeFriend, signOutFromGoogle } from '@/lib/firebase-actions';
-import { type DocumentData, addDoc, collection, serverTimestamp, query, where, getDocs, onSnapshot, updateDoc, Timestamp, orderBy, limit } from 'firebase/firestore';
+import { addProfilePicture, removeProfilePicture, addFriend, removeFriend, signOutFromGoogle } from '@/lib/firebase-actions';
+import { type DocumentData, addDoc, collection, serverTimestamp, query, where, getDocs, onSnapshot, updateDoc, Timestamp, orderBy, limit, doc } from 'firebase/firestore';
 import { Loader2, Plane, MapPin, Languages, Backpack, Cigarette, Wine, Calendar, Camera, Trash2, PlusCircle, LogOut, Edit, Ruler, Scale, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, X, Sparkles, BriefcaseBusiness, Coins, Users, MoreVertical, ShieldAlert, Ban, Send, UserPlus, Heart, UserCheck, UserX, CheckCircle, ShieldCheck, History } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
@@ -322,23 +322,32 @@ export default function ProfileClientPage() {
 
   useEffect(() => {
     if (profileId) {
-      const fetchProfile = async () => {
-        setLoading(true);
-        try {
-          const profileData = await getUserProfile(profileId as string);
-          setProfile(profileData);
-        } catch (error) {
-          console.error("Failed to fetch profile:", error);
+      setLoading(true);
+      const docRef = doc(db, "users", profileId as string);
+      const unsubscribe = onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) {
+          setProfile(docSnap.data());
+        } else {
+          console.error("No such document!");
           toast({
             variant: "destructive",
-            title: "Erreur de chargement",
-            description: "Impossible de récupérer les informations du profil."
-          })
-        } finally {
-          setLoading(false);
+            title: "Profil non trouvé",
+            description: "Impossible de récupérer les informations de ce profil."
+          });
+          setProfile(null);
         }
-      };
-      fetchProfile();
+        setLoading(false);
+      }, (error) => {
+        console.error("Failed to fetch profile with real-time listener:", error);
+        toast({
+          variant: "destructive",
+          title: "Erreur de chargement",
+          description: "Impossible de récupérer les informations du profil en temps réel."
+        });
+        setLoading(false);
+      });
+
+      return () => unsubscribe(); // Cleanup listener on component unmount
     }
   }, [profileId, toast]);
 
