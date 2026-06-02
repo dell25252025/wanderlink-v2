@@ -16,7 +16,7 @@ import OnboardingOverlay from '@/components/OnboardingOverlay';
 import NotificationHandler from '@/components/notification-handler';
 import { NavigationProvider } from '@/context/navigation-context';
 import NavigationExecutor from '@/components/navigation-executor';
-import { UserPresenceHandler } from '@/components/user-presence-handler'; // Import the new component
+
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -66,7 +66,6 @@ export default function RootLayout({
           }}
         />
         <AuthProvider>
-          <UserPresenceHandler /> {/* <-- Add the handler here */}
           <OnboardingProvider>
             <NotificationProvider>
               <NavigationProvider>
