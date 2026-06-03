@@ -46,7 +46,9 @@ async function handleUser(user: any) {
       isPremium: false,
       subscriptionEndDate: null,
       isVerified: false,
-      onboardingCompleted: false // ETAPE 1: Initialisation du champ
+      onboardingCompleted: false, // ETAPE 1: Initialisation du champ
+      isOnline: true, // Ajout du champ isOnline
+      lastSeen: serverTimestamp(), // Ajout du champ lastSeen
     };
     await setDoc(userRef, sanitizeData(newProfileData));
 
@@ -62,6 +64,13 @@ async function handleUser(user: any) {
     };
   } else {
     const data = userDoc.data();
+    // Vérifier et mettre à jour si les champs de présence manquent
+    if (data.isOnline === undefined || data.lastSeen === undefined) {
+        await updateDoc(userRef, {
+            isOnline: true,
+            lastSeen: serverTimestamp(),
+        });
+    }
     return { 
         success: true, 
         id: user.uid, 
