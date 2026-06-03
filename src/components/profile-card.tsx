@@ -62,6 +62,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, isFriend, onAddFrien
         <div className="mt-1">
           <Link href={`/profile?id=${profile.id}`} passHref>
             <h3 className="font-bold text-sm md:text-lg drop-shadow-md flex items-center gap-1 md:gap-1.5 cursor-pointer">
+              {profile.isOnline && <div className="h-2 w-2 rounded-full bg-green-500 shrink-0" />}
               {profile.name}, {profile.age}
               {profile.isVerified && <CheckCircle className="h-3 w-3 md:h-4 md:w-4 text-blue-400" fill="white" />}
             </h3>
