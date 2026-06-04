@@ -26,6 +26,7 @@ const intentionMap: { [key: string]: { icon: React.ElementType, color: string, t
 };
 
 const ProfileCard: React.FC<ProfileCardProps> = ({ profile, isFriend, onAddFriend, currentUserId, isAddingFriend }) => {
+  console.log("PROFILE CARD DATA:", JSON.stringify(profile));
   const intentionValue = profile.travelIntention || '50/50';
   const intention = intentionMap[intentionValue];
 
