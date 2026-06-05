@@ -18,60 +18,57 @@ interface DiscoverClientPageProps {
 }
 
 export default function DiscoverClientPage({ initialProfiles: serverProfiles, loading, currentUserProfile }: DiscoverClientPageProps) {
-  const [profiles, setProfiles] = useState<DocumentData[]>([]);
+  // 1. Initialize state with server profiles to prevent hydration errors.
+  const [profiles, setProfiles] = useState<DocumentData[]>(serverProfiles);
   const [friends, setFriends] = useState<string[]>([]);
   const [isAddingFriend, setIsAddingFriend] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const { toast } = useToast();
-  
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-    });
-    return () => unsubscribe();
-  }, []);
 
+  // 2. On client-side mount, check for saved search results and overwrite server data if found.
   useEffect(() => {
-    let activeProfiles = serverProfiles;
-
-    // 1. Check for search results in localStorage
     const savedResultsRaw = localStorage.getItem('searchResults');
     if (savedResultsRaw) {
       try {
         const savedResults = JSON.parse(savedResultsRaw);
         if (Array.isArray(savedResults) && savedResults.length > 0) {
-          console.log("Displaying profiles from saved search results.");
-          activeProfiles = savedResults;
+          console.log("Client Hydration: Found and applying saved search results.");
+          setProfiles(savedResults);
         }
       } catch (e) {
         console.error("Failed to parse saved search results:", e);
-        // On error, fall back to server profiles
       }
     }
+  }, []); // <-- Empty dependency array ensures this runs ONLY ONCE on the client.
 
-    // Set profiles (either from localStorage or server)
-    const initialData = activeProfiles.map(p => ({ ...p, isOnline: false }));
-    setProfiles(initialData);
-
-    // Enrich with online status regardless of the source
-    if (initialData.length > 0) {
-      const uids = initialData.map(p => p.uid || p.objectID).filter(Boolean);
-      getUsersOnlineStatus(uids).then(onlineStatuses => {
-        setProfiles(currentProfiles => 
-          currentProfiles.map(p => ({
-            ...p,
-            isOnline: onlineStatuses[p.uid || p.objectID] || false,
-          }))
-        );
-      });
-    }
-  }, [serverProfiles]);
-
+  // 3. This effect now runs whenever the profiles state is updated (from server OR localStorage)
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+    });
+
     if (currentUserProfile && currentUserProfile.friends) {
       setFriends(currentUserProfile.friends);
     }
-  }, [currentUserProfile]);
+
+    // Only proceed if there are profiles to process
+    if (profiles.length > 0) {
+        // Check if online status is already present to avoid re-fetching
+        if (profiles[0].isOnline !== undefined) return;
+
+        const uids = profiles.map(p => p.uid || p.objectID).filter(Boolean);
+        getUsersOnlineStatus(uids).then(onlineStatuses => {
+            setProfiles(currentProfiles => 
+              currentProfiles.map(p => ({
+                ...p,
+                isOnline: onlineStatuses[p.uid || p.objectID] || false,
+              }))
+            );
+        });
+    }
+
+    return () => unsubscribe();
+  }, [profiles, currentUserProfile]);
 
   const handleAddFriend = async (friendId: string) => {
     if (!currentUser) {
@@ -126,7 +123,7 @@ export default function DiscoverClientPage({ initialProfiles: serverProfiles, lo
       <div className="flex min-h-[calc(100vh-200px)] flex-col items-center justify-center text-center px-4">
         <UserX className="h-16 w-16 text-muted-foreground" />
         <h2 className="mt-6 text-2xl font-bold">Aucun résultat</h2>
-        <p className="mt-2 text-muted-foreground">Essayez d'élargir vos critères de recherche ou de naviguer vers la page de recherche.</p>
+        <p className="mt-2 text-muted-foreground">Lancez une recherche pour découvrir de nouveaux profils !</p>
       </div>
     );
   }

@@ -31,7 +31,6 @@ declare global {
     }
 }
 
-// --- STABLE SINGLETON PATTERN --- //
 let usersIndexSingleton: ReturnType<ReturnType<typeof algoliasearch>['initIndex']> | null = null;
 
 async function getUsersIndex(): Promise<ReturnType<ReturnType<typeof algoliasearch>['initIndex']> | null> {
@@ -70,7 +69,6 @@ export default function DiscoverPage() {
     const [loading, setLoading] = useState(true);
     const [isSearching, setIsSearching] = useState(false);
 
-    // States for filters
     const [showMe, setShowMe] = useState('Femme');
     const [ageRange, setAgeRange] = useState<[number, number]>([25, 45]);
     const [date, setDate] = useState<DateRange | undefined>();
@@ -82,7 +80,6 @@ export default function DiscoverPage() {
     const [travelStyle, setTravelStyle] = useState('Tous');
     const [activities, setActivities] = useState('Toutes');
 
-    // 1. SAVE FILTERS to localStorage
     const saveFilters = useCallback(() => {
         const filters = {
             showMe, ageRange, date: date ? { from: date.from?.toISOString(), to: date.to?.toISOString() } : undefined, 
@@ -91,8 +88,10 @@ export default function DiscoverPage() {
         localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
     }, [showMe, ageRange, date, flexibleDates, nearby, country, destination, intention, travelStyle, activities]);
 
-    // 2. LOAD FILTERS from localStorage on initial render
     useEffect(() => {
+        // 1. Clear previous search results when entering the filter page.
+        localStorage.removeItem('searchResults');
+
         const savedFiltersRaw = localStorage.getItem(FILTERS_STORAGE_KEY);
         if (savedFiltersRaw) {
             try {
@@ -128,7 +127,6 @@ export default function DiscoverPage() {
             if (user) {
                 getUserProfile(user.uid).then(profile => {
                     setUserProfile(profile);
-                    // Preference logic is now separated from loading saved filters
                     if (!localStorage.getItem(FILTERS_STORAGE_KEY) && profile) {
                         if (profile.gender === 'Femme') setShowMe('Homme');
                         else if (profile.gender === 'Autre') setShowMe('Autre');
@@ -161,7 +159,6 @@ export default function DiscoverPage() {
             return;
         }
         
-        // 3. SAVE before searching
         saveFilters();
         setIsSearching(true);
 
@@ -184,7 +181,7 @@ export default function DiscoverPage() {
 
             if (nearby && userProfile.latitude && userProfile.longitude) {
               strictSearchOptions.aroundLatLng = `${userProfile.latitude}, ${userProfile.longitude}`;
-              strictSearchOptions.aroundRadius = 50000; // 50km
+              strictSearchOptions.aroundRadius = 50000;
             }
     
             console.log('[Algolia] Strict filters query: ' + JSON.stringify(strictSearchOptions, null, 2));
