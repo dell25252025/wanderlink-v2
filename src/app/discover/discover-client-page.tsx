@@ -12,38 +12,41 @@ import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 
 interface DiscoverClientPageProps {
-  initialProfiles: DocumentData[]; // These are now ALWAYS the default profiles from the server
+  initialProfiles: DocumentData[]; // Default profiles from the server
   loading: boolean;
   currentUserProfile: DocumentData | null;
 }
 
-export default function DiscoverClientPage({ initialProfiles, loading, currentUserProfile }: DiscoverClientPageProps) {
-  const [profiles, setProfiles] = useState<DocumentData[]>(initialProfiles);
-  const [hasAppliedSavedSearch, setHasAppliedSavedSearch] = useState(false);
+export default function DiscoverClientPage({ initialProfiles, loading: initialLoading, currentUserProfile }: DiscoverClientPageProps) {
+  const [profiles, setProfiles] = useState<DocumentData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [friends, setFriends] = useState<string[]>([]);
   const [isAddingFriend, setIsAddingFriend] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const { toast } = useToast();
 
-  // Effect to apply saved search results from localStorage ONCE
+  // This is the core logic. It runs ONCE on the client to decide what to display.
   useEffect(() => {
     const savedResultsRaw = localStorage.getItem('searchResults');
     if (savedResultsRaw) {
+      console.log("Found saved search results in localStorage. Displaying them.");
       try {
         const savedResults = JSON.parse(savedResultsRaw);
-        // We use a flag to ensure this logic only runs once.
         setProfiles(savedResults);
-        setHasAppliedSavedSearch(true); // Mark that we have used the saved search
       } catch (e) {
-        console.error("Failed to parse saved search results:", e);
-        // If parsing fails, we stick with the initial profiles from the server.
+        console.error("Failed to parse saved search results, using initial profiles:", e);
+        setProfiles(initialProfiles);
       }
+    } else {
+      console.log("No saved search results found. Displaying initial profiles from server.");
+      setProfiles(initialProfiles);
     }
-  }, []); // Empty dependency array ensures this runs only once on client mount.
+    setIsLoading(false);
+  }, [initialProfiles]); // Dependency ensures we react if the initial profiles from the parent change
 
-  // Effect for handling authentication and online status
+  // Effect for handling authentication and enriching profiles with online status
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const authUnsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
     });
 
@@ -51,6 +54,7 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
       setFriends(currentUserProfile.friends);
     }
 
+    // Do not fetch online status if there are no profiles to show
     if (profiles.length > 0) {
       const uids = profiles.map(p => p.uid || p.objectID).filter(Boolean);
       getUsersOnlineStatus(uids).then(onlineStatuses => {
@@ -60,8 +64,8 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
       });
     }
     
-    return () => unsubscribe();
-  }, [profiles, currentUserProfile]);
+    return () => authUnsubscribe();
+  }, [currentUserProfile, profiles]);
 
   const handleAddFriend = async (friendId: string) => {
     if (!currentUser) {
@@ -101,7 +105,7 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
     image: p.profilePictures?.[0] || `https://picsum.photos/seed/${p.uid || p.objectID}/800/1200`
   }));
 
-  if (loading && !hasAppliedSavedSearch) {
+  if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center text-center h-96">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -110,13 +114,12 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
     );
   }
 
-  // This now correctly shows "No results" if a search was performed and yielded 0 hits.
   if (profiles.length === 0) {
     return (
       <div className="flex min-h-[calc(100vh-200px)] flex-col items-center justify-center text-center px-4">
         <UserX className="h-16 w-16 text-muted-foreground" />
         <h2 className="mt-6 text-2xl font-bold">Aucun résultat</h2>
-        <p className="mt-2 text-muted-foreground">Essayez d'élargir vos critères de recherche ou de lancer une nouvelle recherche.</p>
+        <p className="mt-2 text-muted-foreground">Essayez d'élargir vos critères de recherche.</p>
       </div>
     );
   }
