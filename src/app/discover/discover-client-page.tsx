@@ -76,6 +76,7 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
     travelIntention: p.intention || '50/50',
     verified: p.isVerified ?? false,
     isVerified: p.isVerified ?? false,
+    isOnline: p.isOnline ?? false, // Ajout du champ manquant
     image: p.profilePictures?.[0] || `https://picsum.photos/seed/${p.uid || p.objectID}/800/1200`
   }));
 
