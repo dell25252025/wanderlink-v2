@@ -17,13 +17,13 @@ interface DiscoverClientPageProps {
   currentUserProfile: DocumentData | null;
 }
 
-export default function DiscoverClientPage({ initialProfiles, loading, currentUserProfile }: DiscoverClientPageProps) {
-  const [profiles, setProfiles] = useState<DocumentData[]>(initialProfiles);
+export default function DiscoverClientPage({ initialProfiles: serverProfiles, loading, currentUserProfile }: DiscoverClientPageProps) {
+  const [profiles, setProfiles] = useState<DocumentData[]>([]);
   const [friends, setFriends] = useState<string[]>([]);
   const [isAddingFriend, setIsAddingFriend] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const { toast } = useToast();
-
+  
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
@@ -32,13 +32,30 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
   }, []);
 
   useEffect(() => {
-    // Affiche immédiatement les profils d'Algolia
-    setProfiles(initialProfiles.map(p => ({ ...p, isOnline: false })));
+    let activeProfiles = serverProfiles;
 
-    // Puis, enrichit avec le statut en ligne
-    if (initialProfiles.length > 0) {
-      const uids = initialProfiles.map(p => p.uid || p.objectID).filter(Boolean);
-      
+    // 1. Check for search results in localStorage
+    const savedResultsRaw = localStorage.getItem('searchResults');
+    if (savedResultsRaw) {
+      try {
+        const savedResults = JSON.parse(savedResultsRaw);
+        if (Array.isArray(savedResults) && savedResults.length > 0) {
+          console.log("Displaying profiles from saved search results.");
+          activeProfiles = savedResults;
+        }
+      } catch (e) {
+        console.error("Failed to parse saved search results:", e);
+        // On error, fall back to server profiles
+      }
+    }
+
+    // Set profiles (either from localStorage or server)
+    const initialData = activeProfiles.map(p => ({ ...p, isOnline: false }));
+    setProfiles(initialData);
+
+    // Enrich with online status regardless of the source
+    if (initialData.length > 0) {
+      const uids = initialData.map(p => p.uid || p.objectID).filter(Boolean);
       getUsersOnlineStatus(uids).then(onlineStatuses => {
         setProfiles(currentProfiles => 
           currentProfiles.map(p => ({
@@ -48,7 +65,7 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
         );
       });
     }
-  }, [initialProfiles]);
+  }, [serverProfiles]);
 
   useEffect(() => {
     if (currentUserProfile && currentUserProfile.friends) {
@@ -95,8 +112,7 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
     image: p.profilePictures?.[0] || `https://picsum.photos/seed/${p.uid || p.objectID}/800/1200`
   }));
 
-  // Condition d'affichage modifiée
-  if (loading) {
+  if (loading && profiles.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center text-center h-96">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -105,12 +121,12 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
     );
   }
 
-  if (initialProfiles.length === 0 && !loading) {
+  if (profiles.length === 0 && !loading) {
     return (
       <div className="flex min-h-[calc(100vh-200px)] flex-col items-center justify-center text-center px-4">
         <UserX className="h-16 w-16 text-muted-foreground" />
         <h2 className="mt-6 text-2xl font-bold">Aucun résultat</h2>
-        <p className="mt-2 text-muted-foreground">Essayez d'élargir vos critères de recherche.</p>
+        <p className="mt-2 text-muted-foreground">Essayez d'élargir vos critères de recherche ou de naviguer vers la page de recherche.</p>
       </div>
     );
   }
