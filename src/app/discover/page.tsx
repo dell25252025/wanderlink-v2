@@ -1,9 +1,8 @@
 
 "use client";
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-// IMPORTANT: The Algolia script is loaded via CDN. This is just for type safety.
 import type algoliasearch from 'algoliasearch/lite';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -36,11 +35,7 @@ declare global {
 let usersIndexSingleton: ReturnType<ReturnType<typeof algoliasearch>['initIndex']> | null = null;
 
 async function getUsersIndex(): Promise<ReturnType<ReturnType<typeof algoliasearch>['initIndex']> | null> {
-  if (usersIndexSingleton) {
-    return usersIndexSingleton;
-  }
-
-  // Wait for the Algolia script to be loaded
+  if (usersIndexSingleton) return usersIndexSingleton;
   if (typeof window !== 'undefined' && !window.algoliasearch) {
     await new Promise<void>((resolve) => {
       const interval = setInterval(() => {
@@ -48,28 +43,25 @@ async function getUsersIndex(): Promise<ReturnType<ReturnType<typeof algoliasear
           clearInterval(interval);
           resolve();
         }
-      }, 100); // Check every 100ms
+      }, 100);
     });
   }
-
   if (typeof window === 'undefined' || !window.algoliasearch) {
       console.error("Algolia script could not be loaded or not in a browser environment.");
       return null;
   }
-
   const appId = process.env.NEXT_PUBLIC_ALGOLIA_APP_ID || window.__ALGOLIA_APP_ID__;
   const searchKey = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY || window.__ALGOLIA_SEARCH_KEY__;
-
   if (!appId || !searchKey) {
     console.error("Algolia keys are missing.");
     return null;
   }
-
   const client = window.algoliasearch(appId, searchKey);
   usersIndexSingleton = client.initIndex("users");
-
   return usersIndexSingleton;
 }
+
+const FILTERS_STORAGE_KEY = 'discoverFilters';
 
 export default function DiscoverPage() {
     const router = useRouter();
@@ -78,6 +70,7 @@ export default function DiscoverPage() {
     const [loading, setLoading] = useState(true);
     const [isSearching, setIsSearching] = useState(false);
 
+    // States for filters
     const [showMe, setShowMe] = useState('Femme');
     const [ageRange, setAgeRange] = useState<[number, number]>([25, 45]);
     const [date, setDate] = useState<DateRange | undefined>();
@@ -88,6 +81,39 @@ export default function DiscoverPage() {
     const [intention, setIntention] = useState('');
     const [travelStyle, setTravelStyle] = useState('Tous');
     const [activities, setActivities] = useState('Toutes');
+
+    // 1. SAVE FILTERS to localStorage
+    const saveFilters = useCallback(() => {
+        const filters = {
+            showMe, ageRange, date: date ? { from: date.from?.toISOString(), to: date.to?.toISOString() } : undefined, 
+            flexibleDates, nearby, country, destination, intention, travelStyle, activities
+        };
+        localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
+    }, [showMe, ageRange, date, flexibleDates, nearby, country, destination, intention, travelStyle, activities]);
+
+    // 2. LOAD FILTERS from localStorage on initial render
+    useEffect(() => {
+        const savedFiltersRaw = localStorage.getItem(FILTERS_STORAGE_KEY);
+        if (savedFiltersRaw) {
+            try {
+                const savedFilters = JSON.parse(savedFiltersRaw);
+                setShowMe(savedFilters.showMe ?? 'Femme');
+                setAgeRange(savedFilters.ageRange ?? [25, 45]);
+                if (savedFilters.date?.from) {
+                    setDate({ from: new Date(savedFilters.date.from), to: savedFilters.date.to ? new Date(savedFilters.date.to) : undefined });
+                }
+                setFlexibleDates(savedFilters.flexibleDates ?? true);
+                setNearby(savedFilters.nearby ?? true);
+                setCountry(savedFilters.country ?? '');
+                setDestination(savedFilters.destination ?? 'Toutes');
+                setIntention(savedFilters.intention ?? '');
+                setTravelStyle(savedFilters.travelStyle ?? 'Tous');
+                setActivities(savedFilters.activities ?? 'Toutes');
+            } catch (e) {
+                console.error("Failed to parse saved filters:", e);
+            }
+        }
+    }, []);
 
     useEffect(() => {
         if (!document.querySelector('script[src="https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js"]')) {
@@ -102,7 +128,8 @@ export default function DiscoverPage() {
             if (user) {
                 getUserProfile(user.uid).then(profile => {
                     setUserProfile(profile);
-                    if (profile) {
+                    // Preference logic is now separated from loading saved filters
+                    if (!localStorage.getItem(FILTERS_STORAGE_KEY) && profile) {
                         if (profile.gender === 'Femme') setShowMe('Homme');
                         else if (profile.gender === 'Autre') setShowMe('Autre');
                         else setShowMe('Femme');
@@ -114,22 +141,17 @@ export default function DiscoverPage() {
                 router.push('/login');
             }
         });
-
         return () => authUnsubscribe();
     }, [router]);
 
     const handleNearbyChange = (checked: boolean) => {
         setNearby(checked);
-        if (checked) {
-            setCountry('');
-        }
+        if (checked) setCountry('');
     };
 
     const handleFlexibleDatesChange = (checked: boolean) => {
         setFlexibleDates(checked);
-        if (checked) {
-            setDate(undefined);
-        }
+        if (checked) setDate(undefined);
     };
 
     const handleSearch = async () => {
@@ -138,11 +160,12 @@ export default function DiscoverPage() {
             console.error('Search aborted. Index or profile not ready yet.');
             return;
         }
-    
+        
+        // 3. SAVE before searching
+        saveFilters();
         setIsSearching(true);
-    
+
         try {
-            // --- PHASE 1: Strict Search ---
             const strictFilters: string[] = [];
             if (showMe) strictFilters.push(`gender:"${showMe}"`);
             if (country && !nearby) strictFilters.push(`location:"${country}"`);
@@ -152,10 +175,7 @@ export default function DiscoverPage() {
             if (activities && activities !== 'Toutes') strictFilters.push(`activities:"${activities}"`);
             strictFilters.push(`NOT objectID:${currentUser.uid}`);
     
-            const numericFilters = [
-                `age >= ${ageRange[0]}`,
-                `age <= ${ageRange[1]}`,
-            ];
+            const numericFilters = [`age >= ${ageRange[0]}`, `age <= ${ageRange[1]}`];
     
             const strictSearchOptions: any = {
                 filters: strictFilters.join(' AND '),
@@ -171,33 +191,22 @@ export default function DiscoverPage() {
             let { hits } = await index.search('', strictSearchOptions);
             console.log(`[Algolia] Phase 1 (Strict) results: ${hits.length}`);
     
-            // --- PHASE 2: Fallback Search (if no strict results) ---
             if (hits.length === 0) {
                 console.warn("⚠️ No results found with strict filters – applying fallback strategy.");
-    
-                // Fallback MUST keep gender and age. Other filters are dropped.
                 const fallbackFiltersList: string[] = [];
-                if (showMe) fallbackFiltersList.push(`gender:"${showMe}"`); // KEEP GENDER
+                if (showMe) fallbackFiltersList.push(`gender:"${showMe}"`);
                 fallbackFiltersList.push(`NOT objectID:${currentUser.uid}`);
-    
-                // KEEP ORIGINAL AGE RANGE
-                const fallbackNumericFilters = [
-                    `age >= ${ageRange[0]}`,
-                    `age <= ${ageRange[1]}`,
-                ];
-    
+                const fallbackNumericFilters = [`age >= ${ageRange[0]}`, `age <= ${ageRange[1]}`];
                 const fallbackSearchOptions: any = {
                     filters: fallbackFiltersList.join(' AND '),
                     numericFilters: fallbackNumericFilters.join(' AND '),
                 };
-                
                 console.log('[Algolia] Fallback filters query: ' + JSON.stringify(fallbackSearchOptions, null, 2));
                 const fallbackResults = await index.search('', fallbackSearchOptions);
-                hits = fallbackResults.hits; // Re-assign hits from the fallback result
+                hits = fallbackResults.hits;
                 console.log(`[Algolia] Phase 2 (Fallback) results: ${hits.length}`);
             }
     
-            // Phase 3 (last resort) is removed. If hits is empty, it remains empty.
             console.log('[Algolia] Final results:', hits.length);
     
             const searchResults = hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined }));
