@@ -8,6 +8,7 @@ import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storag
 import { v4 as uuidv4 } from 'uuid';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
+import { where } from "firebase/firestore";
 
 
 // --- NOUVELLE FONCTION DE DECONNEXION ---
@@ -487,4 +488,33 @@ export async function getFriends(userId: string) {
     console.error("Error getting friends:", error);
     throw new Error("Failed to retrieve friends list.");
   }
+}
+
+export async function getUsersOnlineStatus(uids: string[]): Promise<Record<string, boolean>> {
+  if (!uids || uids.length === 0) {
+    return {};
+  }
+
+  const statuses: Record<string, boolean> = {};
+  const usersRef = collection(db, "users");
+  
+  // Firestore 'in' query can take up to 30 items at once.
+  // We'll process the UIDs in chunks to be safe.
+  const chunkSize = 30;
+  for (let i = 0; i < uids.length; i += chunkSize) {
+      const chunk = uids.slice(i, i + chunkSize);
+      const q = firestoreQuery(usersRef, where('uid', 'in', chunk));
+      
+      try {
+          const querySnapshot = await getDocs(q);
+          querySnapshot.forEach(doc => {
+              const data = doc.data();
+              statuses[doc.id] = data.isOnline || false;
+          });
+      } catch (error) {
+          console.error("Error fetching user online statuses for chunk:", error);
+      }
+  }
+
+  return statuses;
 }

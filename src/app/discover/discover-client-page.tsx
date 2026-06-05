@@ -6,7 +6,7 @@ import ProfileCard from '@/components/profile-card';
 import { Loader2, UserX } from 'lucide-react';
 import { DocumentData } from 'firebase/firestore';
 import { UserProfile } from '@/lib/schema';
-import { addFriend } from '@/lib/firebase-actions';
+import { addFriend, getUsersOnlineStatus } from '@/lib/firebase-actions'; // 1. IMPORT
 import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -18,7 +18,7 @@ interface DiscoverClientPageProps {
 }
 
 export default function DiscoverClientPage({ initialProfiles, loading, currentUserProfile }: DiscoverClientPageProps) {
-  const [profiles, setProfiles] = useState<DocumentData[]>(initialProfiles);
+  const [profiles, setProfiles] = useState<DocumentData[]>([]); // Initialize as empty
   const [friends, setFriends] = useState<string[]>([]);
   const [isAddingFriend, setIsAddingFriend] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -31,8 +31,21 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
     return () => unsubscribe();
   }, []);
 
+  // 2. USEEFFECT POUR L'ENRICHISSEMENT
   useEffect(() => {
-    setProfiles(initialProfiles);
+    if (initialProfiles.length > 0) {
+      const uids = initialProfiles.map(p => p.uid || p.objectID).filter(Boolean);
+      
+      getUsersOnlineStatus(uids).then(onlineStatuses => {
+        const enrichedProfiles = initialProfiles.map(p => ({
+          ...p,
+          isOnline: onlineStatuses[p.uid || p.objectID] || false, // 3. FUSION
+        }));
+        setProfiles(enrichedProfiles); // 4. MISE À JOUR
+      });
+    } else {
+        setProfiles(initialProfiles);
+    }
   }, [initialProfiles]);
 
   useEffect(() => {
@@ -63,8 +76,9 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
     }
   };
 
+  // 5. SIMPLIFICATION DU MAPPING
   const mappedProfiles: UserProfile[] = profiles.map(p => ({
-    id: p.uid || p.objectID, // Fallback strategy for the ID
+    id: p.uid || p.objectID,
     name: p.firstName,
     age: p.age,
     gender: p.gender,
@@ -76,7 +90,7 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
     travelIntention: p.intention || '50/50',
     verified: p.isVerified ?? false,
     isVerified: p.isVerified ?? false,
-    isOnline: p.isOnline ?? false, // Ajout du champ manquant
+    isOnline: p.isOnline, // Utilise directement la donnée enrichie
     image: p.profilePictures?.[0] || `https://picsum.photos/seed/${p.uid || p.objectID}/800/1200`
   }));
 
