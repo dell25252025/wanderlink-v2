@@ -6,7 +6,7 @@ import ProfileCard from '@/components/profile-card';
 import { Loader2, UserX } from 'lucide-react';
 import { DocumentData } from 'firebase/firestore';
 import { UserProfile } from '@/lib/schema';
-import { addFriend, getUsersOnlineStatus } from '@/lib/firebase-actions'; // 1. IMPORT
+import { addFriend, getUsersOnlineStatus } from '@/lib/firebase-actions';
 import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -18,7 +18,7 @@ interface DiscoverClientPageProps {
 }
 
 export default function DiscoverClientPage({ initialProfiles, loading, currentUserProfile }: DiscoverClientPageProps) {
-  const [profiles, setProfiles] = useState<DocumentData[]>([]); // Initialize as empty
+  const [profiles, setProfiles] = useState<DocumentData[]>(initialProfiles);
   const [friends, setFriends] = useState<string[]>([]);
   const [isAddingFriend, setIsAddingFriend] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -31,20 +31,22 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
     return () => unsubscribe();
   }, []);
 
-  // 2. USEEFFECT POUR L'ENRICHISSEMENT
   useEffect(() => {
+    // Affiche immédiatement les profils d'Algolia
+    setProfiles(initialProfiles.map(p => ({ ...p, isOnline: false })));
+
+    // Puis, enrichit avec le statut en ligne
     if (initialProfiles.length > 0) {
       const uids = initialProfiles.map(p => p.uid || p.objectID).filter(Boolean);
       
       getUsersOnlineStatus(uids).then(onlineStatuses => {
-        const enrichedProfiles = initialProfiles.map(p => ({
-          ...p,
-          isOnline: onlineStatuses[p.uid || p.objectID] || false, // 3. FUSION
-        }));
-        setProfiles(enrichedProfiles); // 4. MISE À JOUR
+        setProfiles(currentProfiles => 
+          currentProfiles.map(p => ({
+            ...p,
+            isOnline: onlineStatuses[p.uid || p.objectID] || false,
+          }))
+        );
       });
-    } else {
-        setProfiles(initialProfiles);
     }
   }, [initialProfiles]);
 
@@ -76,7 +78,6 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
     }
   };
 
-  // 5. SIMPLIFICATION DU MAPPING
   const mappedProfiles: UserProfile[] = profiles.map(p => ({
     id: p.uid || p.objectID,
     name: p.firstName,
@@ -90,10 +91,11 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
     travelIntention: p.intention || '50/50',
     verified: p.isVerified ?? false,
     isVerified: p.isVerified ?? false,
-    isOnline: p.isOnline, // Utilise directement la donnée enrichie
+    isOnline: p.isOnline,
     image: p.profilePictures?.[0] || `https://picsum.photos/seed/${p.uid || p.objectID}/800/1200`
   }));
 
+  // Condition d'affichage modifiée
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center text-center h-96">
@@ -103,7 +105,7 @@ export default function DiscoverClientPage({ initialProfiles, loading, currentUs
     );
   }
 
-  if (profiles.length === 0) {
+  if (initialProfiles.length === 0 && !loading) {
     return (
       <div className="flex min-h-[calc(100vh-200px)] flex-col items-center justify-center text-center px-4">
         <UserX className="h-16 w-16 text-muted-foreground" />
