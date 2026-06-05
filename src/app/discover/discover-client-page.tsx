@@ -25,24 +25,33 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const { toast } = useToast();
 
-  // This is the core logic. It runs ONCE on the client to decide what to display.
+  // CORRIGÉ : Logique de chargement pour éviter le "flash" de contenu
   useEffect(() => {
+    let profilesToSet = initialProfiles;
+    let loadedFromStorage = false;
+
     const savedResultsRaw = localStorage.getItem('searchResults');
     if (savedResultsRaw) {
       console.log("Found saved search results in localStorage. Displaying them.");
       try {
-        const savedResults = JSON.parse(savedResultsRaw);
-        setProfiles(savedResults);
+        profilesToSet = JSON.parse(savedResultsRaw);
+        loadedFromStorage = true;
       } catch (e) {
-        console.error("Failed to parse saved search results, using initial profiles:", e);
-        setProfiles(initialProfiles);
+        console.error("Failed to parse saved search results, falling back to initial profiles:", e);
       }
     } else {
       console.log("No saved search results found. Displaying initial profiles from server.");
-      setProfiles(initialProfiles);
     }
-    setIsLoading(false);
-  }, [initialProfiles]); // Dependency ensures we react if the initial profiles from the parent change
+
+    setProfiles(profilesToSet);
+
+    // On arrête le chargement seulement si :
+    // 1. On a chargé des résultats depuis le localStorage (c'est instantané)
+    // 2. OU le chargement initial du serveur est terminé.
+    if (loadedFromStorage || !initialLoading) {
+      setIsLoading(false);
+    }
+  }, [initialProfiles, initialLoading]); // On réagit au changement des profils initiaux ET à l'état de chargement du serveur
 
   // Effect for handling authentication and enriching profiles with online status
   useEffect(() => {
@@ -54,7 +63,6 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
       setFriends(currentUserProfile.friends);
     }
 
-    // Do not fetch online status if there are no profiles to show
     if (profiles.length > 0) {
       const uids = profiles.map(p => p.uid || p.objectID).filter(Boolean);
       getUsersOnlineStatus(uids).then(onlineStatuses => {
