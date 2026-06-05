@@ -1,55 +1,32 @@
 
-'use client';
-
-import { Suspense, useEffect, useState } from 'react';
-import { onAuthStateChanged, type User } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
-import { useRouter } from 'next/navigation';
+import { Suspense } from 'react';
+import { cookies } from 'next/headers';
 import { Loader2 } from 'lucide-react';
-import { getAllUsers, getUserProfile } from '@/lib/firebase-actions';
+import { getAllUsers, getUserProfile } from '@/lib/firebase-actions.ts';
 import BottomNav from '@/components/bottom-nav';
 import WanderlinkHeader from '@/components/wanderlink-header';
-import { useToast } from '@/hooks/use-toast';
-import type { DocumentData } from 'firebase/firestore';
 import DiscoverClientPage from '@/app/discover/discover-client-page';
+import { User } from 'firebase/auth';
 
-function AuthenticatedHomePage({ user }: { user: User }) {
-  const { toast } = useToast();
-  const [currentUserProfile, setCurrentUserProfile] = useState<DocumentData | null>(null);
-  const [initialProfiles, setInitialProfiles] = useState<DocumentData[]>([]);
-  const [profilesLoading, setProfilesLoading] = useState(true);
+// 1. Force dynamic rendering
+export const dynamic = 'force-dynamic';
 
-  useEffect(() => {
-    function fetchInitialData() {
-      const searchResults = localStorage.getItem('searchResults');
-      if (searchResults) {
-        try {
-          const parsedResults = JSON.parse(searchResults);
-          setInitialProfiles(parsedResults);
-          localStorage.removeItem('searchResults'); // Clear after use
-        } catch (error) {
-          console.error("Error parsing search results from localStorage:", error);
-          setInitialProfiles([]); 
-        }
-        setProfilesLoading(false);
-      } else {
-        // Fetch initial set of users if no search results are present
-        getAllUsers(12)
-          .then(users => {
-            const otherUsers = users.filter(u => u.id !== user.uid);
-            setInitialProfiles(otherUsers);
-          })
-          .catch(error => {
-            console.error("Failed to fetch initial users:", error);
-            toast({ variant: 'destructive', title: 'Error fetching users' });
-          })
-          .finally(() => setProfilesLoading(false));
-      }
-    }
+async function AuthenticatedHomePage() {
+  const cookieStore = cookies();
+  const userCookie = cookieStore.get('user');
+  
+  if (!userCookie) {
+    // This should ideally be handled by middleware, but as a fallback:
+    return null;
+  }
 
-    fetchInitialData();
-    getUserProfile(user.uid).then(setCurrentUserProfile);
-  }, [user, toast]);
+  const user: User = JSON.parse(userCookie.value);
+  
+  // 2. Fetch initial data without any localStorage logic
+  const [currentUserProfile, initialProfiles] = await Promise.all([
+    getUserProfile(user.uid),
+    getAllUsers(12).then(users => users.filter(u => u.id !== user.uid))
+  ]);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -58,7 +35,7 @@ function AuthenticatedHomePage({ user }: { user: User }) {
         <div className="container mx-auto max-w-7xl px-2">
           <DiscoverClientPage 
             initialProfiles={initialProfiles} 
-            loading={profilesLoading} 
+            loading={false} // Data is pre-fetched on the server
             currentUserProfile={currentUserProfile}
           />
         </div>
@@ -68,46 +45,11 @@ function AuthenticatedHomePage({ user }: { user: User }) {
   );
 }
 
-function ConditionalHome() {
-  const [currentUserAuth, setCurrentUserAuth] = useState<User | null>(null);
-  const [loadingAuth, setLoadingAuth] = useState(true);
-  const router = useRouter();
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUserAuth(user);
-      setLoadingAuth(false);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    if (!loadingAuth && !currentUserAuth) {
-      router.push('/login');
-    }
-  }, [loadingAuth, currentUserAuth, router]);
-
-  if (loadingAuth) {
-    return (
-      <div className="flex h-screen w-full flex-col items-center justify-center bg-background">
-        <Loader2 className="h-16 w-16 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (currentUserAuth) {
-    return (
-      <Suspense fallback={<div className="flex h-screen w-full flex-col items-center justify-center bg-background"><Loader2 className="h-16 w-16 animate-spin text-primary" /></div>}>
-        <AuthenticatedHomePage user={currentUserAuth} />
-      </Suspense>
-    );
-  }
-  
+// Main export remains a wrapper for auth logic (if any) or direct component export
+export default function HomePage() {
   return (
-      <div className="flex h-screen w-full flex-col items-center justify-center bg-background">
-        <Loader2 className="h-16 w-16 animate-spin text-primary" />
-      </div>
+    <Suspense fallback={<div className="flex h-screen w-full flex-col items-center justify-center bg-background"><Loader2 className="h-16 w-16 animate-spin text-primary" /></div>}>
+      <AuthenticatedHomePage />
+    </Suspense>
   );
 }
-
-export default ConditionalHome;

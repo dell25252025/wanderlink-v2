@@ -12,36 +12,36 @@ import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 
 interface DiscoverClientPageProps {
-  initialProfiles: DocumentData[];
+  initialProfiles: DocumentData[]; // These are now ALWAYS the default profiles from the server
   loading: boolean;
   currentUserProfile: DocumentData | null;
 }
 
-export default function DiscoverClientPage({ initialProfiles: serverProfiles, loading, currentUserProfile }: DiscoverClientPageProps) {
-  // 1. Initialize state with server profiles to prevent hydration errors.
-  const [profiles, setProfiles] = useState<DocumentData[]>(serverProfiles);
+export default function DiscoverClientPage({ initialProfiles, loading, currentUserProfile }: DiscoverClientPageProps) {
+  const [profiles, setProfiles] = useState<DocumentData[]>(initialProfiles);
+  const [hasAppliedSavedSearch, setHasAppliedSavedSearch] = useState(false);
   const [friends, setFriends] = useState<string[]>([]);
   const [isAddingFriend, setIsAddingFriend] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const { toast } = useToast();
 
-  // 2. On client-side mount, check for saved search results and overwrite server data if found.
+  // Effect to apply saved search results from localStorage ONCE
   useEffect(() => {
     const savedResultsRaw = localStorage.getItem('searchResults');
     if (savedResultsRaw) {
       try {
         const savedResults = JSON.parse(savedResultsRaw);
-        if (Array.isArray(savedResults) && savedResults.length > 0) {
-          console.log("Client Hydration: Found and applying saved search results.");
-          setProfiles(savedResults);
-        }
+        // We use a flag to ensure this logic only runs once.
+        setProfiles(savedResults);
+        setHasAppliedSavedSearch(true); // Mark that we have used the saved search
       } catch (e) {
         console.error("Failed to parse saved search results:", e);
+        // If parsing fails, we stick with the initial profiles from the server.
       }
     }
-  }, []); // <-- Empty dependency array ensures this runs ONLY ONCE on the client.
+  }, []); // Empty dependency array ensures this runs only once on client mount.
 
-  // 3. This effect now runs whenever the profiles state is updated (from server OR localStorage)
+  // Effect for handling authentication and online status
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
@@ -51,22 +51,15 @@ export default function DiscoverClientPage({ initialProfiles: serverProfiles, lo
       setFriends(currentUserProfile.friends);
     }
 
-    // Only proceed if there are profiles to process
     if (profiles.length > 0) {
-        // Check if online status is already present to avoid re-fetching
-        if (profiles[0].isOnline !== undefined) return;
-
-        const uids = profiles.map(p => p.uid || p.objectID).filter(Boolean);
-        getUsersOnlineStatus(uids).then(onlineStatuses => {
-            setProfiles(currentProfiles => 
-              currentProfiles.map(p => ({
-                ...p,
-                isOnline: onlineStatuses[p.uid || p.objectID] || false,
-              }))
-            );
-        });
+      const uids = profiles.map(p => p.uid || p.objectID).filter(Boolean);
+      getUsersOnlineStatus(uids).then(onlineStatuses => {
+        setProfiles(currentProfiles => 
+          currentProfiles.map(p => ({ ...p, isOnline: onlineStatuses[p.uid || p.objectID] || false }))
+        );
+      });
     }
-
+    
     return () => unsubscribe();
   }, [profiles, currentUserProfile]);
 
@@ -75,7 +68,6 @@ export default function DiscoverClientPage({ initialProfiles: serverProfiles, lo
       toast({ variant: 'destructive', title: 'Vous devez être connecté pour ajouter des amis.' });
       return;
     }
-
     setIsAddingFriend(friendId);
     try {
       const result = await addFriend(currentUser.uid, friendId);
@@ -109,7 +101,7 @@ export default function DiscoverClientPage({ initialProfiles: serverProfiles, lo
     image: p.profilePictures?.[0] || `https://picsum.photos/seed/${p.uid || p.objectID}/800/1200`
   }));
 
-  if (loading && profiles.length === 0) {
+  if (loading && !hasAppliedSavedSearch) {
     return (
       <div className="flex flex-col items-center justify-center text-center h-96">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -118,12 +110,13 @@ export default function DiscoverClientPage({ initialProfiles: serverProfiles, lo
     );
   }
 
-  if (profiles.length === 0 && !loading) {
+  // This now correctly shows "No results" if a search was performed and yielded 0 hits.
+  if (profiles.length === 0) {
     return (
       <div className="flex min-h-[calc(100vh-200px)] flex-col items-center justify-center text-center px-4">
         <UserX className="h-16 w-16 text-muted-foreground" />
         <h2 className="mt-6 text-2xl font-bold">Aucun résultat</h2>
-        <p className="mt-2 text-muted-foreground">Lancez une recherche pour découvrir de nouveaux profils !</p>
+        <p className="mt-2 text-muted-foreground">Essayez d'élargir vos critères de recherche ou de lancer une nouvelle recherche.</p>
       </div>
     );
   }
