@@ -12,3 +12,7 @@ export { generateAgoraToken };
 // Fonctions pour les notifications
 import { sendNewMessageNotification, onNotificationCreated } from "./notifications";
 export { sendNewMessageNotification, onNotificationCreated };
+
+// NOUVEAU : Fonctions pour la synchronisation avec Algolia
+import { onUserCreated, onUserUpdated, onUserDeleted } from "./algolia";
+export { onUserCreated, onUserUpdated, onUserDeleted };
