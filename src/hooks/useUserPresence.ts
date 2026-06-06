@@ -1,72 +1,88 @@
 
 import { useEffect } from 'react';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { ref, onValue, set, onDisconnect } from 'firebase/database';
 import { App } from '@capacitor/app';
 import { useAuth } from '@/context/AuthContext';
-import { firestore } from '@/lib/firebase';
+import { firestore, database } from '@/lib/firebase';
 
 export const useUserPresence = () => {
   const { user } = useAuth();
 
   useEffect(() => {
-    console.log('[Presence] Hook initialized'); 
     const uid = user?.uid;
     if (!uid) return;
 
-    console.log(`[Presence] Hook running for user: ${uid}`);
-
     const userDocRef = doc(firestore, 'users', uid);
+    const presenceRef = ref(database, `/status/${uid}`);
 
-    const goOnline = async () => {
-      console.log(`[Presence] Setting user ${uid} to ONLINE.`);
-      try {
-        await updateDoc(userDocRef, { online: true, lastSeen: serverTimestamp() });
-      } catch (error) {
-        console.error(`[Presence] Error going online for user ${uid}:`, error);
-      }
+    // --- Realtime Database connection status --- //
+    const amOnline = {
+      online: true,
+      lastSeen: serverTimestamp(),
     };
 
-    const goOffline = async () => {
-      console.log(`[Presence] Setting user ${uid} to OFFLINE.`);
-      try {
-        await updateDoc(userDocRef, { online: false, lastSeen: serverTimestamp() });
-      } catch (error) {
-        console.error(`[Presence] Error going offline for user ${uid}:`, error);
-      }
+    const amOffline = {
+      online: false,
+      lastSeen: serverTimestamp(),
     };
 
-    // Handle app state changes for Capacitor
-    const appStateListener = App.addListener('appStateChange', ({ isActive }) => {
-      console.log(`[Presence] App state changed. isActive: ${isActive}`);
-      if (isActive) {
-        goOnline();
-      } else {
-        goOffline();
+    const connectedRef = ref(database, '.info/connected');
+
+    const listener = onValue(connectedRef, (snap) => {
+      if (snap.val() === true) {
+        // We're connected (or reconnected).
+        // Update our presence status in Firestore.
+        updateDoc(userDocRef, amOnline).catch(err => console.error("Error setting online status in Firestore:", err));
+
+        // When I disconnect, update my status in Firestore to offline.
+        // This is the magic part that handles abrupt disconnects.
+        const onDisconnectRef = onDisconnect(presenceRef);
+        onDisconnectRef.set(amOffline)
+          .then(() => {
+            // Also, update Firestore when the onDisconnect is set.
+            const firestoreOnDisconnectRef = onDisconnect(userDocRef);
+            firestoreOnDisconnectRef.update(amOffline);
+          })
+          .catch(err => console.error("Error setting onDisconnect hook:", err));
+
+        // Finally, set my current status in the Realtime Database.
+        set(presenceRef, amOnline).catch(err => console.error("Error setting online status in RTDB:", err));
       }
     });
 
-    // Handle web visibility changes
+    // --- App and browser lifecycle events --- //
+    const goOffline = () => {
+      updateDoc(userDocRef, amOffline).catch(err => console.error("Error setting offline status:", err));
+      set(presenceRef, amOffline).catch(err => console.error("Error setting offline status in RTDB:", err));
+    };
+
+    const goOnline = () => {
+      updateDoc(userDocRef, amOnline).catch(err => console.error("Error setting online status:", err));
+      set(presenceRef, amOnline).catch(err => console.error("Error setting online status in RTDB:", err));
+    };
+
+    const appStateListener = App.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) goOnline();
+      else goOffline();
+    });
+
     const handleVisibilityChange = () => {
-      console.log(`[Presence] Visibility state changed. State: ${document.visibilityState}`);
-      if (document.visibilityState === 'visible') {
-        goOnline();
-      } else {
-        goOffline();
-      }
+      if (document.visibilityState === 'visible') goOnline();
+      else goOffline();
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', goOffline); // For browser tab closes
 
-    // Set initial status to online
-    console.log("[Presence] Setting initial status to online.");
-    goOnline();
-
-    // Cleanup listeners on component unmount
+    // Cleanup function on unmount
     return () => {
-      console.log(`[Presence] Cleanup for user: ${uid}. Setting to offline.`);
-      goOffline(); // Set to offline when the hook is cleaned up
+      listener(); // Detach the .info/connected listener
       appStateListener.remove();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', goOffline);
+      goOffline(); // Explicitly go offline on cleanup
     };
+
   }, [user]);
 };
