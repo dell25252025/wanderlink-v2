@@ -1,22 +1,22 @@
-import { getFirestore, doc, updateDoc, arrayUnion } from "firebase/firestore";
+
+import { getFirestore, doc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 import { Capacitor } from "@capacitor/core";
-import { PushNotifications, Token } from "@capacitor/push-notifications";
-import { LocalNotifications } from "@capacitor/local-notifications"; // Importation ajoutée
+import { PushNotifications, Token, PluginListenerHandle } from "@capacitor/push-notifications";
+import { LocalNotifications } from "@capacitor/local-notifications";
 import { app } from "@/lib/firebase";
 
 const db = getFirestore(app);
 
-// Nouvelle fonction pour créer les canaux de notification
 export const createNotificationChannels = async () => {
-  // Les canaux ne sont nécessaires que sur Android
+  // This function is unchanged
   if (Capacitor.getPlatform() === 'android') {
     try {
       await LocalNotifications.createChannel({
-        id: "messages", // L'ID que nous avons défini dans AndroidManifest.xml
+        id: "messages",
         name: "Messages",
         description: "Notifications pour les nouveaux messages de chat",
-        importance: 5, // 5 = Maximum
-        visibility: 1, // 1 = Public
+        importance: 5,
+        visibility: 1,
         sound: "default",
         vibration: true,
       });
@@ -27,49 +27,70 @@ export const createNotificationChannels = async () => {
   }
 };
 
-export const initPushNotifications = async (userId: string | null) => {
+// MODIFIED: This function now returns a promise that resolves to a cleanup function.
+export const initPushNotifications = async (userId: string): Promise<() => Promise<void>> => {
   if (!userId) {
-    console.log("Push notifications non initialisées: ID utilisateur manquant.");
-    return;
+    console.log("Push notifications not initialized: Missing user ID.");
+    return async () => {};
   }
-
+  
   if (!Capacitor.isNativePlatform()) {
-    console.log("Push notifications non initialisées: Pas une plateforme native.");
-    return;
+    console.log("Push notifications not initialized: Not a native platform.");
+    return async () => {};
   }
 
   try {
-    // ÉTAPE 1 : Créer le canal avant de demander les permissions
     await createNotificationChannels();
 
-    // Le reste de la logique...
     const permission = await PushNotifications.requestPermissions();
-
     if (permission.receive !== "granted") {
-      console.log("L'utilisateur n'a pas accordé les permissions pour les notifications.");
-      return;
+      console.log("User did not grant permissions for push notifications.");
+      return async () => {};
     }
 
     await PushNotifications.register();
 
-    PushNotifications.addListener("registration", async (token: Token) => {
-      console.log(`Token FCM reçu: ${token.value}`);
-      try {
-        const userRef = doc(db, "users", userId);
-        await updateDoc(userRef, {
-          fcmTokens: arrayUnion(token.value)
-        });
-        console.log(`Token FCM sauvegardé pour l'utilisateur ${userId}`);
-      } catch (error) {
-        console.error("Erreur lors de la sauvegarde du token FCM:", error);
-      }
-    });
+    let activeToken: string | null = null;
+    const listeners: PluginListenerHandle[] = [];
 
-    PushNotifications.addListener("registrationError", (error: any) => {
-      console.error("Erreur lors de l'enregistrement pour les notifications:", error);
+    const regListener = await PushNotifications.addListener("registration", (token: Token) => {
+      console.log(`Push registration success, token: ${token.value}`);
+      activeToken = token.value;
+      const userRef = doc(db, "users", userId);
+      updateDoc(userRef, { fcmTokens: arrayUnion(token.value) })
+        .then(() => console.log(`FCM token saved for user ${userId}`))
+        .catch(error => console.error("Error saving FCM token:", error));
     });
+    listeners.push(regListener);
+
+    const errListener = await PushNotifications.addListener("registrationError", (error: any) => {
+      console.error("Error on registration for push notifications:", error);
+    });
+    listeners.push(errListener);
+    
+    // This is the cleanup function that will be returned
+    return async () => {
+      console.log("Cleaning up push notifications...");
+      
+      // Remove listeners
+      for (const listener of listeners) {
+        await listener.remove();
+      }
+      
+      if (activeToken) {
+        try {
+          const userRef = doc(db, "users", userId);
+          // Remove the token from Firestore
+          await updateDoc(userRef, { fcmTokens: arrayRemove(activeToken) });
+          console.log(`FCM token removed for user ${userId}`);
+        } catch (error) {
+          console.error("Error removing FCM token on cleanup:", error);
+        }
+      }
+    };
 
   } catch (error) {
-    console.error("Erreur lors de l'initialisation des notifications push:", error);
+    console.error("Error initializing push notifications:", error);
+    return async () => {};
   }
 };

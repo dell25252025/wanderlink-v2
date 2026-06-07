@@ -1,3 +1,4 @@
+
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
@@ -17,20 +18,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    // 1. Variable pour stocker la fonction de nettoyage des notifications
+    let cleanupPushNotifications: (() => Promise<void>) | null = null;
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      // Si un nettoyage précédent existe, exécutez-le d'abord
+      if (cleanupPushNotifications) {
+        console.log("Cleaning up previous user's push notifications...");
+        await cleanupPushNotifications();
+        cleanupPushNotifications = null;
+      }
+
       setCurrentUser(user);
       setLoading(false);
 
-      // Si un utilisateur est connecté, on initialise les notifications
+      // Si un nouvel utilisateur est connecté, on initialise les notifications
       if (user) {
-        console.log("User is logged in, initializing push notifications...");
-        initPushNotifications(user.uid);
+        console.log("New user logged in, initializing push notifications...");
+        // 2. Stocker la nouvelle fonction de nettoyage
+        cleanupPushNotifications = await initPushNotifications(user.uid);
       } else {
         console.log("User is logged out.");
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      // Nettoyage final lors du démontage du composant
+      console.log("Auth provider unmounting, ensuring cleanup.");
+      unsubscribe();
+      if (cleanupPushNotifications) {
+        cleanupPushNotifications();
+      }
+    };
   }, []);
 
   return (
