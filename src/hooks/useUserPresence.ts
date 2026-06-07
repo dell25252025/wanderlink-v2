@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { firestore, database } from '@/lib/firebase';
 
 export const useUserPresence = () => {
-  const { user } = useAuth();
+  const { currentUser: user } = useAuth();
 
   useEffect(() => {
     const uid = user?.uid;
