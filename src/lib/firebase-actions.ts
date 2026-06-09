@@ -11,8 +11,22 @@ import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { where } from "firebase/firestore";
 
 
-// --- NOUVELLE FONCTION DE DECONNEXION ---
+// --- FONCTION DE DECONNEXION CORRIGEE ---
 export async function signOutFromGoogle() {
+  const user = auth.currentUser;
+  if (user) {
+    try {
+      const userDocRef = doc(db, 'users', user.uid);
+      await updateDoc(userDocRef, {
+        isOnline: false,
+        lastSeen: serverTimestamp(),
+      });
+      console.log(`[Presence] Statut de l'utilisateur ${user.uid} mis à hors-ligne avant la déconnexion.`);
+    } catch (e) {
+      console.error("Erreur lors de la mise à jour du statut de présence avant déconnexion:", e);
+    }
+  }
+
   try {
     if (Capacitor.isNativePlatform()) {
       await GoogleAuth.signOut();
@@ -21,6 +35,7 @@ export async function signOutFromGoogle() {
     return { success: true };
   } catch (error) {
     console.error("Erreur lors de la déconnexion :", error);
+    // Tentative de déconnexion de secours, car c'est l'action la plus importante.
     await firebaseSignOut(auth).catch(e => console.error("Erreur lors de la déconnexion Firebase de secours :", e));
     const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
     return { success: false, error: errorMessage };
@@ -47,9 +62,9 @@ async function handleUser(user: any) {
       isPremium: false,
       subscriptionEndDate: null,
       isVerified: false,
-      onboardingCompleted: false, // ETAPE 1: Initialisation du champ
-      isOnline: true, // Ajout du champ isOnline
-      lastSeen: serverTimestamp(), // Ajout du champ lastSeen
+      onboardingCompleted: false,
+      isOnline: true,
+      lastSeen: serverTimestamp(),
     };
     await setDoc(userRef, sanitizeData(newProfileData));
 
@@ -65,7 +80,6 @@ async function handleUser(user: any) {
     };
   } else {
     const data = userDoc.data();
-    // Vérifier et mettre à jour si les champs de présence manquent
     if (data.isOnline === undefined || data.lastSeen === undefined) {
         await updateDoc(userRef, {
             isOnline: true,
@@ -75,7 +89,7 @@ async function handleUser(user: any) {
     return { 
         success: true, 
         id: user.uid, 
-        isNewUser: !data.onboardingCompleted, // La decision est maintenant basée sur ce champ
+        isNewUser: !data.onboardingCompleted,
         onboardingCompleted: data.onboardingCompleted === true 
     };
   }
@@ -152,7 +166,7 @@ export async function sendCallSystemMessage(chatId: string, callerId: string, re
 
         const messageData = {
             text: text,
-            senderId: callerId, // L'initiateur de l'action
+            senderId: callerId,
             timestamp: serverTimestamp(),
             type: type,
         };
@@ -244,7 +258,7 @@ export async function createUserProfile(userId: string, profileData: any) {
             ...restOfProfileData,
             profilePictures: uploadedPhotoUrls,
             updatedAt: new Date().toISOString(),
-            onboardingCompleted: true // ETAPE 3: Finalisation du champ
+            onboardingCompleted: true
         };
         if (finalProfileData.dates?.from) {
           finalProfileData.dates.from = new Date(finalProfileData.dates.from);
@@ -498,8 +512,6 @@ export async function getUsersOnlineStatus(uids: string[]): Promise<Record<strin
   const statuses: Record<string, boolean> = {};
   const usersRef = collection(db, "users");
   
-  // Firestore 'in' query can take up to 30 items at once.
-  // We'll process the UIDs in chunks to be safe.
   const chunkSize = 30;
   for (let i = 0; i < uids.length; i += chunkSize) {
       const chunk = uids.slice(i, i + chunkSize);

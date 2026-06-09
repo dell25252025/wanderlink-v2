@@ -10,9 +10,6 @@ export const useUserPresence = () => {
 
   useEffect(() => {
     const uid = user?.uid;
-    // Si il n'y a pas d'utilisateur, on ne fait rien.
-    // La fonction de nettoyage de l'effet précédent (si il y en avait un)
-    // aura déjà été appelée et aura mis l'utilisateur hors ligne.
     if (!uid) {
       return;
     }
@@ -20,8 +17,6 @@ export const useUserPresence = () => {
     const userDocRef = doc(firestore, 'users', uid);
     const presenceRef = ref(database, `/status/${uid}`);
 
-    // J'ai vu dans `firebase-actions.ts` que le champ est `isOnline`, et pas `online`.
-    // Je corrige ici pour la cohérence.
     const amOnline = {
       isOnline: true,
       lastSeen: serverTimestamp(),
@@ -48,9 +43,10 @@ export const useUserPresence = () => {
       if (snap.val() === true) {
         goOnline();
 
+        // Ceci est correct et gère les déconnexions brutales pour la Realtime Database.
         onDisconnect(presenceRef).set(amOffline);
-        const userDocOnDisconnect = onDisconnect(userDocRef);
-        userDocOnDisconnect.update(amOffline);
+
+        // La ligne incorrecte a été supprimée. onDisconnect ne fonctionne pas avec Firestore.
       }
     });
 
@@ -67,21 +63,18 @@ export const useUserPresence = () => {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', goOffline);
 
-    // Lorsque le `user` change (y compris lors de la déconnexion),
-    // la fonction de nettoyage de CET effet est appelée. C'est la clé pour corriger le bug.
     return () => {
-      console.log(`[Presence] Nettoyage pour l'utilisateur ${uid}`); // Pour le débogage
+      console.log(`[Presence] Nettoyage pour l'utilisateur ${uid}`);
       
-      // Détacher tous les listeners pour éviter les fuites de mémoire
       listener();
       appStateListener.remove();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', goOffline);
 
-      // Le plus important : mettre le statut à hors ligne lors du nettoyage.
-      // Ceci va maintenant s'exécuter correctement quand l'utilisateur se déconnecte.
+      // La déconnexion manuelle est maintenant gérée dans signOutFromGoogle.
+      // goOffline() reste ici pour gérer le changement de page ou la fermeture de l'onglet.
       goOffline();
     };
 
-  }, [user]); // L'effet dépend UNIQUEMENT de l'objet `user`
+  }, [user]);
 };
