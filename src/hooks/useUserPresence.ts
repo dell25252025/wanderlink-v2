@@ -1,4 +1,3 @@
-
 import { useEffect } from 'react';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { ref, onValue, set, onDisconnect } from 'firebase/database';
@@ -11,47 +10,28 @@ export const useUserPresence = () => {
 
   useEffect(() => {
     const uid = user?.uid;
-    if (!uid) return;
+    // Si il n'y a pas d'utilisateur, on ne fait rien.
+    // La fonction de nettoyage de l'effet précédent (si il y en avait un)
+    // aura déjà été appelée et aura mis l'utilisateur hors ligne.
+    if (!uid) {
+      return;
+    }
 
     const userDocRef = doc(firestore, 'users', uid);
     const presenceRef = ref(database, `/status/${uid}`);
 
-    // --- Realtime Database connection status --- //
+    // J'ai vu dans `firebase-actions.ts` que le champ est `isOnline`, et pas `online`.
+    // Je corrige ici pour la cohérence.
     const amOnline = {
-      online: true,
+      isOnline: true,
       lastSeen: serverTimestamp(),
     };
 
     const amOffline = {
-      online: false,
+      isOnline: false,
       lastSeen: serverTimestamp(),
     };
 
-    const connectedRef = ref(database, '.info/connected');
-
-    const listener = onValue(connectedRef, (snap) => {
-      if (snap.val() === true) {
-        // We're connected (or reconnected).
-        // Update our presence status in Firestore.
-        updateDoc(userDocRef, amOnline).catch(err => console.error("Error setting online status in Firestore:", err));
-
-        // When I disconnect, update my status in Firestore to offline.
-        // This is the magic part that handles abrupt disconnects.
-        const onDisconnectRef = onDisconnect(presenceRef);
-        onDisconnectRef.set(amOffline)
-          .then(() => {
-            // Also, update Firestore when the onDisconnect is set.
-            const firestoreOnDisconnectRef = onDisconnect(userDocRef);
-            firestoreOnDisconnectRef.update(amOffline);
-          })
-          .catch(err => console.error("Error setting onDisconnect hook:", err));
-
-        // Finally, set my current status in the Realtime Database.
-        set(presenceRef, amOnline).catch(err => console.error("Error setting online status in RTDB:", err));
-      }
-    });
-
-    // --- App and browser lifecycle events --- //
     const goOffline = () => {
       updateDoc(userDocRef, amOffline).catch(err => console.error("Error setting offline status:", err));
       set(presenceRef, amOffline).catch(err => console.error("Error setting offline status in RTDB:", err));
@@ -61,6 +41,18 @@ export const useUserPresence = () => {
       updateDoc(userDocRef, amOnline).catch(err => console.error("Error setting online status:", err));
       set(presenceRef, amOnline).catch(err => console.error("Error setting online status in RTDB:", err));
     };
+
+
+    const connectedRef = ref(database, '.info/connected');
+    const listener = onValue(connectedRef, (snap) => {
+      if (snap.val() === true) {
+        goOnline();
+
+        onDisconnect(presenceRef).set(amOffline);
+        const userDocOnDisconnect = onDisconnect(userDocRef);
+        userDocOnDisconnect.update(amOffline);
+      }
+    });
 
     const appStateListener = App.addListener('appStateChange', ({ isActive }) => {
       if (isActive) goOnline();
@@ -73,16 +65,23 @@ export const useUserPresence = () => {
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('beforeunload', goOffline); // For browser tab closes
+    window.addEventListener('beforeunload', goOffline);
 
-    // Cleanup function on unmount
+    // Lorsque le `user` change (y compris lors de la déconnexion),
+    // la fonction de nettoyage de CET effet est appelée. C'est la clé pour corriger le bug.
     return () => {
-      listener(); // Detach the .info/connected listener
+      console.log(`[Presence] Nettoyage pour l'utilisateur ${uid}`); // Pour le débogage
+      
+      // Détacher tous les listeners pour éviter les fuites de mémoire
+      listener();
       appStateListener.remove();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', goOffline);
-      goOffline(); // Explicitly go offline on cleanup
+
+      // Le plus important : mettre le statut à hors ligne lors du nettoyage.
+      // Ceci va maintenant s'exécuter correctement quand l'utilisateur se déconnecte.
+      goOffline();
     };
 
-  }, [user]);
+  }, [user]); // L'effet dépend UNIQUEMENT de l'objet `user`
 };
