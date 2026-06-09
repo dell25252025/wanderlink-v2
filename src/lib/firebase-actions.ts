@@ -12,16 +12,15 @@ import { where } from "firebase/firestore";
 
 
 // --- FONCTION DE DECONNEXION CORRIGEE ---
-export async function signOutFromGoogle() {
-  const user = auth.currentUser;
-  if (user) {
+export async function signOutFromGoogle(uid: string) {
+  if (uid) {
     try {
-      const userDocRef = doc(db, 'users', user.uid);
+      const userDocRef = doc(db, 'users', uid);
       await updateDoc(userDocRef, {
         isOnline: false,
         lastSeen: serverTimestamp(),
       });
-      console.log(`[Presence] Statut de l'utilisateur ${user.uid} mis à hors-ligne avant la déconnexion.`);
+      console.log(`[Presence] Statut de l'utilisateur ${uid} mis à hors-ligne avant la déconnexion.`);
     } catch (e) {
       console.error("Erreur lors de la mise à jour du statut de présence avant déconnexion:", e);
     }

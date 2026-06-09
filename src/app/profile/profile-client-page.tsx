@@ -434,9 +434,19 @@ export default function ProfileClientPage() {
   const handleSignOut = async () => {
     setIsDrawerOpen(false);
     await new Promise(resolve => setTimeout(resolve, 150));
+    
+    if (!currentUser) {
+        console.error("Tentative de déconnexion sans utilisateur courant.");
+        toast({
+            variant: "destructive",
+            title: "Erreur",
+            description: "Impossible de se déconnecter, utilisateur non trouvé.",
+        });
+        return;
+    }
 
     try {
-      const result = await signOutFromGoogle();
+      const result = await signOutFromGoogle(currentUser.uid);
       if (result.success) {
         toast({
           title: "Déconnexion réussie",
