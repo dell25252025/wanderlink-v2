@@ -1,4 +1,3 @@
-console.log(`--- MODULE LOADED: src/app/chat/inbox-page.tsx at ${new Date().toISOString()} ---`);
 
 'use client';
 
