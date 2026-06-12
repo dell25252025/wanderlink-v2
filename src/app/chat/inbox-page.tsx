@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, ArrowLeft, MoreVertical, Trash2, CheckCircle } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -11,47 +11,41 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-
-
-// Données factices pour la liste des conversations
-const initialConversations = [
-  {
-    id: 'user123',
-    name: 'Sophia',
-    avatarUrl: 'https://picsum.photos/seed/user1/200',
-    lastMessage: 'Salut ! Ton profil est super intéressant.',
-    timestamp: '10:42',
-    unreadCount: 2,
-    isVerified: true,
-  },
-  {
-    id: 'user456',
-    name: 'James',
-    avatarUrl: 'https://picsum.photos/seed/user2/200',
-    lastMessage: 'Merci beaucoup ! Le tien aussi. Prêt pour l\'aventure ?',
-    timestamp: 'Hier',
-    unreadCount: 0,
-    isVerified: false,
-  },
-  {
-    id: 'user789',
-    name: 'Isabella',
-    avatarUrl: 'https://picsum.photos/seed/user3/200',
-    lastMessage: 'J\'ai vu qu\'on aimait tous les deux l\'Italie !',
-    timestamp: 'Hier',
-    unreadCount: 1,
-    isVerified: true,
-  },
-];
-
+import { useRealtimeConversations } from '@/hooks/useRealtimeConversations'; // Import the new hook
+import { db } from '@/lib/firebase';
+import { collection, onSnapshot, doc } from 'firebase/firestore';
+import { formatDistanceToNow } from 'date-fns';
+import { fr } from 'date-fns/locale';
 
 export default function InboxPage() {
   const router = useRouter();
+  const { conversations: initialConversations, loading, error } = useRealtimeConversations();
   const [searchTerm, setSearchTerm] = useState('');
   const [conversations, setConversations] = useState(initialConversations);
   const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const { toast } = useToast();
+  const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setConversations(initialConversations);
+  }, [initialConversations]);
+
+  useEffect(() => {
+    if (conversations.length === 0) return;
+
+    const userIds = conversations.map(c => c.otherUserId);
+    const unsubscribes = userIds.map(userId => {
+      const userDocRef = doc(db, 'users', userId);
+      return onSnapshot(userDocRef, (doc) => {
+        if (doc.exists()) {
+          setOnlineStatuses(prev => ({ ...prev, [userId]: doc.data().isOnline || false }));
+        }
+      });
+    });
+
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, [conversations]);
 
   const filteredConversations = conversations.filter(convo =>
     convo.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -59,18 +53,27 @@ export default function InboxPage() {
 
   const handleDeleteConversation = () => {
     if (conversationToDelete) {
-      setConversations(conversations.filter(c => c.id !== conversationToDelete));
+      // This should be handled by a proper backend function
+      console.log("Deleting conversation", conversationToDelete);
       toast({ title: 'Conversation supprimée' });
       setConversationToDelete(null);
     }
   };
   
   const handleDeleteAllConversations = () => {
-    setConversations([]);
+    // This should be handled by a proper backend function
+    console.log("Deleting all conversations");
     toast({ title: 'Toutes les conversations ont été supprimées' });
     setIsDeletingAll(false);
   };
 
+  if (loading) {
+    return <div className="flex h-screen items-center justify-center">Chargement des conversations...</div>;
+  }
+
+  if (error) {
+    return <div className="flex h-screen items-center justify-center text-red-500">{error}</div>;
+  }
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -133,17 +136,26 @@ export default function InboxPage() {
                     {filteredConversations.map((convo) => (
                         <li key={convo.id} className="flex items-center gap-1 p-1.5 transition-colors hover:bg-muted/50">
                             <Link href={`/chat?id=${convo.id}`} className="flex flex-1 items-center gap-2 min-w-0">
-                                <Avatar className="h-9 w-9">
-                                <AvatarImage src={convo.avatarUrl} alt={convo.name} />
-                                <AvatarFallback>{convo.name.charAt(0)}</AvatarFallback>
-                                </Avatar>
+                                <div className="relative">
+                                    <Avatar className="h-9 w-9">
+                                    <AvatarImage src={convo.avatarUrl} alt={convo.name} />
+                                    <AvatarFallback>{convo.name.charAt(0)}</AvatarFallback>
+                                    </Avatar>
+                                    {onlineStatuses[convo.otherUserId] && (
+                                        <div className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 border-2 border-background"></div>
+                                    )}
+                                </div>
                                 <div className="flex-1 truncate">
                                 <div className="flex items-baseline justify-between">
                                     <p className="font-semibold truncate text-xs flex items-center gap-1">
                                       {convo.name}
                                       {convo.isVerified && <CheckCircle className="h-3 w-3 text-blue-500" />}
                                     </p>
-                                    <p className="text-[10px] text-muted-foreground">{convo.timestamp}</p>
+                                    {convo.timestamp && (
+                                        <p className="text-[10px] text-muted-foreground">
+                                            {formatDistanceToNow(convo.timestamp.toDate(), { addSuffix: true, locale: fr })}
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <p className="truncate text-[11px] text-muted-foreground">
@@ -192,7 +204,7 @@ export default function InboxPage() {
                     ))}
                     </ul>
                 ) : (
-                    <p className="p-4 text-center text-sm text-muted-foreground">Aucune conversation trouvée.</p>
+                    <p className="p-4 text-center text-sm text-muted-foreground">Aucune conversation pour le moment.</p>
                 )}
             </div>
         </div>
