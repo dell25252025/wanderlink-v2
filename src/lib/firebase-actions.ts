@@ -11,7 +11,6 @@ import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { where } from "firebase/firestore";
 
 
-// --- FONCTION DE DECONNEXION CORRIGEE ---
 export async function signOutFromGoogle(uid: string) {
   if (uid) {
     try {
@@ -34,13 +33,13 @@ export async function signOutFromGoogle(uid: string) {
     return { success: true };
   } catch (error) {
     console.error("Erreur lors de la déconnexion :", error);
-    // Tentative de déconnexion de secours, car c'est l'action la plus importante.
     await firebaseSignOut(auth).catch(e => console.error("Erreur lors de la déconnexion Firebase de secours :", e));
     const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
     return { success: false, error: errorMessage };
   }
 }
 
+// --- FONCTION DE GESTION DE L'UTILISATEUR CORRIGEE ---
 async function handleUser(user: any) {
   const userRef = doc(db, "users", user.uid);
   const userDoc = await getDoc(userRef);
@@ -62,7 +61,7 @@ async function handleUser(user: any) {
       subscriptionEndDate: null,
       isVerified: false,
       onboardingCompleted: false,
-      isOnline: true,
+      isOnline: true, // Défini à true pour les nouveaux utilisateurs
       lastSeen: serverTimestamp(),
     };
     await setDoc(userRef, sanitizeData(newProfileData));
@@ -79,12 +78,13 @@ async function handleUser(user: any) {
     };
   } else {
     const data = userDoc.data();
-    if (data.isOnline === undefined || data.lastSeen === undefined) {
-        await updateDoc(userRef, {
-            isOnline: true,
-            lastSeen: serverTimestamp(),
-        });
-    }
+    // Correction : Toujours mettre à jour le statut en ligne lors de la connexion
+    await updateDoc(userRef, {
+        isOnline: true,
+        lastSeen: serverTimestamp(),
+    });
+    console.log(`[Presence] Statut de l'utilisateur ${user.uid} mis à jour à 'en-ligne' lors de la connexion.`);
+
     return { 
         success: true, 
         id: user.uid, 
