@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, ArrowLeft, MoreVertical, Trash2, CheckCircle } from 'lucide-react';
+import { Search, ArrowLeft, MoreVertical, Trash2, CheckCircle, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link';
@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { useRealtimeConversations } from '@/hooks/useRealtimeConversations'; // Import the new hook
+import { useRealtimeConversations, type Conversation } from '@/hooks/useRealtimeConversations';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, doc } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
@@ -21,30 +21,40 @@ export default function InboxPage() {
   const router = useRouter();
   const { conversations: initialConversations, loading, error } = useRealtimeConversations();
   const [searchTerm, setSearchTerm] = useState('');
-  const [conversations, setConversations] = useState(initialConversations);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const { toast } = useToast();
   const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
+    console.log("[InboxPage] Les conversations initiales ont changé:", initialConversations);
     setConversations(initialConversations);
   }, [initialConversations]);
 
   useEffect(() => {
-    if (conversations.length === 0) return;
+    if (conversations.length === 0) {
+        console.log("[InboxPage] Aucune conversation à surveiller pour le statut en ligne.");
+        return;
+    }
 
+    console.log(`[InboxPage] Mise en place des écouteurs de statut pour ${conversations.length} utilisateur(s).`);
     const userIds = conversations.map(c => c.otherUserId);
     const unsubscribes = userIds.map(userId => {
       const userDocRef = doc(db, 'users', userId);
       return onSnapshot(userDocRef, (doc) => {
         if (doc.exists()) {
-          setOnlineStatuses(prev => ({ ...prev, [userId]: doc.data().isOnline || false }));
+          const isOnline = doc.data().isOnline || false;
+          console.log(`[InboxPage] Statut mis à jour pour ${userId}: ${isOnline ? 'En ligne' : 'Hors ligne'}`);
+          setOnlineStatuses(prev => ({ ...prev, [userId]: isOnline }));
         }
       });
     });
 
-    return () => unsubscribes.forEach(unsub => unsub());
+    return () => {
+        console.log("[InboxPage] Nettoyage des écouteurs de statut.");
+        unsubscribes.forEach(unsub => unsub());
+    }
   }, [conversations]);
 
   const filteredConversations = conversations.filter(convo =>
@@ -53,26 +63,29 @@ export default function InboxPage() {
 
   const handleDeleteConversation = () => {
     if (conversationToDelete) {
-      // This should be handled by a proper backend function
-      console.log("Deleting conversation", conversationToDelete);
-      toast({ title: 'Conversation supprimée' });
+      console.log("Action de suppression pour la conversation:", conversationToDelete);
+      toast({ title: 'Fonctionnalité en cours de développement' });
       setConversationToDelete(null);
     }
   };
   
   const handleDeleteAllConversations = () => {
-    // This should be handled by a proper backend function
-    console.log("Deleting all conversations");
-    toast({ title: 'Toutes les conversations ont été supprimées' });
+    console.log("Action de suppression pour toutes les conversations");
+    toast({ title: 'Fonctionnalité en cours de développement' });
     setIsDeletingAll(false);
   };
 
-  if (loading) {
-    return <div className="flex h-screen items-center justify-center">Chargement des conversations...</div>;
+  if (loading && conversations.length === 0) {
+    return (
+        <div className="flex h-screen items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="ml-3 text-muted-foreground">Chargement des conversations...</p>
+        </div>
+    );
   }
 
   if (error) {
-    return <div className="flex h-screen items-center justify-center text-red-500">{error}</div>;
+    return <div className="flex h-screen items-center justify-center text-destructive">{error}</div>;
   }
 
   return (
@@ -88,7 +101,7 @@ export default function InboxPage() {
         <AlertDialog open={isDeletingAll} onOpenChange={setIsDeletingAll}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={conversations.length === 0}>
                 <MoreVertical className="h-5 w-5" />
               </Button>
             </DropdownMenuTrigger>
@@ -135,7 +148,7 @@ export default function InboxPage() {
                     <ul className="divide-y">
                     {filteredConversations.map((convo) => (
                         <li key={convo.id} className="flex items-center gap-1 p-1.5 transition-colors hover:bg-muted/50">
-                            <Link href={`/chat?id=${convo.id}`} className="flex flex-1 items-center gap-2 min-w-0">
+                            <Link href={`/chat/${convo.id}`} className="flex flex-1 items-center gap-2 min-w-0">
                                 <div className="relative">
                                     <Avatar className="h-9 w-9">
                                     <AvatarImage src={convo.avatarUrl} alt={convo.name} />
@@ -169,7 +182,7 @@ export default function InboxPage() {
                                 </div>
                                 </div>
                             </Link>
-                            <AlertDialog>
+                            <AlertDialog open={conversationToDelete === convo.id} onOpenChange={() => setConversationToDelete(null)}>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
@@ -178,22 +191,22 @@ export default function InboxPage() {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                   <AlertDialogTrigger asChild>
-                                    <DropdownMenuItem className="text-destructive" onClick={() => setConversationToDelete(convo.id)}>
+                                    <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); setConversationToDelete(convo.id); }}>
                                       <Trash2 className="mr-2 h-4 w-4" />
                                       Supprimer
                                     </DropdownMenuItem>
                                   </AlertDialogTrigger>
                                 </DropdownMenuContent>
                               </DropdownMenu>
-                              <AlertDialogContent>
+                              <AlertDialogContent onClick={(e) => e.stopPropagation()}>
                                   <AlertDialogHeader>
                                       <AlertDialogTitle>Supprimer la conversation ?</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                          Cette action est irréversible et supprimera définitivement cette conversation.
+                                          Cette action est irréversible.
                                       </AlertDialogDescription>
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
-                                      <AlertDialogCancel onClick={() => setConversationToDelete(null)}>Annuler</AlertDialogCancel>
+                                      <AlertDialogCancel onClick={(e) => { e.stopPropagation(); setConversationToDelete(null); }}>Annuler</AlertDialogCancel>
                                       <AlertDialogAction onClick={handleDeleteConversation} className="bg-destructive hover:bg-destructive/90">
                                           Supprimer
                                       </AlertDialogAction>
