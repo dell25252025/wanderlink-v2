@@ -27,9 +27,6 @@ export default function InboxPage() {
   const { toast } = useToast();
   const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
 
-  // --- AUDIT LOG ---
-  console.log("--- AUDIT: Rendu du composant InboxPage. État actuel de onlineStatuses:", onlineStatuses);
-
   useEffect(() => {
     setConversations(initialConversations);
   }, [initialConversations]);
@@ -38,32 +35,14 @@ export default function InboxPage() {
     if (conversations.length === 0) {
         return;
     }
-    
-    // --- AUDIT LOG 1 ---
-    console.log(`--- AUDIT 1: Le useEffect pour écouter les statuts s'exécute pour ${conversations.length} conversation(s).`);
 
     const userIds = conversations.map(c => c.otherUserId);
     const unsubscribes = userIds.map(userId => {
-      
-      // --- AUDIT LOG 2 ---
-      console.log(`--- AUDIT 2: Mise en place de l'écouteur onSnapshot pour otherUserId: ${userId}`);
-      
       const userDocRef = doc(db, 'users', userId);
       return onSnapshot(userDocRef, (doc) => {
         if (doc.exists()) {
           const isOnline = doc.data().isOnline || false;
-          
-          // --- AUDIT LOG 3 ---
-          console.log(`--- AUDIT 3: Données reçues de Firestore. otherUserId: ${userId}, isOnline: ${isOnline}`);
-          
-          setOnlineStatuses(prev => {
-            const newState = { ...prev, [userId]: isOnline };
-            // --- AUDIT LOG 4 ---
-            console.log(`--- AUDIT 4: Mise à jour de onlineStatuses. Nouvel état:`, newState);
-            return newState;
-          });
-        } else {
-            console.warn(`--- AUDIT WARNING: Le document pour l'utilisateur ${userId} n'existe pas.`);
+          setOnlineStatuses(prev => ({ ...prev, [userId]: isOnline }));
         }
       });
     });
@@ -105,7 +84,45 @@ export default function InboxPage() {
   return (
     <div className="flex h-screen flex-col bg-background">
       <header className="fixed top-0 z-20 w-full h-12 flex items-center justify-between border-b bg-background/95 px-2 py-1 backdrop-blur-sm md:px-4">
-        {/* ... Header JSX ... */}
+        <div className="flex items-center">
+            <Button onClick={() => router.push('/')} variant="ghost" size="icon" className="h-8 w-8 -ml-2">
+                <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h1 className="text-sm font-semibold ml-2">Messages</h1>
+        </div>
+        
+        <AlertDialog open={isDeletingAll} onOpenChange={setIsDeletingAll}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={conversations.length === 0}>
+                <MoreVertical className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <AlertDialogTrigger asChild>
+                <DropdownMenuItem className="text-destructive">
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Tout supprimer
+                </DropdownMenuItem>
+              </AlertDialogTrigger>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <AlertDialogContent>
+              <AlertDialogHeader>
+                  <AlertDialogTitle>Supprimer toutes les conversations ?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                      Cette action est irréversible et supprimera définitivement toutes vos conversations.
+                  </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                  <AlertDialogCancel>Annuler</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeleteAllConversations} className="bg-destructive hover:bg-destructive/90">
+                      Supprimer
+                  </AlertDialogAction>
+              </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
       </header>
 
       <main className="flex-1 overflow-y-auto pt-12 pb-4">
@@ -122,12 +139,7 @@ export default function InboxPage() {
             <div className="mt-2">
                 {filteredConversations.length > 0 ? (
                     <ul className="divide-y">
-                    {filteredConversations.map((convo) => {
-                        // --- AUDIT LOG 5 ---
-                        const statusValue = onlineStatuses[convo.otherUserId];
-                        console.log(`--- AUDIT 5: Rendu de la conversation avec ${convo.name} (${convo.otherUserId}). Valeur du statut: ${statusValue}`);
-
-                        return (
+                    {filteredConversations.map((convo) => (
                         <li key={convo.id} className="flex items-center gap-1 p-1.5 transition-colors hover:bg-muted/50">
                             <Link href={`/chat/${convo.id}`} className="flex flex-1 items-center gap-2 min-w-0">
                                 <div className="relative">
@@ -135,9 +147,7 @@ export default function InboxPage() {
                                     <AvatarImage src={convo.avatarUrl} alt={convo.name} />
                                     <AvatarFallback>{convo.name.charAt(0)}</AvatarFallback>
                                     </Avatar>
-                                    {/* --- AUDIT LOG 6 --- */}
-                                    {console.log(`--- AUDIT 6: Vérification du JSX pour ${convo.otherUserId}. La condition (statusValue) est: ${!!statusValue}`)}
-                                    {statusValue && (
+                                    {onlineStatuses[convo.otherUserId] && (
                                         <div className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 border-2 border-background"></div>
                                     )}
                                 </div>
@@ -165,10 +175,39 @@ export default function InboxPage() {
                                 </div>
                                 </div>
                             </Link>
-                            {/* ... Menu ... */}
+                            <AlertDialog open={conversationToDelete === convo.id} onOpenChange={() => setConversationToDelete(null)}>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <AlertDialogTrigger asChild>
+                                    <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); setConversationToDelete(convo.id); }}>
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Supprimer
+                                    </DropdownMenuItem>
+                                  </AlertDialogTrigger>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                              <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                                  <AlertDialogHeader>
+                                      <AlertDialogTitle>Supprimer la conversation ?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                          Cette action est irréversible.
+                                      </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                      <AlertDialogCancel onClick={(e) => { e.stopPropagation(); setConversationToDelete(null); }}>Annuler</AlertDialogCancel>
+                                      <AlertDialogAction onClick={handleDeleteConversation} className="bg-destructive hover:bg-destructive/90">
+                                          Supprimer
+                                      </AlertDialogAction>
+                                  </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                         </li>
-                        );
-                    })}
+                    ))}
                     </ul>
                 ) : (
                     <p className="p-4 text-center text-sm text-muted-foreground">Aucune conversation pour le moment.</p>
