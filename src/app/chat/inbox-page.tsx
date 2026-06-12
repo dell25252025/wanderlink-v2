@@ -32,6 +32,9 @@ export default function InboxPage() {
   }, [initialConversations]);
 
   useEffect(() => {
+    // --- LOG DE VÉRIFICATION ---
+    console.log("CONVERSATIONS =", conversations);
+
     if (conversations.length === 0) {
         return;
     }
@@ -40,6 +43,10 @@ export default function InboxPage() {
     const unsubscribes = userIds.map(userId => {
       const userDocRef = doc(db, 'users', userId);
       return onSnapshot(userDocRef, (doc) => {
+        // --- LOGS DE VÉRIFICATION ---
+        console.log("SNAPSHOT USER =", userId);
+        console.log("SNAPSHOT DATA =", doc.data());
+
         if (doc.exists()) {
           const isOnline = doc.data().isOnline || false;
           setOnlineStatuses(prev => ({ ...prev, [userId]: isOnline }));
@@ -80,6 +87,9 @@ export default function InboxPage() {
   if (error) {
     return <div className="flex h-screen items-center justify-center text-destructive">{error}</div>;
   }
+  
+  // --- LOG DE VÉRIFICATION ---
+  console.log("ONLINE_STATUSES =", onlineStatuses);
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -139,7 +149,14 @@ export default function InboxPage() {
             <div className="mt-2">
                 {filteredConversations.length > 0 ? (
                     <ul className="divide-y">
-                    {filteredConversations.map((convo) => (
+                    {filteredConversations.map((convo) => {
+                       // --- LOG DE VÉRIFICATION ---
+                        console.log({
+                            convoId: convo.id,
+                            otherUserId: convo.otherUserId,
+                            onlineValue: onlineStatuses[convo.otherUserId]
+                        });
+                      return (
                         <li key={convo.id} className="flex items-center gap-1 p-1.5 transition-colors hover:bg-muted/50">
                             <Link href={`/chat/${convo.id}`} className="flex flex-1 items-center gap-2 min-w-0">
                                 <div className="relative">
@@ -207,7 +224,8 @@ export default function InboxPage() {
                               </AlertDialogContent>
                             </AlertDialog>
                         </li>
-                    ))}
+                      );
+                    })}
                     </ul>
                 ) : (
                     <p className="p-4 text-center text-sm text-muted-foreground">Aucune conversation pour le moment.</p>
