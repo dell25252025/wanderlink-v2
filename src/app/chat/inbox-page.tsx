@@ -18,6 +18,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 export default function InboxPage() {
+  console.log("--- InboxPage component rendering --- PRE-HOOKS"); // NOUVEAU TEST
+
   const router = useRouter();
   const { conversations: initialConversations, loading, error } = useRealtimeConversations();
   const [searchTerm, setSearchTerm] = useState('');
@@ -36,31 +38,11 @@ export default function InboxPage() {
         return;
     }
 
-    // --- LOG 1: DÉCLENCHEMENT DE L'EFFET ---
-    console.log(
-      '[ONLINE EFFECT]',
-      {
-        conversationsLength: conversations.length,
-        otherUserIds: conversations.map(c => c.otherUserId)
-      }
-    );
-
     const userIds = conversations.map(c => c.otherUserId);
     const unsubscribes = userIds.map(userId => {
       const userDocRef = doc(db, 'users', userId);
       return onSnapshot(userDocRef, (doc) => {
         if (doc.exists()) {
-          // --- LOG 2: RÉPONSE DE FIRESTORE ---
-          console.log(
-            '[ONLINE SNAPSHOT]',
-            {
-              userId,
-              exists: doc.exists(),
-              firestoreData: doc.data(),
-              isOnline: doc.data()?.isOnline
-            }
-          );
-
           const isOnline = doc.data().isOnline || false;
           setOnlineStatuses(prev => ({ ...prev, [userId]: isOnline }));
         }
@@ -100,12 +82,6 @@ export default function InboxPage() {
   if (error) {
     return <div className="flex h-screen items-center justify-center text-destructive">{error}</div>;
   }
-
-  // --- LOG 3: ÉTAT ACTUEL AVANT LE RENDER ---
-  console.log(
-    '[ONLINE STATE]',
-    onlineStatuses
-  );
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -165,18 +141,7 @@ export default function InboxPage() {
             <div className="mt-2">
                 {filteredConversations.length > 0 ? (
                     <ul className="divide-y">
-                    {filteredConversations.map((convo) => {
-                      // --- LOG 4: DONNÉES DISPONIBLES AU MOMENT DU RENDER ---
-                      console.log(
-                        '[CONVERSATION RENDER]',
-                        {
-                          name: convo.name,
-                          otherUserId: convo.otherUserId,
-                          statusValue: onlineStatuses[convo.otherUserId]
-                        }
-                      );
-
-                      return (
+                    {filteredConversations.map((convo) => (
                         <li key={convo.id} className="flex items-center gap-1 p-1.5 transition-colors hover:bg-muted/50">
                             <Link href={`/chat/${convo.id}`} className="flex flex-1 items-center gap-2 min-w-0">
                                 <div className="relative">
@@ -244,8 +209,7 @@ export default function InboxPage() {
                               </AlertDialogContent>
                             </AlertDialog>
                         </li>
-                      );
-                    })}
+                    ))}
                     </ul>
                 ) : (
                     <p className="p-4 text-center text-sm text-muted-foreground">Aucune conversation pour le moment.</p>

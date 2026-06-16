@@ -49,30 +49,6 @@ export const viewport: Viewport = {
   userScalable: false,
 }
 
-const ErrorTrapScript = () => (
-  <script
-    dangerouslySetInnerHTML={{
-      __html: `
-        window.addEventListener('error', function(event) {
-          console.log('[GLOBAL ERROR TRAP]', {
-            message: event.message,
-            filename: event.filename,
-            lineno: event.lineno,
-            colno: event.colno,
-            error: event.error ? event.error.stack : 'No stack trace'
-          });
-        });
-        window.addEventListener('unhandledrejection', function(event) {
-          console.log('[GLOBAL PROMISE REJECTION]', {
-            reason: event.reason ? event.reason.stack : 'No stack trace'
-          });
-        });
-        console.log('[GLOBAL ERROR TRAP] Script loaded.');
-      `,
-    }}
-  />
-);
-
 export default function RootLayout({
   children,
 }: {
@@ -80,9 +56,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr" suppressHydrationWarning>
-      <head>
-        <ErrorTrapScript />
-      </head>
       <body className={cn("font-sans antialiased", poppins.variable, playfair.variable, ptsans.variable)}>
         <script
           dangerouslySetInnerHTML={{
