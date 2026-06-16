@@ -27,6 +27,16 @@ export default function InboxPage() {
   const { toast } = useToast();
   const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
 
+  // --- DÉBUT DE LA MODIFICATION POUR LE DÉBOGAGE ---
+  useEffect(() => {
+    if (initialConversations.length > 0) {
+      console.log('--- VÉRIFICATION DES DONNÉES BRUTES DE CONVERSATION ---');
+      console.log(JSON.stringify(initialConversations[0], null, 2));
+      console.log('----------------------------------------------------');
+    }
+  }, [initialConversations]);
+  // --- FIN DE LA MODIFICATION POUR LE DÉBOGAGE ---
+
   useEffect(() => {
     setConversations(initialConversations);
   }, [initialConversations]);
