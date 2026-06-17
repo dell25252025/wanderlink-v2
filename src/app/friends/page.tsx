@@ -8,9 +8,10 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { getFriends, removeFriend } from '@/lib/firebase-actions';
-import { auth } from '@/lib/firebase';
+import { removeFriend } from '@/lib/firebase-actions';
+import { auth, db } from '@/lib/firebase';
 import type { User as FirebaseUser } from 'firebase/auth';
+import { collection, onSnapshot, query, where, doc } from 'firebase/firestore';
 import type { DocumentData } from 'firebase/firestore';
 import WanderlinkHeader from '@/components/wanderlink-header';
 import BottomNav from '@/components/bottom-nav';
@@ -27,38 +28,80 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+interface Friend extends DocumentData {
+  id: string;
+  firstName?: string;
+  profilePictures?: string[];
+  location?: string;
+  isVerified?: boolean;
+  isOnline?: boolean;
+}
+
 export default function FriendsPage() {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
-  const [friends, setFriends] = useState<DocumentData[]>([]);
+  const [friends, setFriends] = useState<Friend[]>([]);
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
+    const unsubscribeAuth = auth.onAuthStateChanged((user) => {
       if (user) {
         setCurrentUser(user);
-        fetchFriends(user.uid);
       } else {
         router.push('/login');
       }
     });
 
-    const fetchFriends = async (uid: string) => {
-      setLoading(true);
-      try {
-        const friendsList = await getFriends(uid);
-        setFriends(friendsList);
-      } catch (error) {
-        console.error('Failed to fetch friends:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    return () => unsubscribe();
+    return () => unsubscribeAuth();
   }, [router]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    setLoading(true);
+    const friendsRef = collection(db, 'users', currentUser.uid, 'friends');
+    const q = query(friendsRef);
+
+    const unsubscribeFriends = onSnapshot(q, async (snapshot) => {
+      const friendIds = snapshot.docs.map(doc => doc.id);
+      if (friendIds.length === 0) {
+        setFriends([]);
+        setLoading(false);
+        return;
+      }
+
+      const friendProfiles: Friend[] = [];
+      const unsubscribes = friendIds.map(id => {
+          const userDocRef = doc(db, 'users', id);
+          return onSnapshot(userDocRef, (userDoc) => {
+              if (userDoc.exists()) {
+                  const userData = { id: userDoc.id, ...userDoc.data() } as Friend;
+                  const index = friendProfiles.findIndex(f => f.id === id);
+                  if (index > -1) {
+                      friendProfiles[index] = userData;
+                  } else {
+                      friendProfiles.push(userData);
+                  }
+                  setFriends([...friendProfiles]);
+              }
+          });
+      });
+
+      setLoading(false);
+      
+      return () => {
+          unsubscribes.forEach(unsub => unsub());
+      };
+
+    }, (error) => {
+      console.error('Failed to fetch friends:', error);
+      setLoading(false);
+    });
+
+    return () => unsubscribeFriends();
+  }, [currentUser]);
   
   const handleRemoveFriend = async (friendId: string) => {
     if (!currentUser) return;
@@ -99,10 +142,15 @@ export default function FriendsPage() {
                     {filteredFriends.map((friend) => (
                         <li key={friend.id} className="flex items-center gap-2 p-3 hover:bg-muted/50">
                             <Link href={`/profile?id=${friend.id}`} className="flex flex-1 items-center gap-4 min-w-0">
-                                <Avatar className="h-12 w-12">
-                                    <AvatarImage src={friend.profilePictures?.[0]} alt={friend.firstName} />
-                                    <AvatarFallback>{friend.firstName?.charAt(0) || 'A'}</AvatarFallback>
-                                </Avatar>
+                                <div className="relative">
+                                    <Avatar className="h-12 w-12">
+                                        <AvatarImage src={friend.profilePictures?.[0]} alt={friend.firstName} />
+                                        <AvatarFallback>{friend.firstName?.charAt(0) || 'A'}</AvatarFallback>
+                                    </Avatar>
+                                    {friend.isOnline && (
+                                        <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background"></div>
+                                    )}
+                                </div>
                                 <div className="flex-1 overflow-hidden">
                                     <p className="font-semibold truncate flex items-center gap-1.5">
                                       {friend.firstName}
@@ -146,7 +194,7 @@ export default function FriendsPage() {
                 <div className="flex min-h-[calc(100vh-250px)] flex-col items-center justify-center text-center px-4">
                     <User className="h-16 w-16 text-muted-foreground" />
                     <h2 className="mt-6 text-2xl font-bold">
-                      {searchTerm ? "Aucun ami trouvé" : "Vous n'avez aucun ami"}
+                      {searchTerm ? "Aucun ami trouvé" : "Vous n\'avez aucun ami"}
                     </h2>
                     <p className="mt-2 max-w-xs text-muted-foreground">
                       {searchTerm ? "Essayez une recherche différente." : "Commencez à explorer pour vous faire de nouveaux amis voyageurs !"}
