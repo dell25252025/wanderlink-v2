@@ -13,7 +13,7 @@ export default function InboxPage() {
 
   return (
     <div className="flex min-h-screen w-full flex-col">
-      <WanderlinkHeader />
+      <WanderlinkHeader title="Messages (depuis /inbox)" />
       <main className="flex-1 pb-24 pt-20">
         <div className="container mx-auto max-w-7xl px-2">
             <div className="relative mb-4">

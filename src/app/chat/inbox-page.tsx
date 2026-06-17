@@ -18,8 +18,6 @@ import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 export default function InboxPage() {
-  console.log("--- InboxPage component rendering --- PRE-HOOKS"); // NOUVEAU TEST
-
   const router = useRouter();
   const { conversations: initialConversations, loading, error } = useRealtimeConversations();
   const [searchTerm, setSearchTerm] = useState('');
@@ -90,7 +88,7 @@ export default function InboxPage() {
             <Button onClick={() => router.push('/')} variant="ghost" size="icon" className="h-8 w-8 -ml-2">
                 <ArrowLeft className="h-5 w-5" />
             </Button>
-            <h1 className="text-sm font-semibold ml-2">Messages</h1>
+            <h1 className="text-sm font-semibold ml-2">Messages (depuis /chat/inbox)</h1>
         </div>
         
         <AlertDialog open={isDeletingAll} onOpenChange={setIsDeletingAll}>
