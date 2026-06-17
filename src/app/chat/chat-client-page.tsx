@@ -260,11 +260,26 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [messageToDelete, setMessageToDelete] = useState<Message | null>(null);
   const [showReactionPopoverFor, setShowReactionPopoverFor] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [isOtherUserOnline, setIsOtherUserOnline] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isDesktop = useMediaQuery('(min-width: 768px)');
+
+  useEffect(() => {
+    if (otherUserId) {
+      const userDocRef = doc(db, 'users', otherUserId);
+      const unsubscribe = onSnapshot(userDocRef, (doc) => {
+        if (doc.exists()) {
+          const userData = doc.data();
+          setOtherUser(userData);
+          setIsOtherUserOnline(userData.isOnline || false);
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, [otherUserId]);
 
   useEffect(() => {
     const blockedUsersRaw = localStorage.getItem('blockedUsers');
@@ -279,10 +294,6 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         router.push('/inbox');
         return; 
       }
-    }
-    
-    if (otherUserId) {
-      getUserProfile(otherUserId).then(setOtherUser);
     }
   }, [otherUserId, router, toast]);
 
@@ -688,7 +699,20 @@ const takePicture = useCallback(async (source: CameraSource) => {
     <div className="flex h-screen flex-col bg-background w-full overflow-x-hidden">
       <header className="fixed top-0 z-30 flex w-full items-center gap-2 border-b bg-background/95 px-2 py-1 backdrop-blur-sm h-12">
         <Button onClick={handleBack} variant="ghost" size="icon" className="h-8 w-8"><ArrowLeft className="h-4 w-4" /></Button>
-        <Link href={`/profile?id=${otherUserId}`} className="flex min-w-0 flex-1 items-center gap-2 truncate"><Avatar className="h-8 w-8"><AvatarImage src={otherUserImage} alt={otherUserName} /><AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback></Avatar><div className="flex-1 truncate"><h1 className="truncate text-sm font-semibold">{otherUserName}</h1></div></Link>
+        <Link href={`/profile?id=${otherUserId}`} className="flex min-w-0 flex-1 items-center gap-2 truncate">
+          <div className="relative">
+            <Avatar className="h-8 w-8">
+              <AvatarImage src={otherUserImage} alt={otherUserName} />
+              <AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback>
+            </Avatar>
+            {isOtherUserOnline && (
+              <div className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 border-2 border-background"></div>
+            )}
+          </div>
+          <div className="flex-1 truncate">
+            <h1 className="truncate text-sm font-semibold">{otherUserName}</h1>
+          </div>
+        </Link>
         <>
             <Button onClick={() => handleStartCall(true)} variant="ghost" size="icon" className="h-8 w-8"><Video className="h-4 w-4" /></Button>
             <Drawer><DrawerTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DrawerTrigger><DrawerContent><div className="mx-auto w-full max-w-sm"><DrawerHeader><DrawerTitle>Options</DrawerTitle><DrawerDescription>Gérez votre interaction avec {otherUserName}.</DrawerDescription></DrawerHeader><div className="p-4 pt-0"><div className="mt-3 h-full"><DrawerClose asChild><Button variant="outline" className="w-full justify-start p-4 h-auto text-base"><Ban className="mr-2 h-5 w-5" /> Bloquer</Button></DrawerClose><div className="my-2 border-t"></div><DrawerClose asChild><Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={() => setIsReportModalOpen(true)}><ShieldAlert className="mr-2 h-5 w-5" /> Signaler</Button></DrawerClose></div></div><div className="p-4"><DrawerClose asChild><Button variant="secondary" className="w-full h-12 text-base">Annuler</Button></DrawerClose></div></div></DrawerContent></Drawer>
