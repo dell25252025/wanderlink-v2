@@ -1,191 +1,192 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { collection, query, where, onSnapshot, getDocs, documentId, doc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, User as UserIcon } from 'lucide-react';
-import { getUserProfile } from '@/lib/firebase-actions';
-import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-// --- Types --- //
+// Interfaces
 interface Chat {
   id: string;
   participants: string[];
-  lastMessage: {
+  lastMessage?: {
     text: string;
+    timestamp: any; // Firestore Timestamp
     senderId: string;
-    timestamp: any;
     read: boolean;
-  } | null;
-}
-
-interface ParticipantProfile {
-  id: string;
-  name: string;
-  profilePicture: string | null;
+  };
 }
 
 interface EnrichedChat extends Chat {
-  otherParticipant: ParticipantProfile | null;
-  isOnline?: boolean; // Ajout du statut en ligne
+  otherParticipant: {
+    id: string;
+    firstName?: string;
+    profilePictures?: string[];
+    isOnline?: boolean;
+  };
 }
 
-// --- Composant d'une seule conversation --- //
+// Component to render a single chat item
 const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
-  if (!chat.otherParticipant) {
-    return null;
-  }
+  const router = useRouter();
+  const [currentUser] = useAuthState(auth);
 
-  const lastMessageTimestamp = chat.lastMessage?.timestamp?.toDate();
-  const isUnread = chat.lastMessage && !chat.lastMessage.read && chat.lastMessage.senderId !== auth.currentUser?.uid;
+  const handleClick = () => {
+    router.push(`/chat?id=${chat.otherParticipant.id}`);
+  };
+
+  if (!currentUser) return null;
+
+  const { otherParticipant, lastMessage } = chat;
+  const lastMessageTimestamp = lastMessage?.timestamp?.toDate();
+  const isLastMessageUnread = lastMessage && lastMessage.senderId !== currentUser.uid && !lastMessage.read;
 
   return (
-    <Link href={`/chat?id=${chat.otherParticipant.id}`} className="block w-full">
-      <div className="flex items-center space-x-4 p-3 hover:bg-muted/50 transition-colors rounded-lg">
-        <div className="relative">
-          <Avatar className="h-12 w-12">
-            <AvatarImage src={chat.otherParticipant.profilePicture || undefined} alt={chat.otherParticipant.name} />
-            <AvatarFallback><UserIcon /></AvatarFallback>
-          </Avatar>
-          {chat.isOnline && (
-            <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background"></div>
+    <li 
+      onClick={handleClick}
+      className="flex items-center gap-4 p-3 hover:bg-muted/50 cursor-pointer transition-colors"
+    >
+      <div className="relative">
+        <Avatar className="h-12 w-12">
+          <AvatarImage src={otherParticipant.profilePictures?.[0]} alt={otherParticipant.firstName} />
+          <AvatarFallback>{otherParticipant.firstName?.charAt(0) || 'U'}</AvatarFallback>
+        </Avatar>
+        {chat.otherParticipant.isOnline && (
+            <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background" />
+        )}
+      </div>
+      <div className="flex-1 overflow-hidden">
+        <div className="flex justify-between items-center">
+          <p className="font-semibold truncate">{otherParticipant.firstName || 'Utilisateur'}</p>
+          {lastMessageTimestamp && (
+            <p className="text-xs text-muted-foreground whitespace-nowrap">
+              {formatDistanceToNow(lastMessageTimestamp, { addSuffix: true, locale: fr })}
+            </p>
           )}
         </div>
-        <div className="flex-1 overflow-hidden">
-          <div className="flex justify-between items-center">
-            <p className="font-semibold truncate">{chat.otherParticipant.name}</p>
-            {lastMessageTimestamp && (
-              <p className="text-xs text-muted-foreground whitespace-nowrap">
-                {formatDistanceToNow(lastMessageTimestamp, { addSuffix: true, locale: fr })}
-              </p>
-            )}
-          </div>
-          <div className="flex justify-between items-start">
-            <p className={`text-sm truncate pr-2 ${isUnread ? 'text-foreground font-bold' : 'text-muted-foreground'}`}>
-              {chat.lastMessage ? chat.lastMessage.text : 'Aucun message'}
-            </p>
-            {isUnread && (
-               <span className="h-2.5 w-2.5 rounded-full bg-primary mt-1.5" />
-            )}
-          </div>
+        <div className="flex justify-between items-start">
+            <p className={cn(
+                "text-sm truncate w-11/12",
+                isLastMessageUnread ? "text-foreground font-bold" : "text-muted-foreground"
+            )}>
+             {lastMessage?.text || 'Pas encore de messages'}
+           </p>
+           {isLastMessageUnread && (
+             <div className="h-2 w-2 rounded-full bg-primary mt-1.5"></div>
+           )}
         </div>
       </div>
-    </Link>
+    </li>
   );
 };
 
-
-// --- Composant principal de la liste des conversations --- //
-const InboxList = ({ searchTerm }: { searchTerm: string }) => {
-  const [user, loadingAuth] = useAuthState(auth);
+// Main component to display the list of chats
+export default function InboxList() {
   const [chats, setChats] = useState<EnrichedChat[]>([]);
-  const [loadingChats, setLoadingChats] = useState(true);
-  const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
+  const [currentUser] = useAuthState(auth);
 
-  // Étape 1: Récupérer les conversations
   useEffect(() => {
-    if (!user) {
-      if (!loadingAuth) setLoadingChats(false);
-      return;
-    }
+    if (!currentUser) return;
 
-    setLoadingChats(true);
-    const chatsRef = collection(db, 'chats');
-    const q = query(
-      chatsRef, 
-      where('participants', 'array-contains', user.uid)
-    );
+    const q = query(collection(db, 'chats'), where('participants', 'array-contains', currentUser.uid));
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const chatData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
+      // Explicitly filter out chats where the user is the only participant
+      const baseChats: Chat[] = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Chat))
+        .filter(chat => chat.participants.some(p => p !== currentUser.uid));
       
-      const enrichedChats = await Promise.all(chatData.map(async (chat) => {
-        const otherParticipantId = chat.participants.find(p => p !== user.uid);
-        let otherParticipant: ParticipantProfile | null = null;
-        if (otherParticipantId) {
-          try {
-            const profile = await getUserProfile(otherParticipantId);
-            otherParticipant = {
-              id: otherParticipantId,
-              name: profile?.firstName || 'Utilisateur inconnu',
-              profilePicture: profile?.profilePictures?.[0] || null
-            };
-          } catch (error) {
-            console.error("Could not fetch participant profile", error);
-          }
-        }
-        return { ...chat, otherParticipant };
-      }));
-
-      const sortedChats = enrichedChats.sort((a, b) => {
-        const timeA = a.lastMessage?.timestamp?.toMillis() || 0;
-        const timeB = b.lastMessage?.timestamp?.toMillis() || 0;
-        return timeB - timeA;
-      });
-      
-      setChats(sortedChats);
-      setLoadingChats(false);
-    }, (error) => {
-      console.error("Error fetching chats:", error);
-      if (error.message.includes("firestore/failed-precondition")) {
-          console.error("Firestore index missing. Please create it.");
+      if (baseChats.length === 0) {
+        setChats([]);
+        setLoading(false);
+        return;
       }
-      setLoadingChats(false);
+
+      const otherParticipantIds = baseChats
+        .map(chat => chat.participants.find(p => p !== currentUser.uid))
+        .filter((id): id is string => id !== undefined);
+
+      if (otherParticipantIds.length === 0) {
+          setChats([]);
+          setLoading(false);
+          return;
+      }
+      
+      const usersSnapshot = await getDocs(query(collection(db, 'users'), where(documentId(), 'in', otherParticipantIds)));
+      const usersData = new Map(usersSnapshot.docs.map(doc => [doc.id, doc.data()]));
+
+      const enrichedChats: EnrichedChat[] = baseChats
+        .map(chat => {
+          const otherParticipantId = chat.participants.find(p => p !== currentUser.uid);
+          const otherParticipantData = otherParticipantId ? usersData.get(otherParticipantId) : null;
+
+          if (otherParticipantData) {
+            return {
+              ...chat,
+              otherParticipant: {
+                id: otherParticipantId!,
+                firstName: otherParticipantData.firstName,
+                profilePictures: otherParticipantData.profilePictures,
+                isOnline: false, // Default value
+              },
+            };
+          }
+          return null;
+        })
+        .filter((chat): chat is EnrichedChat => chat !== null);
+
+      setChats(enrichedChats);
+      setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [user, loadingAuth]);
+  }, [currentUser]);
 
-  // Étape 2: Écouter les statuts en ligne des participants
-  useEffect(() => {
-    const participantIds = chats.map(chat => chat.otherParticipant?.id).filter((id): id is string => !!id);
-    if (participantIds.length === 0) return;
+   useEffect(() => {
+    if (chats.length === 0) return;
 
-    const unsubscribes = participantIds.map(userId => {
-      const userDocRef = doc(db, 'users', userId);
-      return onSnapshot(userDocRef, (doc) => {
-        if (doc.exists()) {
-          setOnlineStatuses(prev => ({ ...prev, [userId]: doc.data().isOnline || false }));
+    const participantIds = chats.map(chat => chat.otherParticipant.id);
+    if(participantIds.length === 0) return;
+
+    const unsubscribes = participantIds.map(id => {
+      const userDocRef = doc(db, 'users', id);
+      return onSnapshot(userDocRef, (userDoc) => {
+        if (userDoc.exists()) {
+            const isOnline = userDoc.data().isOnline || false;
+            setChats(prevChats => prevChats.map(chat => 
+                chat.otherParticipant.id === id 
+                ? { ...chat, otherParticipant: { ...chat.otherParticipant, isOnline } } 
+                : chat
+            ));
         }
       });
     });
 
     return () => unsubscribes.forEach(unsub => unsub());
-  }, [chats]);
+  }, [chats.length]); // Depend on chats.length to re-trigger when chats are loaded
 
-  const chatsWithOnlineStatus = chats.map(chat => ({
-    ...chat,
-    isOnline: chat.otherParticipant ? onlineStatuses[chat.otherParticipant.id] || false : false,
-  }));
 
-  const filteredChats = chatsWithOnlineStatus.filter(chat => 
-    chat.otherParticipant?.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  if (loadingAuth || loadingChats) {
-    return <div className="flex justify-center items-center h-48"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+  if (loading) {
+    return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
 
-  if (!user) {
-    return <p className="text-center text-muted-foreground">Veuillez vous connecter pour voir vos messages.</p>;
-  }
-
-  if (filteredChats.length === 0) {
-    return <p className="text-center text-muted-foreground">{searchTerm ? 'Aucune conversation trouvée.' : 'Aucune conversation pour le moment.'}</p>;
+  if (chats.length === 0) {
+    return <div className="text-center text-muted-foreground pt-10">Aucune conversation.</div>;
   }
 
   return (
-    <div className="space-y-2">
-      {filteredChats.map(chat => (
+    <ul className="divide-y divide-border">
+      {chats.map(chat => (
         <ChatListItem key={chat.id} chat={chat} />
       ))}
-    </div>
+    </ul>
   );
-};
-
-export default InboxList;
+}

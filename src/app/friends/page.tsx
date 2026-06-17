@@ -57,7 +57,9 @@ export default function FriendsPage() {
       setLoading(true);
       try {
         const friendsList = await getFriends(uid);
-        setFriends(friendsList as Friend[]);
+        // Filter out the current user from their own friends list
+        const filteredList = friendsList.filter(friend => friend.id !== uid);
+        setFriends(filteredList as Friend[]);
       } catch (error) {
         console.error('Failed to fetch friends:', error);
       } finally {
