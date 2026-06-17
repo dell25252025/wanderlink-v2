@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -32,12 +32,13 @@ interface ParticipantProfile {
 
 interface EnrichedChat extends Chat {
   otherParticipant: ParticipantProfile | null;
+  isOnline?: boolean; // Ajout du statut en ligne
 }
 
 // --- Composant d'une seule conversation --- //
 const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
   if (!chat.otherParticipant) {
-    return null; // Ne pas afficher si les détails du participant ne sont pas chargés
+    return null;
   }
 
   const lastMessageTimestamp = chat.lastMessage?.timestamp?.toDate();
@@ -46,10 +47,15 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
   return (
     <Link href={`/chat?id=${chat.otherParticipant.id}`} className="block w-full">
       <div className="flex items-center space-x-4 p-3 hover:bg-muted/50 transition-colors rounded-lg">
-        <Avatar className="h-12 w-12">
-          <AvatarImage src={chat.otherParticipant.profilePicture || undefined} alt={chat.otherParticipant.name} />
-          <AvatarFallback><UserIcon /></AvatarFallback>
-        </Avatar>
+        <div className="relative">
+          <Avatar className="h-12 w-12">
+            <AvatarImage src={chat.otherParticipant.profilePicture || undefined} alt={chat.otherParticipant.name} />
+            <AvatarFallback><UserIcon /></AvatarFallback>
+          </Avatar>
+          {chat.isOnline && (
+            <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background"></div>
+          )}
+        </div>
         <div className="flex-1 overflow-hidden">
           <div className="flex justify-between items-center">
             <p className="font-semibold truncate">{chat.otherParticipant.name}</p>
@@ -79,7 +85,9 @@ const InboxList = ({ searchTerm }: { searchTerm: string }) => {
   const [user, loadingAuth] = useAuthState(auth);
   const [chats, setChats] = useState<EnrichedChat[]>([]);
   const [loadingChats, setLoadingChats] = useState(true);
+  const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
 
+  // Étape 1: Récupérer les conversations
   useEffect(() => {
     if (!user) {
       if (!loadingAuth) setLoadingChats(false);
@@ -133,7 +141,29 @@ const InboxList = ({ searchTerm }: { searchTerm: string }) => {
     return () => unsubscribe();
   }, [user, loadingAuth]);
 
-  const filteredChats = chats.filter(chat => 
+  // Étape 2: Écouter les statuts en ligne des participants
+  useEffect(() => {
+    const participantIds = chats.map(chat => chat.otherParticipant?.id).filter((id): id is string => !!id);
+    if (participantIds.length === 0) return;
+
+    const unsubscribes = participantIds.map(userId => {
+      const userDocRef = doc(db, 'users', userId);
+      return onSnapshot(userDocRef, (doc) => {
+        if (doc.exists()) {
+          setOnlineStatuses(prev => ({ ...prev, [userId]: doc.data().isOnline || false }));
+        }
+      });
+    });
+
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, [chats]);
+
+  const chatsWithOnlineStatus = chats.map(chat => ({
+    ...chat,
+    isOnline: chat.otherParticipant ? onlineStatuses[chat.otherParticipant.id] || false : false,
+  }));
+
+  const filteredChats = chatsWithOnlineStatus.filter(chat => 
     chat.otherParticipant?.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
