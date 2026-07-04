@@ -1,35 +1,14 @@
+
 'use client';
 
 import { db, storage, auth } from "@/lib/firebase";
-// DIAGNOSTIC V4: Importer l'original `collection` sous un autre nom.
-import { collection as originalCollection, doc, getDoc, DocumentData, setDoc, updateDoc, getDocs, arrayUnion, arrayRemove, addDoc, serverTimestamp, limit, query as firestoreQuery } from "firebase/firestore";
+import { collection, doc, getDoc, DocumentData, setDoc, updateDoc, getDocs, arrayUnion, arrayRemove, addDoc, serverTimestamp, limit, query as firestoreQuery } from "firebase/firestore";
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut, signInWithCredential } from "firebase/auth";
 import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 import { v4 as uuidv4 } from 'uuid';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { where } from "firebase/firestore";
-
-// --- DEBUT DE L'ESPION DE DIAGNOSTIC v4 ---
-let callCounter = 0;
-function collection(...args: any[]) {
-  callCounter++;
-  console.log(`--- [DIAGNOSTIC V4] Appel N°${callCounter} à collection() ---`);
-  
-  if (!args[0] || typeof args[0] !== 'object') {
-      console.error(`!!!!! [DIAGNOSTIC V4] ALERTE SUR APPEL N°${callCounter} !!!!!`);
-      console.error("Le premier argument est INVALIDE. Type:", typeof args[0]);
-      console.error("Valeur:", args[0]);
-  }
-
-  console.log(`Argument 2 (path?): ${args[1]}`);
-  console.trace(`Trace pour l'appel N°${callCounter}`);
-  console.log(`------------------------------------------------------`);
-  
-  // Appeler la fonction originale de Firebase avec les arguments reçus.
-  return originalCollection.apply(null, args as any);
-}
-// --- FIN DE L'ESPION DE DIAGNOSTIC v4 ---
 
 
 export async function signOutFromGoogle(uid: string) {
@@ -40,7 +19,7 @@ export async function signOutFromGoogle(uid: string) {
         isOnline: false,
         lastSeen: serverTimestamp(),
       });
-      console.log(`[Presence] Statut de l'utilisateur ${uid} mis à hors-ligne avant la déconnexion.`);
+      console.log(`[Presence] Statut de l\'utilisateur ${uid} mis à hors-ligne avant la déconnexion.`);
     } catch (e) {
       console.error("Erreur lors de la mise à jour du statut de présence avant déconnexion:", e);
     }
@@ -60,6 +39,7 @@ export async function signOutFromGoogle(uid: string) {
   }
 }
 
+// --- FONCTION DE GESTION DE L'UTILISATEUR CORRIGEE ---
 async function handleUser(user: any) {
   const userRef = doc(db, "users", user.uid);
   const userDoc = await getDoc(userRef);
@@ -81,7 +61,7 @@ async function handleUser(user: any) {
       subscriptionEndDate: null,
       isVerified: false,
       onboardingCompleted: false,
-      isOnline: true,
+      isOnline: true, // Défini à true pour les nouveaux utilisateurs
       lastSeen: serverTimestamp(),
     };
     await setDoc(userRef, sanitizeData(newProfileData));
@@ -98,11 +78,12 @@ async function handleUser(user: any) {
     };
   } else {
     const data = userDoc.data();
+    // Correction : Toujours mettre à jour le statut en ligne lors de la connexion
     await updateDoc(userRef, {
         isOnline: true,
         lastSeen: serverTimestamp(),
     });
-    console.log(`[Presence] Statut de l'utilisateur ${user.uid} mis à jour à 'en-ligne' lors de la connexion.`);
+    console.log(`[Presence] Statut de l\'utilisateur ${user.uid} mis à jour à \'en-ligne\' lors de la connexion.`);
 
     return { 
         success: true, 
@@ -204,7 +185,7 @@ export async function sendCallSystemMessage(chatId: string, callerId: string, re
 
         return { success: true };
     } catch (error) {
-        console.error("Erreur lors de l'envoi du message système d'appel:", error);
+        console.error("Erreur lors de l\'envoi du message système d\'appel:", error);
         const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
         return { success: false, error: errorMessage };
     }
@@ -212,7 +193,7 @@ export async function sendCallSystemMessage(chatId: string, callerId: string, re
 
 
 export async function generateAgoraToken(channelName: string, uid: number | string) {
-  console.warn("Generation de token simulée (Client Side). Assurez-vous d'être en mode Test sur Agora.");
+  console.warn("Generation de token simulée (Client Side). Assurez-vous d\'être en mode Test sur Agora.");
   return { success: true, token: null };
 }
 
@@ -338,7 +319,7 @@ export async function addProfilePicture(userId: string, photoDataUri: string) {
     } catch (e) {
         console.error("Error adding profile picture:", e);
         const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
-        return { success: false, error: `Failed to add profile picture: '${errorMessage}'` };
+        return { success: false, error: `Failed to add profile picture: \'${errorMessage}\'` };
     }
 }
 
@@ -361,7 +342,7 @@ export async function removeProfilePicture(userId: string, photoUrl: string) {
     } catch (e) {
         console.error("Error removing profile picture:", e);
         const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
-        return { success: false, error: `Failed to remove picture: '${errorMessage}'` };
+        return { success: false, error: `Failed to remove picture: \'${errorMessage}\'` };
     }
 }
 

@@ -18,7 +18,8 @@ function AuthenticatedHomePage({ user }: { user: User }) {
   const [initialProfiles, setInitialProfiles] = useState<DocumentData[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
 
-  // This hook now ONLY fetches default data. It does NOT touch localStorage.
+  // SOLUTION: Ce hook ne doit s'exécuter qu'UNE SEULE FOIS au montage.
+  // Les dépendances ont été retirées pour empêcher les ré-exécutions.
   useEffect(() => {
     getUserProfile(user.uid).then(setCurrentUserProfile);
     
@@ -32,14 +33,14 @@ function AuthenticatedHomePage({ user }: { user: User }) {
         toast({ variant: 'destructive', title: 'Error fetching users' });
       })
       .finally(() => setProfilesLoading(false));
-  }, [user, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
       <WanderlinkHeader />
       <main className="flex-1 pb-24 pt-10 md:pt-12">
         <div className="container mx-auto max-w-7xl px-2">
-          {/* DiscoverClientPage is now responsible for deciding what to show */}
           <DiscoverClientPage 
             initialProfiles={initialProfiles} 
             loading={profilesLoading} 
