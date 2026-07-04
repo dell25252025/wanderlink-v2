@@ -1,14 +1,35 @@
-
 'use client';
 
 import { db, storage, auth } from "@/lib/firebase";
-import { collection, doc, getDoc, DocumentData, setDoc, updateDoc, getDocs, arrayUnion, arrayRemove, addDoc, serverTimestamp, limit, query as firestoreQuery } from "firebase/firestore";
+// DIAGNOSTIC V4: Importer l'original `collection` sous un autre nom.
+import { collection as originalCollection, doc, getDoc, DocumentData, setDoc, updateDoc, getDocs, arrayUnion, arrayRemove, addDoc, serverTimestamp, limit, query as firestoreQuery } from "firebase/firestore";
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut, signInWithCredential } from "firebase/auth";
 import { ref, uploadString, getDownloadURL, deleteObject } from "firebase/storage";
 import { v4 as uuidv4 } from 'uuid';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { where } from "firebase/firestore";
+
+// --- DEBUT DE L'ESPION DE DIAGNOSTIC v4 ---
+let callCounter = 0;
+function collection(...args: any[]) {
+  callCounter++;
+  console.log(`--- [DIAGNOSTIC V4] Appel N°${callCounter} à collection() ---`);
+  
+  if (!args[0] || typeof args[0] !== 'object') {
+      console.error(`!!!!! [DIAGNOSTIC V4] ALERTE SUR APPEL N°${callCounter} !!!!!`);
+      console.error("Le premier argument est INVALIDE. Type:", typeof args[0]);
+      console.error("Valeur:", args[0]);
+  }
+
+  console.log(`Argument 2 (path?): ${args[1]}`);
+  console.trace(`Trace pour l'appel N°${callCounter}`);
+  console.log(`------------------------------------------------------`);
+  
+  // Appeler la fonction originale de Firebase avec les arguments reçus.
+  return originalCollection.apply(null, args as any);
+}
+// --- FIN DE L'ESPION DE DIAGNOSTIC v4 ---
 
 
 export async function signOutFromGoogle(uid: string) {
@@ -39,7 +60,6 @@ export async function signOutFromGoogle(uid: string) {
   }
 }
 
-// --- FONCTION DE GESTION DE L'UTILISATEUR CORRIGEE ---
 async function handleUser(user: any) {
   const userRef = doc(db, "users", user.uid);
   const userDoc = await getDoc(userRef);
@@ -61,7 +81,7 @@ async function handleUser(user: any) {
       subscriptionEndDate: null,
       isVerified: false,
       onboardingCompleted: false,
-      isOnline: true, // Défini à true pour les nouveaux utilisateurs
+      isOnline: true,
       lastSeen: serverTimestamp(),
     };
     await setDoc(userRef, sanitizeData(newProfileData));
@@ -78,7 +98,6 @@ async function handleUser(user: any) {
     };
   } else {
     const data = userDoc.data();
-    // Correction : Toujours mettre à jour le statut en ligne lors de la connexion
     await updateDoc(userRef, {
         isOnline: true,
         lastSeen: serverTimestamp(),
