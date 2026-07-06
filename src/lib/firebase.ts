@@ -4,12 +4,16 @@ import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 import { getFunctions } from "firebase/functions";
+// Ajout de l'import pour la Realtime Database
+import { getDatabase } from "firebase/database";
 
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyCGC-3H86sqqgigM2H5bIE4e1bEmGnKJz0",
   authDomain: "wanderlink-c1a35.firebaseapp.com",
+  // Ajout de la databaseURL pour la Realtime Database
+  databaseURL: "https://wanderlink-c1a35-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "wanderlink-c1a35",
   storageBucket: "wanderlink-c1a35.firebasestorage.app",
   messagingSenderId: "186522309970",
@@ -23,6 +27,8 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const storage = getStorage(app);
 const functions = getFunctions(app);
+// Initialisation de la Realtime Database
+const rtdb = getDatabase(app);
 
-
-export { app, db, auth, storage, functions };
+// Export de toutes les instances
+export { app, db, rtdb, auth, storage, functions };
