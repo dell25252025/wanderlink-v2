@@ -1,35 +1,53 @@
 import { useEffect } from 'react';
 import { User } from 'firebase/auth';
-import { db, rtdb } from '@/lib/firebase'; // Import des deux instances
+import { db, rtdb } from '@/lib/firebase';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-// Étape 5: Import des fonctions de la Realtime Database
-import { ref, onDisconnect, set } from 'firebase/database';
+import { ref, onDisconnect, set, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
 
 export const useUserPresence = (user: User | null) => {
   useEffect(() => {
-    if (user) {
-      // --- Partie Firestore (qui fonctionne) ---
-      const userDocRef = doc(db, 'users', user.uid);
-      updateDoc(userDocRef, {
-        isOnline: true,
-        lastSeen: serverTimestamp(),
-      });
-
-      // --- Étape 5: Introduction de la Realtime Database ---
-      try {
-        // Création de la référence à un chemin dans la RTDB
-        const userStatusDatabaseRef = ref(rtdb, '/status/' + user.uid);
-        console.log("[DIAGNOSTIC] Étape 5: La création de la référence Realtime Database a réussi.");
-      } catch (error) {
-        console.error("[DIAGNOSTIC] Étape 5: ERREUR lors de la création de la référence Realtime Database !", error);
-      }
-
-    } else {
-      console.log("[DIAGNOSTIC] Le hook est monté, mais il n'y a pas d'utilisateur.");
+    if (!user) {
+      console.log("[DIAGNOSTIC] Test Final: Hook actif, mais pas d'utilisateur connecté.");
+      return;
     }
 
-    // Pour l'instant, on ne fait rien à la déconnexion
-    return () => {};
+    console.log(`[DIAGNOSTIC] Test Final: Démarrage du hook de présence pour l'utilisateur ${user.uid}.`);
+
+    // Références aux bases de données
+    const userDocRef = doc(db, 'users', user.uid);
+    const userStatusDatabaseRef = ref(rtdb, `/status/${user.uid}`);
+
+    // Timestamps et statuts pour les deux services
+    const isOfflineForFirestore = { isOnline: false, lastSeen: serverTimestamp() };
+    const isOnlineForFirestore = { isOnline: true, lastSeen: serverTimestamp() };
+
+    const isOfflineForRTDB = { state: 'offline', last_changed: rtdbServerTimestamp() };
+    const isOnlineForRTDB = { state: 'online', last_changed: rtdbServerTimestamp() };
+
+    // 1. Mise à jour de Firestore (déjà validé)
+    updateDoc(userDocRef, isOnlineForFirestore);
+
+    // 2. Logique critique de la Realtime Database
+    try {
+      console.log("[DIAGNOSTIC] Test Final: Tentative de mise en place du onDisconnect.");
+      onDisconnect(userStatusDatabaseRef).set(isOfflineForRTDB).then(() => {
+        console.log("[DIAGNOSTIC] Test Final: Le gestionnaire onDisconnect a été configuré avec succès.");
+        console.log("[DIAGNOSTIC] Test Final: Mise à jour du statut RTDB à 'online'.");
+        set(userStatusDatabaseRef, isOnlineForRTDB);
+      }).catch((error) => {
+        console.error("[DIAGNOSTIC] Test Final: ERREUR lors de la promesse onDisconnect.set() !", error);
+      });
+    } catch (error) {
+      console.error("[DIAGNOSTIC] Test Final: ERREUR dans le bloc try/catch principal de la RTDB !", error);
+    }
+
+    // 3. Fonction de nettoyage au démontage (logout)
+    return () => {
+      console.log(`[DIAGNOSTIC] Test Final: Nettoyage du hook pour ${user.uid}.`);
+      // Met à jour le statut immédiatement lors d'une déconnexion propre
+      set(userStatusDatabaseRef, isOfflineForRTDB);
+      updateDoc(userDocRef, isOfflineForFirestore);
+    };
 
   }, [user]);
 };
