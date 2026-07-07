@@ -19,16 +19,21 @@ export const useUserPresence = (user: User | null) => {
     const isOfflineForRTDB = { state: 'offline', last_changed: rtdbServerTimestamp() };
     const isOnlineForRTDB = { state: 'online', last_changed: rtdbServerTimestamp() };
 
-    // Mise à jour de la présence sur Firestore et RTDB
     updateDoc(userDocRef, isOnlineForFirestore);
-    
-    // Logique de déconnexion de la Realtime Database
-    onDisconnect(userStatusDatabaseRef).set(isOfflineForRTDB).then(() => {
-      set(userStatusDatabaseRef, isOnlineForRTDB);
+
+    onDisconnect(userStatusDatabaseRef).set(isOfflineForRTDB).then(async () => {
+      console.log("--- [TEST FINAL] --- Le .then() de onDisconnect est atteint. Tentative d'écriture dans RTDB.");
+      try {
+        await set(userStatusDatabaseRef, isOnlineForRTDB);
+        console.log("--- [TEST FINAL] --- SUCCÈS : L'écriture dans la Realtime Database a réussi.");
+      } catch (error) {
+        console.error("--- [TEST FINAL] --- ÉCHEC : L'écriture dans la Realtime Database a échoué. ERREUR :", error);
+      }
+    }).catch((error) => {
+      console.error("--- [TEST FINAL] --- ÉCHEC CRITIQUE : onDisconnect().set() a échoué. ERREUR :", error);
     });
 
     return () => {
-      // Nettoyage lors de la déconnexion ou du démontage
       set(userStatusDatabaseRef, isOfflineForRTDB);
       updateDoc(userDocRef, isOfflineForFirestore);
     };
