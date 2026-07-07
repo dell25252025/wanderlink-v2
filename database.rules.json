@@ -1,0 +1,13 @@
+{
+  "rules": {
+    "status": {
+      "$uid": {
+        // Seul l'utilisateur authentifié peut écrire son propre statut
+        // OU le serveur Firebase lui-même (auth == null) pour onDisconnect
+        ".write": "auth != null && auth.uid == $uid || auth == null",
+        // Tout utilisateur authentifié peut lire le statut des autres
+        ".read": "auth != null"
+      }
+    }
+  }
+}
