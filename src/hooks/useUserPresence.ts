@@ -1,7 +1,8 @@
+
 import { useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { db, rtdb } from '@/lib/firebase';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp, onSnapshot, getDoc } from 'firebase/firestore';
 import { ref, onDisconnect, set, serverTimestamp as rtdbServerTimestamp } from 'firebase/database';
 
 export const useUserPresence = (user: User | null) => {
@@ -19,23 +20,36 @@ export const useUserPresence = (user: User | null) => {
     const isOfflineForRTDB = { state: 'offline', last_changed: rtdbServerTimestamp() };
     const isOnlineForRTDB = { state: 'online', last_changed: rtdbServerTimestamp() };
 
-    updateDoc(userDocRef, isOnlineForFirestore);
+    // On établit un listener pour connaître la préférence de l'utilisateur en temps réel
+    const unsubscribe = onSnapshot(userDocRef, (snapshot) => {
+      if (!snapshot.exists()) return;
 
-    onDisconnect(userStatusDatabaseRef).set(isOfflineForRTDB).then(async () => {
-      console.log("--- [TEST FINAL] --- Le .then() de onDisconnect est atteint. Tentative d'écriture dans RTDB.");
-      try {
-        await set(userStatusDatabaseRef, isOnlineForRTDB);
-        console.log("--- [TEST FINAL] --- SUCCÈS : L'écriture dans la Realtime Database a réussi.");
-      } catch (error) {
-        console.error("--- [TEST FINAL] --- ÉCHEC : L'écriture dans la Realtime Database a échoué. ERREUR :", error);
+      const userData = snapshot.data();
+      const userWantsToBeVisible = userData.showOnlineStatus !== false;
+
+      // Si l'utilisateur NE VEUT PAS être visible, on s'assure qu'il soit hors ligne et on arrête tout.
+      if (!userWantsToBeVisible) {
+        set(userStatusDatabaseRef, isOfflineForRTDB);
+        updateDoc(userDocRef, isOfflineForFirestore);
+        return;
       }
-    }).catch((error) => {
-      console.error("--- [TEST FINAL] --- ÉCHEC CRITIQUE : onDisconnect().set() a échoué. ERREUR :", error);
+      
+      // Si l'utilisateur VEUT être visible, on applique la logique de présence normale.
+      updateDoc(userDocRef, isOnlineForFirestore);
+      set(userStatusDatabaseRef, isOnlineForRTDB);
+
+      onDisconnect(userStatusDatabaseRef).set(isOfflineForRTDB);
     });
 
+    // La fonction de nettoyage doit tout couper
     return () => {
-      set(userStatusDatabaseRef, isOfflineForRTDB);
-      updateDoc(userDocRef, isOfflineForFirestore);
+      unsubscribe(); // Arrête d'écouter les préférences
+      if (user) {
+        // On s'assure de mettre l'utilisateur hors ligne quand il se déconnecte volontairement
+        const userStatusDatabaseRefOnCleanup = ref(rtdb, `/status/${user.uid}`);
+        set(userStatusDatabaseRefOnCleanup, isOfflineForRTDB);
+        updateDoc(doc(db, 'users', user.uid), isOfflineForFirestore);
+      }
     };
 
   }, [user]);
