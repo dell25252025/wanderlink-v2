@@ -3,26 +3,27 @@
 
 import { useState, useEffect } from 'react';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
-import { useAuth } from '@/context/AuthContext'; // Chemin confirmé
-import { db } from '@/lib/firebase'; // Corrigé : utilise 'db' au lieu de 'firestore'
+import { useAuth } from '@/context/AuthContext';
+import { db } from '@/lib/firebase';
 
 import { Eye, MessageSquare, UserPlus } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { SettingsHeader } from '@/components/settings/settings-header';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 export default function PrivacySettingsPage() {
   const { currentUser } = useAuth();
-  const [showOnlineStatus, setShowOnlineStatus] = useState(true); 
-
-  // ... (les autres états sont conservés pour la complétude de votre page)
-  const [showRecentActivity, setShowRecentActivity] = useState(false);
+  const [showOnlineStatus, setShowOnlineStatus] = useState(true);
+  const [messagingPolicy, setMessagingPolicy] = useState('all');
+  const [photoVisibility, setPhotoVisibility] = useState('all');
+  const [friendRequestPolicy, setFriendRequestPolicy] = useState('all');
 
   useEffect(() => {
     if (!currentUser?.uid) return;
 
-    const userRef = doc(db, 'users', currentUser.uid); // Corrigé
+    const userRef = doc(db, 'users', currentUser.uid);
     const unsubscribe = onSnapshot(userRef, (doc) => {
       if (doc.exists()) {
         const userData = doc.data();
@@ -36,7 +37,7 @@ export default function PrivacySettingsPage() {
   const handleToggleOnlineStatus = async (isActive: boolean) => {
     if (!currentUser?.uid) return;
 
-    const userRef = doc(db, 'users', currentUser.uid); // Corrigé
+    const userRef = doc(db, 'users', currentUser.uid);
     try {
       await updateDoc(userRef, {
         showOnlineStatus: isActive,
@@ -62,13 +63,76 @@ export default function PrivacySettingsPage() {
                             <Label htmlFor="online-status" className="text-sm">Afficher mon statut "En ligne"</Label>
                             <Switch id="online-status" checked={showOnlineStatus} onCheckedChange={handleToggleOnlineStatus} />
                         </div>
-                         <div className="flex items-center justify-between rounded-lg border p-4">
-                            <Label htmlFor="recent-activity" className="text-sm">Afficher mon activité récente</Label>
-                            <Switch id="recent-activity" checked={showRecentActivity} onCheckedChange={setShowRecentActivity} disabled />
-                        </div>
+                         {/* La section 'Activité récente' a été supprimée */}
                     </CardContent>
                 </Card>
-                {/* ... Autres cartes ... */}
+                
+                <Card>
+                    <CardHeader className="p-4">
+                        <CardTitle className="flex items-center gap-2 text-base"><MessageSquare className="h-5 w-5"/> Qui peut voir mes photos ?</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0">
+                        <RadioGroup value={photoVisibility} onValueChange={setPhotoVisibility} className="space-y-2">
+                           <div className="flex items-center space-x-3">
+                               <RadioGroupItem value="all" id="p-all" />
+                               <Label htmlFor="p-all" className="text-sm font-normal">Tout le monde</Label>
+                           </div>
+                           <div className="flex items-center space-x-3">
+                               <RadioGroupItem value="friends" id="p-friends" />
+                               <Label htmlFor="p-friends" className="text-sm font-normal">Seulement mes amis</Label>
+                           </div>
+                           <div className="flex items-center space-x-3">
+                               <RadioGroupItem value="none" id="p-none" />
+                               <Label htmlFor="p-none" className="text-sm font-normal">Personne</Label>
+                           </div>
+                        </RadioGroup>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="p-4">
+                        <CardTitle className="flex items-center gap-2 text-base"><MessageSquare className="h-5 w-5"/> Qui peut m'envoyer un message ?</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0">
+                        <RadioGroup value={messagingPolicy} onValueChange={setMessagingPolicy} className="space-y-2">
+                           <div className="flex items-center space-x-3">
+                               <RadioGroupItem value="all" id="m-all" />
+                               <Label htmlFor="m-all" className="text-sm font-normal">Tout le monde</Label>
+                           </div>
+                           <div className="flex items-center space-x-3">
+                               <RadioGroupItem value="friends" id="m-friends" />
+                               <Label htmlFor="m-friends" className="text-sm font-normal">Seulement mes amis</Label>
+                           </div>
+                           <div className="flex items-center space-x-3">
+                               <RadioGroupItem value="none" id="m-none" />
+                               <Label htmlFor="m-none" className="text-sm font-normal">Personne</Label>
+                           </div>
+                        </RadioGroup>
+                    </CardContent>
+                </Card>
+                
+                <Card>
+                    <CardHeader className="p-4">
+                        <CardTitle className="flex items-center gap-2 text-base"><UserPlus className="h-5 w-5"/> Qui peut m'envoyer une demande d'ami ?</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0">
+                        <RadioGroup value={friendRequestPolicy} onValueChange={setFriendRequestPolicy} className="space-y-2">
+                           <div className="flex items-center space-x-3">
+                               <RadioGroupItem value="all" id="fr-all" />
+                               <Label htmlFor="fr-all" className="text-sm font-normal">Tout le monde</Label>
+                           </div>
+                           <div className="flex items-center space-x-3">
+                               <RadioGroupItem value="friends" id="fr-friends" />
+                               <Label htmlFor="fr-friends" className="text-sm font-normal">Amis de mes amis</Label>
+                           </div>
+                           <div className="flex items-center space-x-3">
+                               <RadioGroupItem value="none" id="fr-none" />
+                               <Label htmlFor="fr-none" className="text-sm font-normal">Personne</Label>
+                           </div>
+                        </RadioGroup>
+                    </CardContent>
+                </Card>
+
             </div>
         </main>
     </div>
