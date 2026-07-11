@@ -7,9 +7,11 @@ if (admin.apps.length === 0) {
   admin.initializeApp();
 }
 
+const db = admin.database();
+
 /**
- * Étape 2 : Cloud Function minimale pour la suppression de compte.
- * Log l'UID et retourne un succès, sans effectuer de suppression.
+ * Étape 3 : Suppression des données RTDB.
+ * Log l'UID, supprime les données de la RTDB et retourne un succès.
  */
 export const deleteUserAccount = functions.https.onCall(async (_, context) => {
   // S'assurer que la requête vient d'un utilisateur authentifié
@@ -21,10 +23,21 @@ export const deleteUserAccount = functions.https.onCall(async (_, context) => {
   }
 
   const uid = context.auth.uid;
-  
-  // Log minimal pour vérification
-  functions.logger.log(`[ÉTAPE 2] Appel reçu pour la suppression du compte de l'UID: ${uid}`);
+  functions.logger.log(`[ÉTAPE 3] Appel reçu pour la suppression du compte de l'UID: ${uid}`);
 
-  // Ne supprime rien, retourne simplement un succès
-  return { success: true, message: "La communication avec la fonction est réussie." };
+  try {
+    // Suppression des données de la Realtime Database (système de présence)
+    const rtdbRef = db.ref(`/status/${uid}`);
+    await rtdbRef.remove();
+    functions.logger.log(`[ÉTAPE 3] Données RTDB supprimées avec succès pour l'UID: ${uid}`);
+
+    return { success: true, message: "Étape 3 réussie: Données RTDB supprimées." };
+
+  } catch (error) {
+    functions.logger.error(`[ÉTAPE 3] Erreur lors de la suppression des données RTDB pour ${uid}`, error);
+    throw new functions.https.HttpsError(
+      "internal",
+      "Erreur lors de la suppression des données de présence."
+    );
+  }
 });
