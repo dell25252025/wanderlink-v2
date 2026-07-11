@@ -18,39 +18,7 @@ export default function DeleteAccountPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDeleteAccount = async () => {
-    setIsDeleting(true);
-    const user = auth.currentUser;
-
-    if (user) {
-      try {
-        await deleteUser(user);
-        toast({
-          title: 'Compte supprimé',
-          description: 'Votre compte a été définitivement supprimé. Nous sommes tristes de vous voir partir.',
-        });
-        // Redirect to homepage or login page after deletion
-        router.push('/');
-      } catch (error: any) {
-        console.error("Account deletion error:", error);
-        let description = "Une erreur est survenue lors de la suppression de votre compte.";
-        if (error.code === 'auth/requires-recent-login') {
-          description = "Cette action nécessite une reconnexion récente. Veuillez vous déconnecter, vous reconnecter, puis réessayer.";
-        }
-        toast({
-          variant: 'destructive',
-          title: 'Échec de la suppression',
-          description,
-        });
-        setIsDeleting(false);
-      }
-    } else {
-      toast({
-        variant: 'destructive',
-        title: 'Erreur',
-        description: 'Aucun utilisateur connecté. Impossible de supprimer le compte.',
-      });
-      setIsDeleting(false);
-    }
+    console.log("Delete button works");
   };
 
   return (
