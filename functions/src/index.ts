@@ -17,6 +17,10 @@ export { sendNewMessageNotification, onNotificationCreated };
 import { onUserCreated, onUserUpdated, onUserDeleted } from "./algolia";
 export { onUserCreated, onUserUpdated, onUserDeleted };
 
-// NOUVEAU: Fonction pour la synchronisation de la présence
+// Fonction pour la synchronisation de la présence
 import { onUserStatusChanged } from "./presence";
 export { onUserStatusChanged };
+
+// NOUVEAU: Fonction pour la suppression de compte
+import { deleteUserAccount } from "./user-deletion";
+export { deleteUserAccount };

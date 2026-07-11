@@ -2,23 +2,47 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Trash2, AlertTriangle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { SettingsHeader } from '@/components/settings/settings-header';
-import { auth } from '@/lib/firebase';
-import { deleteUser } from 'firebase/auth';
+
+// NOUVEAUX IMPORTS POUR FIREBASE FUNCTIONS
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 export default function DeleteAccountPage() {
-  const router = useRouter();
   const { toast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDeleteAccount = async () => {
-    console.log("Delete button works");
+    setIsDeleting(true);
+    console.log("[CLIENT] Bouton cliqué. Appel de la Cloud Function...");
+
+    try {
+      const functions = getFunctions();
+      const deleteUserAccount = httpsCallable(functions, 'deleteUserAccount');
+      
+      const result = await deleteUserAccount();
+
+      console.log("[CLIENT] Réponse de la fonction reçue:", result.data);
+
+      toast({
+        title: "Étape 2 Réussie",
+        description: "La communication avec la Cloud Function a fonctionné.",
+      });
+
+    } catch (error) {
+      console.error("[CLIENT] Erreur lors de l'appel de la fonction:", error);
+      toast({
+        variant: "destructive",
+        title: "Échec de l'Étape 2",
+        description: "Impossible de communiquer avec la Cloud Function. Vérifiez les logs.",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
