@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -10,9 +9,10 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/hooks/use-toast';
 import { SettingsHeader } from '@/components/settings/settings-header';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { Capacitor } from '@capacitor/core';
 
-// CORRECTIONS : Importer signOut et l'instance auth de firebase
-import { signOut } from 'firebase/auth';
+// Déconnexion Firebase
+import { signOut as firebaseSignOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
 export default function DeleteAccountPage() {
@@ -25,20 +25,34 @@ export default function DeleteAccountPage() {
     console.log("[CLIENT] Processus de suppression de compte initié.");
 
     try {
+      // Étape 1: Appel de la Cloud Function pour supprimer les données backend
       const functions = getFunctions();
       const deleteUserAccount = httpsCallable(functions, 'deleteUserAccount');
-      
-      await deleteUserAccount();
+      const result = await deleteUserAccount();
 
-      console.log("[CLIENT] Suppression backend réussie. Déconnexion et redirection...");
+      if (!result.data.success) {
+        throw new Error("La fonction Cloud a indiqué un échec.");
+      }
+      
+      console.log("[CLIENT] Suppression backend réussie. Déconnexion de l'appareil...");
+
+      // Étape 2: Déconnexion du compte Google au niveau de l'appareil (natif)
+      if (Capacitor.isNativePlatform()) {
+        const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
+        await GoogleAuth.signOut();
+        console.log("[CLIENT] Déconnexion GoogleAuth (Capacitor) réussie.");
+      }
+
+      // Étape 3: Déconnexion de la session Firebase
+      await firebaseSignOut(auth);
+      console.log("[CLIENT] Déconnexion Firebase Auth réussie.");
 
       toast({
         title: "Compte supprimé",
         description: "Votre compte a été supprimé avec succès. Vous allez être redirigé.",
       });
 
-      // CORRECTION : Utiliser signOut(auth) pour la déconnexion
-      await signOut(auth);
+      // Étape 4: Redirection vers la page de login
       router.push('/login');
 
     } catch (error) {
