@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/hooks/use-toast';
 import { SettingsHeader } from '@/components/settings/settings-header';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { useAuth } from '@/context/auth-context'; // Pour la déconnexion
+import { useAuth } from '@/context/AuthContext'; // CORRECTION: Le nom du fichier est AuthContext.tsx
 
 export default function DeleteAccountPage() {
   const { toast } = useToast();
