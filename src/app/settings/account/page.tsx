@@ -9,7 +9,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { auth } from '@/lib/firebase';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
-import { ArrowLeft, Loader2, Save, Mail, KeyRound, CheckCircle, AlertCircle, Edit, Trash2, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, Mail, KeyRound, AlertCircle, Edit, Settings, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -17,8 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { SettingsHeader } from '@/components/settings/settings-header';
-import Link from 'next/link'; // Importation de Link
-import { cn } from '@/lib/utils'; // Importation de cn
+import Link from 'next/link';
 
 const emailSchema = z.object({
   email: z.string().email('Adresse e-mail invalide.'),
@@ -242,20 +241,17 @@ export default function AccountSettingsPage() {
                     </CardContent>
                 </Card>
 
-                {/* -- Bloc de suppression de compte ajouté -- */}
-                <Card className="border-destructive/50">
-                  <Link href="/settings/delete-account" className="block hover:bg-destructive/10">
+                <Card>
+                  <Link href="/settings/advanced" className="block hover:bg-muted/50">
                     <CardHeader className="flex-row items-center justify-between p-4">
-                      <div className="flex items-center gap-3">
-                        <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', 'bg-red-100 dark:bg-red-900/50')}>
-                          <Trash2 className={cn('h-4 w-4', 'text-red-500')} />
+                        <div className="flex items-center gap-3">
+                            <Settings className="h-5 w-5" />
+                            <div>
+                                <CardTitle className="text-base">Paramètres avancés</CardTitle>
+                                <CardDescription className="text-sm">Gérer les options avancées de votre compte.</CardDescription>
+                            </div>
                         </div>
-                        <div>
-                          <CardTitle className="text-base text-destructive">Supprimer le compte</CardTitle>
-                          <CardDescription className="text-sm">Suppression permanente de votre compte et de vos données.</CardDescription>
-                        </div>
-                      </div>
-                      <ChevronRight className="h-5 w-5 text-muted-foreground/50" />
+                        <ChevronRight className="h-5 w-5 text-muted-foreground/50" />
                     </CardHeader>
                   </Link>
                 </Card>
@@ -265,7 +261,7 @@ export default function AccountSettingsPage() {
                   <AlertTitle className="text-base">Sécurité du compte</AlertTitle>
                   <AlertDescription className="text-sm">
                     Pour des raisons de sécurité, la modification de vos informations peut nécessiter une reconnexion récente.
-                  </AlertDescription>
+                  </Alerte>
                 </Alert>
             </div>
         </main>
