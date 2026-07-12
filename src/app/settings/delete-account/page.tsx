@@ -2,47 +2,54 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation'; // Pour la redirection
 import { Trash2, AlertTriangle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { SettingsHeader } from '@/components/settings/settings-header';
-
-// NOUVEAUX IMPORTS POUR FIREBASE FUNCTIONS
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { useAuth } from '@/context/auth-context'; // Pour la déconnexion
 
 export default function DeleteAccountPage() {
   const { toast } = useToast();
+  const router = useRouter();
+  const { logout } = useAuth(); // Récupère la fonction de déconnexion
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDeleteAccount = async () => {
     setIsDeleting(true);
-    console.log("[CLIENT] Bouton cliqué. Appel de la Cloud Function...");
+    console.log("[CLIENT] Processus de suppression de compte initié.");
 
     try {
       const functions = getFunctions();
       const deleteUserAccount = httpsCallable(functions, 'deleteUserAccount');
       
-      const result = await deleteUserAccount();
+      // La fonction s'occupe de tout supprimer dans le backend
+      await deleteUserAccount();
 
-      console.log("[CLIENT] Réponse de la fonction reçue:", result.data);
+      console.log("[CLIENT] Suppression backend réussie. Déconnexion et redirection...");
 
       toast({
-        title: "Étape 2 Réussie",
-        description: "La communication avec la Cloud Function a fonctionné.",
+        title: "Compte supprimé",
+        description: "Votre compte a été supprimé avec succès. Vous allez être redirigé.",
       });
+
+      // Déconnexion de l'état local et redirection
+      await logout();
+      router.push('/login');
 
     } catch (error) {
-      console.error("[CLIENT] Erreur lors de l'appel de la fonction:", error);
+      console.error("[CLIENT] Erreur lors de la suppression du compte:", error);
       toast({
         variant: "destructive",
-        title: "Échec de l'Étape 2",
-        description: "Impossible de communiquer avec la Cloud Function. Vérifiez les logs.",
+        title: "Erreur",
+        description: "Une erreur est survenue lors de la suppression du compte.",
       });
-    } finally {
       setIsDeleting(false);
     }
+    // Pas de setIsDeleting(false) ici car l'utilisateur est redirigé
   };
 
   return (
