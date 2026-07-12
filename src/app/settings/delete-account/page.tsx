@@ -2,7 +2,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation'; // Pour la redirection
+import { useRouter } from 'next/navigation';
 import { Trash2, AlertTriangle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,12 +10,14 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/hooks/use-toast';
 import { SettingsHeader } from '@/components/settings/settings-header';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { useAuth } from '@/context/AuthContext'; // CORRECTION: Le nom du fichier est AuthContext.tsx
+
+// CORRECTIONS : Importer signOut et l'instance auth de firebase
+import { signOut } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 export default function DeleteAccountPage() {
   const { toast } = useToast();
   const router = useRouter();
-  const { logout } = useAuth(); // Récupère la fonction de déconnexion
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDeleteAccount = async () => {
@@ -26,7 +28,6 @@ export default function DeleteAccountPage() {
       const functions = getFunctions();
       const deleteUserAccount = httpsCallable(functions, 'deleteUserAccount');
       
-      // La fonction s'occupe de tout supprimer dans le backend
       await deleteUserAccount();
 
       console.log("[CLIENT] Suppression backend réussie. Déconnexion et redirection...");
@@ -36,8 +37,8 @@ export default function DeleteAccountPage() {
         description: "Votre compte a été supprimé avec succès. Vous allez être redirigé.",
       });
 
-      // Déconnexion de l'état local et redirection
-      await logout();
+      // CORRECTION : Utiliser signOut(auth) pour la déconnexion
+      await signOut(auth);
       router.push('/login');
 
     } catch (error) {
@@ -49,7 +50,6 @@ export default function DeleteAccountPage() {
       });
       setIsDeleting(false);
     }
-    // Pas de setIsDeleting(false) ici car l'utilisateur est redirigé
   };
 
   return (
