@@ -14,7 +14,6 @@ import {
   FileText,
   Heart,
   MessageSquare,
-  Trash2,
   Moon,
   Languages,
   Crown,
@@ -141,13 +140,6 @@ const SettingsPage = () => {
       onClick: handleLike,
       color: 'text-pink-500',
       bgColor: 'bg-pink-100 dark:bg-pink-900/50',
-    },
-    {
-      icon: Trash2,
-      label: 'Supprimer le compte',
-      href: '/settings/delete-account',
-      color: 'text-red-500',
-      bgColor: 'bg-red-100 dark:bg-red-900/50',
     },
   ];
 
