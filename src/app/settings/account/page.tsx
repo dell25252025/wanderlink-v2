@@ -261,7 +261,7 @@ export default function AccountSettingsPage() {
                   <AlertTitle className="text-base">Sécurité du compte</AlertTitle>
                   <AlertDescription className="text-sm">
                     Pour des raisons de sécurité, la modification de vos informations peut nécessiter une reconnexion récente.
-                  </Alerte>
+                  </AlertDescription>
                 </Alert>
             </div>
         </main>
