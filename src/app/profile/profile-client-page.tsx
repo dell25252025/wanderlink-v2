@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getUserProfile, addProfilePicture, removeProfilePicture, addFriend, removeFriend, signOutFromGoogle } from '@/lib/firebase-actions';
-import { type DocumentData, addDoc, collection, serverTimestamp, query, where, getDocs, onSnapshot, updateDoc, Timestamp, orderBy, limit, doc } from 'firebase/firestore';
+import { type DocumentData, addDoc, collection, serverTimestamp, query, where, getDocs, onSnapshot, updateDoc, Timestamp, orderBy, limit, doc, arrayUnion } from 'firebase/firestore';
 import { Loader2, Plane, MapPin, Languages, Backpack, Cigarette, Wine, Calendar, Camera, Trash2, PlusCircle, LogOut, Edit, Ruler, Scale, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, X, Sparkles, BriefcaseBusiness, Coins, Users, MoreVertical, ShieldAlert, Ban, Send, UserPlus, Heart, UserCheck, UserX, CheckCircle, ShieldCheck, History } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
@@ -468,28 +468,22 @@ export default function ProfileClientPage() {
     }
   };
   
-  const handleBlockUser = () => {
+  const handleBlockUser = async () => {
     setIsDrawerOpen(false);
-    if (!profile) return;
+    if (!currentUser || !profileId || !profile) {
+      toast({ variant: 'destructive', title: 'Erreur', description: 'Action impossible pour le moment.' });
+      return;
+    }
+
     try {
-      const blockedUsers = JSON.parse(localStorage.getItem('blockedUsers') || '[]');
-      const isAlreadyBlocked = blockedUsers.some((user: any) => user.id === profile.id);
-      
-      if (!isAlreadyBlocked) {
-        const userToBlock = {
-          id: profile.id,
-          name: profile.firstName,
-          avatarUrl: profile.profilePictures?.[0] || `https://picsum.photos/seed/${profile.id}/200`
-        };
-        blockedUsers.push(userToBlock);
-        localStorage.setItem('blockedUsers', JSON.stringify(blockedUsers));
-        toast({ title: `${profile.firstName} a été bloqué(e).` });
-        router.push('/');
-      } else {
-        toast({ title: 'Déjà bloqué', description: `${profile.firstName} est déjà dans votre liste de blocage.` });
-      }
+      const currentUserRef = doc(db, 'users', currentUser.uid);
+      await updateDoc(currentUserRef, {
+        blockedUsers: arrayUnion(profileId)
+      });
+      toast({ title: `${profile.firstName || 'Utilisateur'} a été bloqué(e).` });
+      router.push('/');
     } catch (error) {
-      console.error("Failed to block user:", error);
+      console.error("Failed to block user via Firestore:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de bloquer cet utilisateur.' });
     }
   };
