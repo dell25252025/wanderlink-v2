@@ -248,6 +248,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const { toast } = useToast();
   
   const [currentUser, loadingAuth] = useAuthState(auth);
+  const [currentUserProfile, setCurrentUserProfile] = useState<DocumentData | null>(null);
   const [otherUser, setOtherUser] = useState<DocumentData | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [chat, setChat] = useState<DocumentData | null>(null);
@@ -280,6 +281,20 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       return () => unsubscribe();
     }
   }, [otherUserId]);
+
+  useEffect(() => {
+    if (currentUser?.uid) {
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      const unsubscribe = onSnapshot(userDocRef, (doc) => {
+        if (doc.exists()) {
+          setCurrentUserProfile(doc.data());
+        } else {
+          console.log("Current user profile not found!");
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     const blockedUsersRaw = localStorage.getItem('blockedUsers');
@@ -425,8 +440,31 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
  const handleSendMessage = useCallback(async (e?: React.FormEvent | React.KeyboardEvent<HTMLTextAreaElement>, messageData: Partial<Omit<Message, 'id' | 'senderId' | 'timestamp' | 'reactions'> & { type?: Message['type'] }> = {}) => {
     if (e) e.preventDefault();
+    
+    if (!currentUser || !otherUser) return; 
+
+    if (currentUserProfile?.blockedUsers?.includes(otherUserId)) {
+        toast({
+            variant: "destructive",
+            title: "Envoi impossible",
+            description: "Vous avez bloqué cet utilisateur. Vous ne pouvez pas lui envoyer de messages.",
+        });
+        setNewMessage('');
+        return;
+    }
+
+    if (otherUser?.blockedUsers?.includes(currentUser.uid)) {
+        toast({
+            variant: "destructive",
+            title: "Action impossible",
+            description: "Cet utilisateur vous a bloqué. Vous ne pouvez pas lui envoyer de messages.",
+        });
+        setNewMessage('');
+        return;
+    }
+
     const text = newMessage.trim();
-    if ((!text && !messageData.imageUrl && !messageData.audioUrl && messageData.type !== 'video_call' && messageData.type !== 'missed_call') || !currentUser || !otherUser) return;
+    if ((!text && !messageData.imageUrl && !messageData.audioUrl && messageData.type !== 'video_call' && messageData.type !== 'missed_call')) return;
 
     const chatId = getChatId(currentUser.uid, otherUserId);
     const chatDocRef = doc(db, 'chats', chatId);
@@ -463,7 +501,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
           setNewMessage(text);
       }
     }
-  }, [newMessage, currentUser, otherUser, toast]);
+  }, [newMessage, currentUser, otherUser, toast, currentUserProfile, otherUserId]);
 
   const handleDeleteMessage = useCallback(async () => {
     if (!messageToDelete || !currentUser || !otherUser) return;
