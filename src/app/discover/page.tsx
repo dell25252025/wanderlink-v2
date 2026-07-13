@@ -171,6 +171,13 @@ export default function DiscoverPage() {
             if (travelStyle && travelStyle !== 'Tous') strictFilters.push(`travelStyle:"${travelStyle}"`);
             if (activities && activities !== 'Toutes') strictFilters.push(`activities:"${activities}"`);
             strictFilters.push(`NOT objectID:${currentUser.uid}`);
+
+            // Add blocked users to the filter
+            if (userProfile.blockedUsers && userProfile.blockedUsers.length > 0) {
+                userProfile.blockedUsers.forEach((blockedId: string) => {
+                    strictFilters.push(`NOT objectID:${blockedId}`);
+                });
+            }
     
             const numericFilters = [`age >= ${ageRange[0]}`, `age <= ${ageRange[1]}`];
     
@@ -193,6 +200,14 @@ export default function DiscoverPage() {
                 const fallbackFiltersList: string[] = [];
                 if (showMe) fallbackFiltersList.push(`gender:"${showMe}"`);
                 fallbackFiltersList.push(`NOT objectID:${currentUser.uid}`);
+
+                // Also apply block filter in fallback
+                if (userProfile.blockedUsers && userProfile.blockedUsers.length > 0) {
+                    userProfile.blockedUsers.forEach((blockedId: string) => {
+                        fallbackFiltersList.push(`NOT objectID:${blockedId}`);
+                    });
+                }
+
                 const fallbackNumericFilters = [`age >= ${ageRange[0]}`, `age <= ${ageRange[1]}`];
                 const fallbackSearchOptions: any = {
                     filters: fallbackFiltersList.join(' AND '),
