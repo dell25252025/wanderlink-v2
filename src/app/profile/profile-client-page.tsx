@@ -231,6 +231,7 @@ export default function ProfileClientPage() {
   const router = useRouter();
   const profileId = searchParams.get('id');
   const [profile, setProfile] = useState<DocumentData | null>(null);
+  const [currentUserProfile, setCurrentUserProfile] = useState<DocumentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [isOwner, setIsOwner] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -350,6 +351,42 @@ export default function ProfileClientPage() {
       return () => unsubscribe(); // Cleanup listener on component unmount
     }
   }, [profileId, toast]);
+
+  useEffect(() => {
+      if (currentUser?.uid) {
+          const unsub = onSnapshot(doc(db, "users", currentUser.uid), (doc) => {
+              setCurrentUserProfile(doc.data());
+          });
+          return () => unsub();
+      }
+  }, [currentUser]);
+
+  useEffect(() => {
+      if (!currentUserProfile || !profile || !currentUser || !profileId) {
+          return;
+      }
+
+      if (currentUser.uid !== profileId) {
+          const iHaveBlockedThem = currentUserProfile.blockedUsers?.includes(profileId);
+          const theyHaveBlockedMe = profile.blockedUsers?.includes(currentUser.uid);
+
+          if (iHaveBlockedThem) {
+              toast({
+                  variant: "destructive",
+                  title: "Utilisateur bloqué",
+                  description: "Vous ne pouvez pas voir le profil de cet utilisateur car vous l'avez bloqué.",
+              });
+              router.push('/');
+          } else if (theyHaveBlockedMe) {
+              toast({
+                  variant: "destructive",
+                  title: "Profil inaccessible",
+                  description: "Cet utilisateur n'est pas disponible.",
+              });
+              router.push('/');
+          }
+      }
+  }, [currentUserProfile, profile, currentUser, profileId, router, toast]);
 
   const handlePhotoAdd = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
