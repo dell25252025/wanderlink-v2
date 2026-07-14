@@ -11,6 +11,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getUserProfile } from '@/lib/firebase-actions'; // Import getUserProfile
+import { DocumentData } from 'firebase/firestore';
 
 // Interfaces
 interface Chat {
@@ -92,14 +94,36 @@ export default function InboxList() {
   const [chats, setChats] = useState<EnrichedChat[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUser] = useAuthState(auth);
+  const [currentUserProfile, setCurrentUserProfile] = useState<DocumentData | null>(null);
 
+  // Effect to fetch current user's full profile
   useEffect(() => {
-    if (!currentUser) return;
+    if (currentUser) {
+      getUserProfile(currentUser.uid).then(profile => {
+        setCurrentUserProfile(profile);
+      });
+    }
+  }, [currentUser]);
+
+
+  // Effect to fetch and filter chats
+  useEffect(() => {
+    // Wait until we have the user and their profile (with block list)
+    if (!currentUser || !currentUserProfile) {
+        // If we have the user but not the profile yet, keep loading
+        if(currentUser && !currentUserProfile) {
+            setLoading(true);
+        } else {
+            setLoading(false);
+        }
+        return;
+    }
+
+    const blockedUserIds = new Set(currentUserProfile.blockedUsers || []);
 
     const q = query(collection(db, 'chats'), where('participants', 'array-contains', currentUser.uid));
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      // Explicitly filter out chats where the user is the only participant
       const baseChats: Chat[] = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() } as Chat))
         .filter(chat => chat.participants.some(p => p !== currentUser.uid));
@@ -143,12 +167,15 @@ export default function InboxList() {
         })
         .filter((chat): chat is EnrichedChat => chat !== null);
 
-      setChats(enrichedChats);
+      // *** MODIFICATION: Filter out blocked users before setting state ***
+      const filteredChats = enrichedChats.filter(chat => !blockedUserIds.has(chat.otherParticipant.id));
+
+      setChats(filteredChats);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [currentUser]);
+  }, [currentUser, currentUserProfile]); // Re-run when profile is loaded
 
    useEffect(() => {
     if (chats.length === 0) return;
