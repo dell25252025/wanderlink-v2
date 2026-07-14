@@ -447,9 +447,11 @@ export async function addFriend(currentUserId: string, friendId: string) {
   try {
     const currentUserRef = doc(db, 'users', currentUserId);
     const friendRef = doc(db, 'users', friendId);
+    // Correctly add friendId to current user's list
     await updateDoc(currentUserRef, {
-      friends: arrayUnion(currentUserId),
+      friends: arrayUnion(friendId),
     });
+    // Correctly add currentUserId to friend's list
     await updateDoc(friendRef, {
       friends: arrayUnion(currentUserId),
     });

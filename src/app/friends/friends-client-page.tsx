@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { auth } from '@/lib/firebase';
 import { getUserProfile } from '@/lib/firebase-actions';
-import type { DocumentData } from 'firestore';
+import type { DocumentData } from 'firebase/firestore'; // Corrected import
 import { Loader2, UserX, Send, User } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -22,39 +22,53 @@ import {
 } from "@/components/ui/alert-dialog";
 import { removeFriend } from '@/lib/firebase-actions';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthState } from 'react-firebase-hooks/auth';
 
 export default function FriendsClientPage() {
   const [friends, setFriends] = useState<DocumentData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser] = useAuthState(auth);
   const { toast } = useToast();
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      if (user) {
-        // @ts-ignore
-        setCurrentUser(user);
-        const userProfile = await getUserProfile(user.uid);
-        if (userProfile && userProfile.friends) {
-          const friendPromises = userProfile.friends.map((friendId: string) => getUserProfile(friendId));
-          const friendsData = await Promise.all(friendPromises);
-          // @ts-ignore
-          setFriends(friendsData.filter(friend => friend)); // Filter out any null profiles
-        }
-      } else {
-        setCurrentUser(null);
-        setFriends([]);
-      }
-      setLoading(false);
-    });
+    if (!currentUser) {
+        setLoading(false);
+        return;
+    }
 
-    return () => unsubscribe();
-  }, []);
+    const fetchFriends = async () => {
+        setLoading(true);
+        try {
+            const userProfile = await getUserProfile(currentUser.uid);
+            if (userProfile && userProfile.friends) {
+                
+              // *** MODIFICATION: Filter out blocked users ***
+              const blockedUserIds = new Set(userProfile.blockedUsers || []);
+              const visibleFriendIds = userProfile.friends.filter((friendId: string) => !blockedUserIds.has(friendId));
+    
+              if (visibleFriendIds.length > 0) {
+                const friendPromises = visibleFriendIds.map((friendId: string) => getUserProfile(friendId));
+                const friendsData = await Promise.all(friendPromises);
+                setFriends(friendsData.filter(friend => friend)); // Filter out any null profiles just in case
+              } else {
+                setFriends([]);
+              }
+            }
+        } catch (error) {
+            console.error("Failed to fetch friends:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not load friends.' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    fetchFriends();
+
+  }, [currentUser, toast]);
 
   const handleRemoveFriend = async (friendId: string) => {
     if (!currentUser) return;
 
-    // @ts-ignore
     const result = await removeFriend(currentUser.uid, friendId);
     if (result.success) {
       setFriends(prevFriends => prevFriends.filter(friend => friend.uid !== friendId));
