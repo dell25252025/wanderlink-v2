@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { getUserProfile, addProfilePicture, removeProfilePicture, addFriend, removeFriend, signOutFromGoogle } from '@/lib/firebase-actions';
+import { getUserProfile, addProfilePicture, removeProfilePicture, addFriend, removeFriend, signOutFromGoogle, blockUser } from '@/lib/firebase-actions';
 import { type DocumentData, addDoc, collection, serverTimestamp, query, where, getDocs, onSnapshot, updateDoc, Timestamp, orderBy, limit, doc, arrayUnion } from 'firebase/firestore';
 import { Loader2, Plane, MapPin, Languages, Backpack, Cigarette, Wine, Calendar, Camera, Trash2, PlusCircle, LogOut, Edit, Ruler, Scale, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, X, Sparkles, BriefcaseBusiness, Coins, Users, MoreVertical, ShieldAlert, Ban, Send, UserPlus, Heart, UserCheck, UserX, CheckCircle, ShieldCheck, History } from 'lucide-react';
 import Image from 'next/image';
@@ -507,21 +507,22 @@ export default function ProfileClientPage() {
   
   const handleBlockUser = async () => {
     setIsDrawerOpen(false);
-    if (!currentUser || !profileId || !profile) {
-      toast({ variant: 'destructive', title: 'Erreur', description: 'Action impossible pour le moment.' });
-      return;
-    }
+    if (!currentUser || !profileId) return;
 
-    try {
-      const currentUserRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(currentUserRef, {
-        blockedUsers: arrayUnion(profileId)
+    const res = await blockUser(currentUser.uid, profileId);
+
+    if (res.success) {
+      toast({
+        title: "Utilisateur bloqué",
+        description: "Cet utilisateur a été bloqué et ne fait plus partie de vos amis.",
       });
-      toast({ title: `${profile.firstName || 'Utilisateur'} a été bloqué(e).` });
-      router.push('/');
-    } catch (error) {
-      console.error("Failed to block user via Firestore:", error);
-      toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de bloquer cet utilisateur.' });
+      router.push('/'); 
+    } else {
+      toast({
+        title: "Erreur",
+        description: res.error,
+        variant: "destructive",
+      });
     }
   };
 
