@@ -482,6 +482,30 @@ export async function removeFriend(currentUserId: string, friendId: string) {
   }
 }
 
+export async function blockUser(currentUserId: string, targetUserId: string) {
+    if (!currentUserId || !targetUserId) {
+        return { success: false, error: "IDs d'utilisateur requis." };
+    }
+    try {
+        const currentUserRef = doc(db, "users", currentUserId);
+        await updateDoc(currentUserRef, {
+            blockedUsers: arrayUnion(targetUserId),
+        });
+        
+        const removeFriendResult = await removeFriend(currentUserId, targetUserId);
+        if (!removeFriendResult.success) {
+            console.warn(`La suppression d'ami a échoué lors du blocage, mais le blocage a réussi. Raison: ${removeFriendResult.error}`);
+        }
+
+        return { success: true };
+    } catch (error) {
+        console.error("Erreur lors du blocage de l'utilisateur:", error);
+        const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
+        return { success: false, error: errorMessage };
+    }
+}
+
+
 export async function getFriends(userId: string) {
   try {
     const userDoc = await getDoc(doc(db, "users", userId));

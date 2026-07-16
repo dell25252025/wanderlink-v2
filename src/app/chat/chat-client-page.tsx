@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Video, Loader2, CheckCircle, PlusCircle, Trash2, CameraIcon, Mic, Image as ImageIcon, Copy, PhoneMissed } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { getUserProfile, initiateCall } from '@/lib/firebase-actions';
+import { getUserProfile, initiateCall, blockUser } from '@/lib/firebase-actions';
 import { auth, db, storage } from '@/lib/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { Drawer, DrawerContent, DrawerTrigger, DrawerClose, DrawerHeader, DrawerTitle, DrawerDescription } from '@/components/ui/drawer';
@@ -312,6 +312,26 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
   }, [otherUserId, router, toast]);
 
+  const handleBlockUser = async () => {
+    if (!currentUser || !otherUserId) return;
+
+    const res = await blockUser(currentUser.uid, otherUserId);
+
+    if (res.success) {
+      toast({
+        title: "Utilisateur bloqué",
+        description: "Cet utilisateur a été bloqué et ne fait plus partie de vos amis.",
+      });
+      router.push('/inbox'); 
+    } else {
+      toast({
+        title: "Erreur",
+        description: res.error,
+        variant: "destructive",
+      });
+    }
+  };
+
   const requestCameraPermission = useCallback(async (): Promise<boolean> => {
     const result = await Camera.checkPermissions();
     let status: PermissionState = result.camera;
@@ -495,7 +515,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
       await setDoc(chatDocRef, { participants: [currentUser.uid, otherUserId], lastMessage: { id: newDocRef.id, text: lastMessageText, senderId: currentUser.uid, timestamp: serverTimestamp(), read: false } }, { merge: true });
     } catch (error) {
-      console.error("Erreur lors de l'envoi du message:", error);
+      console.error("Erreur lors de l\'envoi du message:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
       if (messageData.type !== 'video_call' && messageData.type !== 'missed_call') {
           setNewMessage(text);
@@ -753,7 +773,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
         </Link>
         <>
             <Button onClick={() => handleStartCall(true)} variant="ghost" size="icon" className="h-8 w-8"><Video className="h-4 w-4" /></Button>
-            <Drawer><DrawerTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DrawerTrigger><DrawerContent><div className="mx-auto w-full max-w-sm"><DrawerHeader><DrawerTitle>Options</DrawerTitle><DrawerDescription>Gérez votre interaction avec {otherUserName}.</DrawerDescription></DrawerHeader><div className="p-4 pt-0"><div className="mt-3 h-full"><DrawerClose asChild><Button variant="outline" className="w-full justify-start p-4 h-auto text-base"><Ban className="mr-2 h-5 w-5" /> Bloquer</Button></DrawerClose><div className="my-2 border-t"></div><DrawerClose asChild><Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={() => setIsReportModalOpen(true)}><ShieldAlert className="mr-2 h-5 w-5" /> Signaler</Button></DrawerClose></div></div><div className="p-4"><DrawerClose asChild><Button variant="secondary" className="w-full h-12 text-base">Annuler</Button></DrawerClose></div></div></DrawerContent></Drawer>
+            <Drawer><DrawerTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button></DrawerTrigger><DrawerContent><div className="mx-auto w-full max-w-sm"><DrawerHeader><DrawerTitle>Options</DrawerTitle><DrawerDescription>Gérez votre interaction avec {otherUserName}.</DrawerDescription></DrawerHeader><div className="p-4 pt-0"><div className="mt-3 h-full"><DrawerClose asChild><Button onClick={handleBlockUser} variant="outline" className="w-full justify-start p-4 h-auto text-base"><Ban className="mr-2 h-5 w-5" /> Bloquer</Button></DrawerClose><div className="my-2 border-t"></div><DrawerClose asChild><Button variant="outline" className="w-full justify-start p-4 h-auto text-base" onClick={() => setIsReportModalOpen(true)}><ShieldAlert className="mr-2 h-5 w-5" /> Signaler</Button></DrawerClose></div></div><div className="p-4"><DrawerClose asChild><Button variant="secondary" className="w-full h-12 text-base">Annuler</Button></DrawerClose></div></div></DrawerContent></Drawer>
         </>
       </header>
 
