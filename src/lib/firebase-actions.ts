@@ -505,6 +505,23 @@ export async function blockUser(currentUserId: string, targetUserId: string) {
     }
 }
 
+export async function unblockUser(currentUserId: string, targetUserId: string) {
+    if (!currentUserId || !targetUserId) {
+        return { success: false, error: "IDs d'utilisateur requis." };
+    }
+    try {
+        const currentUserRef = doc(db, "users", currentUserId);
+        await updateDoc(currentUserRef, {
+            blockedUsers: arrayRemove(targetUserId),
+        });
+        return { success: true };
+    } catch (error) {
+        console.error("Erreur lors du déblocage de l'utilisateur:", error);
+        const errorMessage = error instanceof Error ? error.message : "Une erreur inconnue est survenue.";
+        return { success: false, error: errorMessage };
+    }
+}
+
 
 export async function getFriends(userId: string) {
   try {

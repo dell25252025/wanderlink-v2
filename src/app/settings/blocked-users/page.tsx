@@ -3,6 +3,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuthState } from 'react-firebase-hooks/auth';
+import { auth } from '@/lib/firebase';
 import { UserX, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { SettingsHeader } from '@/components/settings/settings-header';
+import { unblockUser } from '@/lib/firebase-actions';
 
 interface BlockedUser {
   id: string;
@@ -20,12 +23,12 @@ interface BlockedUser {
 export default function BlockedUsersPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const [currentUser] = useAuthState(auth);
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
-    // Load blocked users from localStorage when component mounts on the client
     try {
       const storedUsers = localStorage.getItem('blockedUsers');
       if (storedUsers) {
@@ -36,28 +39,42 @@ export default function BlockedUsersPage() {
     }
   }, []);
 
-  const handleUnblock = (userId: string) => {
-    try {
-      const updatedUsers = blockedUsers.filter(user => user.id !== userId);
-      setBlockedUsers(updatedUsers);
-      localStorage.setItem('blockedUsers', JSON.stringify(updatedUsers));
-      
-      toast({
-        title: 'Utilisateur débloqué',
-        description: 'Vous pouvez de nouveau interagir avec cet utilisateur.',
-      });
-    } catch (error) {
-       console.error("Failed to unblock user", error);
+  const handleUnblock = async (userIdToUnblock: string) => {
+    if (!currentUser) {
+        toast({ variant: 'destructive', title: 'Erreur', description: 'Vous devez être connecté.' });
+        return;
+    }
+
+    const res = await unblockUser(currentUser.uid, userIdToUnblock);
+
+    if (res.success) {
+        try {
+            const updatedUsers = blockedUsers.filter(user => user.id !== userIdToUnblock);
+            setBlockedUsers(updatedUsers);
+            localStorage.setItem('blockedUsers', JSON.stringify(updatedUsers));
+            
+            toast({
+                title: 'Utilisateur débloqué',
+                description: 'Vous pouvez de nouveau interagir avec cet utilisateur.',
+            });
+        } catch (error) {
+            console.error("Failed to update local storage after unblocking", error);
+            toast({
+                variant: 'destructive',
+                title: 'Erreur locale',
+                description: 'L\'utilisateur a été débloqué, mais l\'affichage local n\'a pas pu être mis à jour.',
+            });
+        }
+    } else {
        toast({
-        variant: 'destructive',
-        title: 'Erreur',
-        description: 'Impossible de débloquer cet utilisateur.',
+            variant: 'destructive',
+            title: 'Erreur du serveur',
+            description: res.error || 'Impossible de débloquer cet utilisateur.',
       });
     }
   };
 
   if (!isClient) {
-    // Render nothing or a loading spinner on the server to avoid hydration mismatch
     return null;
   }
 
