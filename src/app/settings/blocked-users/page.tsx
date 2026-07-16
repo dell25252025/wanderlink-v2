@@ -1,138 +1,131 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth } from '@/lib/firebase';
-import { UserX, ShieldCheck } from 'lucide-react';
+import { UserX, ShieldCheck, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { SettingsHeader } from '@/components/settings/settings-header';
-import { unblockUser } from '@/lib/firebase-actions';
-
-interface BlockedUser {
-  id: string;
-  name: string;
-  avatarUrl: string;
-}
+import { unblockUser, getBlockedUsers } from '@/lib/firebase-actions';
+import { DocumentData } from 'firebase/firestore';
 
 export default function BlockedUsersPage() {
-  const router = useRouter();
   const { toast } = useToast();
   const [currentUser] = useAuthState(auth);
-  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
-  const [isClient, setIsClient] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState<DocumentData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchBlockedUsers = useCallback(async () => {
+    if (!currentUser) return;
+    try {
+      setLoading(true);
+      const users = await getBlockedUsers(currentUser.uid);
+      setBlockedUsers(users);
+    } catch (error) {
+      console.error("Failed to fetch blocked users:", error);
+      toast({
+        variant: 'destructive',
+        title: 'Erreur',
+        description: 'Impossible de charger la liste des utilisateurs bloqués.',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser, toast]);
 
   useEffect(() => {
-    setIsClient(true);
-    try {
-      const storedUsers = localStorage.getItem('blockedUsers');
-      if (storedUsers) {
-        setBlockedUsers(JSON.parse(storedUsers));
-      }
-    } catch (error) {
-      console.error("Failed to load blocked users from localStorage", error);
-    }
-  }, []);
+    fetchBlockedUsers();
+  }, [fetchBlockedUsers]);
 
   const handleUnblock = async (userIdToUnblock: string) => {
     if (!currentUser) {
-        toast({ variant: 'destructive', title: 'Erreur', description: 'Vous devez être connecté.' });
-        return;
+      toast({ variant: 'destructive', title: 'Erreur', description: 'Vous devez être connecté.' });
+      return;
     }
 
     const res = await unblockUser(currentUser.uid, userIdToUnblock);
 
     if (res.success) {
-        try {
-            const updatedUsers = blockedUsers.filter(user => user.id !== userIdToUnblock);
-            setBlockedUsers(updatedUsers);
-            localStorage.setItem('blockedUsers', JSON.stringify(updatedUsers));
-            
-            toast({
-                title: 'Utilisateur débloqué',
-                description: 'Vous pouvez de nouveau interagir avec cet utilisateur.',
-            });
-        } catch (error) {
-            console.error("Failed to update local storage after unblocking", error);
-            toast({
-                variant: 'destructive',
-                title: 'Erreur locale',
-                description: 'L\'utilisateur a été débloqué, mais l\'affichage local n\'a pas pu être mis à jour.',
-            });
-        }
+      toast({
+        title: 'Utilisateur débloqué',
+        description: 'Vous pouvez de nouveau interagir avec cet utilisateur.',
+      });
+      // Re-fetch the list to show the update
+      await fetchBlockedUsers();
     } else {
-       toast({
-            variant: 'destructive',
-            title: 'Erreur du serveur',
-            description: res.error || 'Impossible de débloquer cet utilisateur.',
+      toast({
+        variant: 'destructive',
+        title: 'Erreur du serveur',
+        description: res.error || 'Impossible de débloquer cet utilisateur.',
       });
     }
   };
-
-  if (!isClient) {
-    return null;
-  }
 
   return (
     <div className="min-h-screen bg-secondary/30">
       <SettingsHeader title="Utilisateurs bloqués" />
       <main className="px-2 py-4 md:px-4 pt-16">
-            <div className="mx-auto max-w-2xl space-y-4">
-                <Card>
-                    <CardHeader className="p-4">
-                        <CardTitle className="flex items-center gap-2 text-base"><UserX className="h-5 w-5" /> Gérer les utilisateurs bloqués</CardTitle>
-                        <CardDescription className="text-sm">Ils ne pourront plus vous contacter ni voir votre profil.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-4 pt-0">
-                        {blockedUsers.length > 0 ? (
-                            <ul className="space-y-3">
-                                {blockedUsers.map(user => (
-                                    <li key={user.id} className="flex items-center justify-between rounded-lg border p-3">
-                                        <div className="flex items-center gap-3">
-                                            <Avatar className="h-10 w-10">
-                                                <AvatarImage src={user.avatarUrl} alt={user.name} />
-                                                <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
-                                            </Avatar>
-                                            <span className="font-medium text-sm">{user.name}</span>
-                                        </div>
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <Button variant="outline">Débloquer</Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                    <AlertDialogTitle>Débloquer {user.name} ?</AlertDialogTitle>
-                                                    <AlertDialogDescription>
-                                                        Cet utilisateur pourra de nouveau voir votre profil, vous contacter et interagir avec vous. Êtes-vous sûr ?
-                                                    </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                    <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                                    <AlertDialogAction onClick={() => handleUnblock(user.id)}>
-                                                        Confirmer
-                                                    </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                           <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 text-center">
-                                <ShieldCheck className="h-10 w-10 text-muted-foreground" />
-                                <h3 className="mt-4 font-semibold text-base">Aucun utilisateur bloqué</h3>
-                                <p className="mt-1 text-sm text-muted-foreground">Votre liste est vide.</p>
-                           </div>
-                        )}
-                    </CardContent>
-                </Card>
-            </div>
-        </main>
+        <div className="mx-auto max-w-2xl space-y-4">
+          <Card>
+            <CardHeader className="p-4">
+              <CardTitle className="flex items-center gap-2 text-base"><UserX className="h-5 w-5" /> Gérer les utilisateurs bloqués</CardTitle>
+              <CardDescription className="text-sm">Ils ne pourront plus vous contacter ni voir votre profil.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 pt-0">
+              {loading ? (
+                <div className="flex justify-center items-center h-24">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : blockedUsers.length > 0 ? (
+                <ul className="space-y-3">
+                  {blockedUsers.map(user => (
+                    <li key={user.id} className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={user.profilePictures?.[0]} alt={user.firstName} />
+                          <AvatarFallback>{user.firstName?.charAt(0) || 'U'}</AvatarFallback>
+                        </Avatar>
+                        <span className="font-medium text-sm">{user.firstName || 'Utilisateur'}</span>
+                      </div>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline">Débloquer</Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Débloquer {user.firstName || 'cet utilisateur'} ?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Cet utilisateur pourra de nouveau voir votre profil, vous contacter et interagir avec vous. Êtes-vous sûr ?
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Annuler</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleUnblock(user.id)}>
+                              Confirmer
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 text-center">
+                  <ShieldCheck className="h-10 w-10 text-muted-foreground" />
+                  <h3 className="mt-4 font-semibold text-base">Aucun utilisateur bloqué</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">Votre liste est vide.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </main>
     </div>
   );
 }

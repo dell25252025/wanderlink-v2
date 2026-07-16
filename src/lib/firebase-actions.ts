@@ -546,6 +546,29 @@ export async function getFriends(userId: string) {
   }
 }
 
+export async function getBlockedUsers(userId: string) {
+  try {
+    const userDoc = await getDoc(doc(db, "users", userId));
+    if (!userDoc.exists()) {
+      return [];
+    }
+    const userData = userDoc.data();
+    const blockedUserIds = userData.blockedUsers || [];
+    if (blockedUserIds.length === 0) {
+      return [];
+    }
+    const blockedUserPromises = blockedUserIds.map((id: string) => getDoc(doc(db, "users", id)));
+    const blockedUserDocs = await Promise.all(blockedUserPromises);
+    const blockedUsers = blockedUserDocs
+      .filter(doc => doc.exists())
+      .map(doc => ({ id: doc.id, ...doc.data() }));
+    return blockedUsers;
+  } catch (error) {
+    console.error("Error getting blocked users:", error);
+    throw new Error("Failed to retrieve blocked users list.");
+  }
+}
+
 export async function getUsersOnlineStatus(uids: string[]): Promise<Record<string, boolean>> {
   if (!uids || uids.length === 0) {
     return {};
