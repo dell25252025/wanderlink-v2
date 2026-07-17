@@ -6,7 +6,7 @@ import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
 import { db } from '@/lib/firebase';
 
-import { Eye, MessageSquare, UserPlus } from 'lucide-react';
+import { Eye, MessageSquare, UserPlus, Image } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -16,10 +16,11 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 export default function PrivacySettingsPage() {
   const { currentUser } = useAuth();
   const [showOnlineStatus, setShowOnlineStatus] = useState(true);
-  const [messagingPolicy, setMessagingPolicy] = useState('all');
   const [photoVisibility, setPhotoVisibility] = useState('all');
+  const [messagingPolicy, setMessagingPolicy] = useState('all');
   const [friendRequestPolicy, setFriendRequestPolicy] = useState('all');
 
+  // STEP 1: Read the photoVisibility setting from Firestore
   useEffect(() => {
     if (!currentUser?.uid) return;
 
@@ -27,7 +28,12 @@ export default function PrivacySettingsPage() {
     const unsubscribe = onSnapshot(userRef, (doc) => {
       if (doc.exists()) {
         const userData = doc.data();
+        // Online Status
         setShowOnlineStatus(userData.showOnlineStatus !== false);
+
+        // Photo Visibility (with a default value)
+        const privacySettings = userData.privacy || {};
+        setPhotoVisibility(privacySettings.photoVisibility || 'all');
       }
     });
 
@@ -36,7 +42,6 @@ export default function PrivacySettingsPage() {
 
   const handleToggleOnlineStatus = async (isActive: boolean) => {
     if (!currentUser?.uid) return;
-
     const userRef = doc(db, 'users', currentUser.uid);
     try {
       await updateDoc(userRef, {
@@ -44,7 +49,22 @@ export default function PrivacySettingsPage() {
         isOnline: isActive,
       });
     } catch (error) {
-      console.error("Erreur lors de la mise à jour du statut en ligne:", error);
+      console.error("Error updating online status:", error);
+    }
+  };
+
+  // STEP 1: Write the photoVisibility setting to Firestore
+  const handlePhotoVisibilityChange = async (value: string) => {
+    if (!currentUser?.uid) return;
+    const userRef = doc(db, 'users', currentUser.uid);
+    try {
+        setPhotoVisibility(value); // Optimistically update the UI
+        await updateDoc(userRef, {
+            'privacy.photoVisibility': value
+        });
+    } catch (error) {
+        console.error("Error updating photo visibility:", error);
+        // Optionally, revert the UI change on error
     }
   };
 
@@ -63,16 +83,15 @@ export default function PrivacySettingsPage() {
                             <Label htmlFor="online-status" className="text-sm">Afficher mon statut "En ligne"</Label>
                             <Switch id="online-status" checked={showOnlineStatus} onCheckedChange={handleToggleOnlineStatus} />
                         </div>
-                         {/* La section 'Activité récente' a été supprimée */}
                     </CardContent>
                 </Card>
                 
                 <Card>
                     <CardHeader className="p-4">
-                        <CardTitle className="flex items-center gap-2 text-base"><MessageSquare className="h-5 w-5"/> Qui peut voir mes photos ?</CardTitle>
+                        <CardTitle className="flex items-center gap-2 text-base"><Image className="h-5 w-5"/> Qui peut voir mes photos ?</CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 pt-0">
-                        <RadioGroup value={photoVisibility} onValueChange={setPhotoVisibility} className="space-y-2">
+                        <RadioGroup value={photoVisibility} onValueChange={handlePhotoVisibilityChange} className="space-y-2">
                            <div className="flex items-center space-x-3">
                                <RadioGroupItem value="all" id="p-all" />
                                <Label htmlFor="p-all" className="text-sm font-normal">Tout le monde</Label>
