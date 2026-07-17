@@ -70,15 +70,21 @@ export default function PrivacySettingsPage() {
   };
   
   const handleMessagingPolicyChange = async (value: string) => {
-    if (!currentUser?.uid) return;
+    console.log('[Privacy Page] handleMessagingPolicyChange triggered with value:', value);
+    if (!currentUser?.uid) {
+        console.log('[Privacy Page] User not found, aborting update.');
+        return;
+    }
     const userRef = doc(db, 'users', currentUser.uid);
     try {
-        setMessagingPolicy(value); // Optimistic UI update
+        setMessagingPolicy(value);
+        console.log('[Privacy Page] Attempting to update Firestore...');
         await updateDoc(userRef, {
             'privacy.messagingPolicy': value
         });
+        console.log('[Privacy Page] Firestore update successful!');
     } catch (error) {
-        console.error("Error updating messaging policy:", error);
+        console.error("[Privacy Page] Error updating messaging policy:", error);
     }
   };
 
