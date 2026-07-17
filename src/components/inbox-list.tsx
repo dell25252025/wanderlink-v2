@@ -11,7 +11,6 @@ import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getUserProfile } from '@/lib/firebase-actions'; // Import getUserProfile
 import { DocumentData } from 'firebase/firestore';
 
 // Interfaces
@@ -96,30 +95,33 @@ export default function InboxList() {
   const [currentUser] = useAuthState(auth);
   const [currentUserProfile, setCurrentUserProfile] = useState<DocumentData | null>(null);
 
-  // Effect to fetch current user's full profile
+  // STEP 1: Listen for real-time updates on the current user's profile
   useEffect(() => {
     if (currentUser) {
-      getUserProfile(currentUser.uid).then(profile => {
-        setCurrentUserProfile(profile);
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      const unsubscribe = onSnapshot(userDocRef, (snapshot) => {
+        if (snapshot.exists()) {
+          setCurrentUserProfile(snapshot.data());
+        } else {
+          setCurrentUserProfile(null);
+        }
       });
+      return () => unsubscribe();
+    } else {
+      setCurrentUserProfile(null);
     }
   }, [currentUser]);
 
 
-  // Effect to fetch and filter chats
+  // STEP 2: Fetch and filter chats, now reacting to real-time profile changes
   useEffect(() => {
-    // Wait until we have the user and their profile (with block list)
     if (!currentUser || !currentUserProfile) {
-        // If we have the user but not the profile yet, keep loading
-        if(currentUser && !currentUserProfile) {
-            setLoading(true);
-        } else {
-            setLoading(false);
-        }
+        setLoading(false);
+        setChats([]);
         return;
     }
 
-    const blockedUserIds = new Set(currentUserProfile.blockedUsers || []);
+    setLoading(true); // Start loading when we begin fetching chats
 
     const q = query(collection(db, 'chats'), where('participants', 'array-contains', currentUser.uid));
 
@@ -144,14 +146,30 @@ export default function InboxList() {
           return;
       }
       
+      // --- SYMMETRICAL BLOCKING LOGIC --- //
+      // 1. Who I have blocked (from our real-time profile)
+      const iHaveBlockedIds = new Set(currentUserProfile.blockedUsers || []);
+
+      // 2. Who has blocked me (fresh query)
+      const usersWhoBlockedMeQuery = query(collection(db, 'users'), where('blockedUsers', 'array-contains', currentUser.uid));
+      const usersWhoBlockedMeSnapshot = await getDocs(usersWhoBlockedMeQuery);
+      const usersWhoBlockedMeIds = new Set(usersWhoBlockedMeSnapshot.docs.map(doc => doc.id));
+      // --- END OF LOGIC --- //
+
       const usersSnapshot = await getDocs(query(collection(db, 'users'), where(documentId(), 'in', otherParticipantIds)));
       const usersData = new Map(usersSnapshot.docs.map(doc => [doc.id, doc.data()]));
 
       const enrichedChats: EnrichedChat[] = baseChats
         .map(chat => {
           const otherParticipantId = chat.participants.find(p => p !== currentUser.uid);
-          const otherParticipantData = otherParticipantId ? usersData.get(otherParticipantId) : null;
+          if (!otherParticipantId) return null;
 
+          // Symmetrical Filter: The chat is hidden if either user has blocked the other.
+          if (iHaveBlockedIds.has(otherParticipantId) || usersWhoBlockedMeIds.has(otherParticipantId)) {
+            return null;
+          }
+
+          const otherParticipantData = usersData.get(otherParticipantId);
           if (otherParticipantData) {
             return {
               ...chat,
@@ -167,10 +185,7 @@ export default function InboxList() {
         })
         .filter((chat): chat is EnrichedChat => chat !== null);
 
-      // *** MODIFICATION: Filter out blocked users before setting state ***
-      const filteredChats = enrichedChats.filter(chat => !blockedUserIds.has(chat.otherParticipant.id));
-
-      setChats(filteredChats);
+      setChats(enrichedChats);
       setLoading(false);
     });
 
@@ -198,7 +213,7 @@ export default function InboxList() {
     });
 
     return () => unsubscribes.forEach(unsub => unsub());
-  }, [chats.length]); // Depend on chats.length to re-trigger when chats are loaded
+  }, [chats.length]);
 
 
   if (loading) {
