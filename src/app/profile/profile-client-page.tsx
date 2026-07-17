@@ -690,7 +690,12 @@ export default function ProfileClientPage() {
       ? `${format(fromDate, 'd LLL yyyy', { locale: fr })}${toDate ? ` au ${format(toDate, 'd LLL yyyy', { locale: fr })}` : ''}`
       : 'Non spécifié';
 
-  const profilePictures = profile.profilePictures && profile.profilePictures.length > 0 ? profile.profilePictures : [];
+  // STEP 2: Determine if photos should be visible
+  const photoVisibility = profile?.privacy?.photoVisibility || 'all'; // Default to 'all'
+  const canViewPhotos = isOwner || photoVisibility === 'all' || (photoVisibility === 'friends' && friendStatus === 'friends');
+
+  // STEP 2: Apply the visibility rule
+  const profilePictures = canViewPhotos && profile.profilePictures && profile.profilePictures.length > 0 ? profile.profilePictures : [];
   
   const destinationCountry = countries.find(c => c.name === profile.destination);
   const locationCountry = countries.find(c => c.name === profile.location);
