@@ -690,13 +690,36 @@ export default function ProfileClientPage() {
       ? `${format(fromDate, 'd LLL yyyy', { locale: fr })}${toDate ? ` au ${format(toDate, 'd LLL yyyy', { locale: fr })}` : ''}`
       : 'Non spécifié';
 
-  // STEP 2: Determine if photos should be visible
-  const photoVisibility = profile?.privacy?.photoVisibility || 'all'; // Default to 'all'
+  // Photo Visibility Logic
+  const photoVisibility = profile?.privacy?.photoVisibility || 'all';
   const canViewPhotos = isOwner || photoVisibility === 'all' || (photoVisibility === 'friends' && friendStatus === 'friends');
-
-  // STEP 2: Apply the visibility rule
   const profilePictures = canViewPhotos && profile.profilePictures && profile.profilePictures.length > 0 ? profile.profilePictures : [];
   
+  // Messaging Policy Logic
+  const messagingPolicy = profile?.privacy?.messagingPolicy || 'all';
+  const canSendMessage = !isOwner && (messagingPolicy === 'all' || (messagingPolicy === 'friends' && friendStatus === 'friends'));
+
+  const handleSendMessageClick = () => {
+    if (canSendMessage) {
+        router.push(`/chat?id=${profileId}`);
+        return;
+    }
+
+    if (messagingPolicy === 'friends') {
+         toast({
+            variant: "default",
+            title: "Messages restreints",
+            description: "Cet utilisateur accepte uniquement les messages de ses amis.",
+        });
+    } else if (messagingPolicy === 'none') {
+         toast({
+            variant: "default",
+            title: "Messages désactivés",
+            description: "Cet utilisateur n'accepte aucun nouveau message.",
+        });
+    }
+  };
+
   const destinationCountry = countries.find(c => c.name === profile.destination);
   const locationCountry = countries.find(c => c.name === profile.location);
   const travelStyleOption = travelStyles.find(s => s.value === profile.travelStyle);
@@ -888,10 +911,13 @@ export default function ProfileClientPage() {
 
                     {!isOwner && (
                         <div className="fixed bottom-0 left-0 right-0 z-10 p-4 bg-background/80 backdrop-blur-sm border-t md:hidden">
-                            <Button asChild className="w-full" size="lg">
-                                <Link href={`/chat?id=${profileId}`}>
-                                    <Send className="mr-2 h-4 w-4" /> Message
-                                </Link>
+                            <Button 
+                                className="w-full" 
+                                size="lg"
+                                disabled={!canSendMessage}
+                                onClick={handleSendMessageClick}
+                            >
+                                <Send className="mr-2 h-4 w-4" /> Message
                             </Button>
                         </div>
                     )}
