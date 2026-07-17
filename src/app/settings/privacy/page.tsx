@@ -20,7 +20,6 @@ export default function PrivacySettingsPage() {
   const [messagingPolicy, setMessagingPolicy] = useState('all');
   const [friendRequestPolicy, setFriendRequestPolicy] = useState('all');
 
-  // STEP 1: Read the photoVisibility setting from Firestore
   useEffect(() => {
     if (!currentUser?.uid) return;
 
@@ -28,12 +27,16 @@ export default function PrivacySettingsPage() {
     const unsubscribe = onSnapshot(userRef, (doc) => {
       if (doc.exists()) {
         const userData = doc.data();
+        const privacySettings = userData.privacy || {};
+
         // Online Status
         setShowOnlineStatus(userData.showOnlineStatus !== false);
 
-        // Photo Visibility (with a default value)
-        const privacySettings = userData.privacy || {};
+        // Photo Visibility
         setPhotoVisibility(privacySettings.photoVisibility || 'all');
+
+        // Messaging Policy
+        setMessagingPolicy(privacySettings.messagingPolicy || 'all');
       }
     });
 
@@ -53,20 +56,32 @@ export default function PrivacySettingsPage() {
     }
   };
 
-  // STEP 1: Write the photoVisibility setting to Firestore
   const handlePhotoVisibilityChange = async (value: string) => {
     if (!currentUser?.uid) return;
     const userRef = doc(db, 'users', currentUser.uid);
     try {
-        setPhotoVisibility(value); // Optimistically update the UI
+        setPhotoVisibility(value); // Optimistic UI update
         await updateDoc(userRef, {
             'privacy.photoVisibility': value
         });
     } catch (error) {
         console.error("Error updating photo visibility:", error);
-        // Optionally, revert the UI change on error
     }
   };
+  
+  const handleMessagingPolicyChange = async (value: string) => {
+    if (!currentUser?.uid) return;
+    const userRef = doc(db, 'users', currentUser.uid);
+    try {
+        setMessagingPolicy(value); // Optimistic UI update
+        await updateDoc(userRef, {
+            'privacy.messagingPolicy': value
+        });
+    } catch (error) {
+        console.error("Error updating messaging policy:", error);
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -113,7 +128,7 @@ export default function PrivacySettingsPage() {
                         <CardTitle className="flex items-center gap-2 text-base"><MessageSquare className="h-5 w-5"/> Qui peut m'envoyer un message ?</CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 pt-0">
-                        <RadioGroup value={messagingPolicy} onValueChange={setMessagingPolicy} className="space-y-2">
+                        <RadioGroup value={messagingPolicy} onValueChange={handleMessagingPolicyChange} className="space-y-2">
                            <div className="flex items-center space-x-3">
                                <RadioGroupItem value="all" id="m-all" />
                                <Label htmlFor="m-all" className="text-sm font-normal">Tout le monde</Label>
