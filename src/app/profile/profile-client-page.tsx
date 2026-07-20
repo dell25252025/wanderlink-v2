@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getUserProfile, addProfilePicture, removeProfilePicture, addFriend, removeFriend, signOutFromGoogle, blockUser } from '@/lib/firebase-actions';
-import { type DocumentData, addDoc, collection, serverTimestamp, query, where, getDocs, onSnapshot, updateDoc, Timestamp, orderBy, limit, doc, arrayUnion } from 'firebase/firestore';
+import { type DocumentData, addDoc, collection, serverTimestamp, query, where, getDocs, onSnapshot, updateDoc, Timestamp, orderBy, limit, doc, arrayUnion, deleteDoc } from 'firebase/firestore';
 import { Loader2, Plane, MapPin, Languages, Backpack, Cigarette, Wine, Calendar, Camera, Trash2, PlusCircle, LogOut, Edit, Ruler, Scale, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, X, Sparkles, BriefcaseBusiness, Coins, Users, MoreVertical, ShieldAlert, Ban, Send, UserPlus, Heart, UserCheck, UserX, CheckCircle, ShieldCheck, History } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
@@ -241,6 +241,7 @@ export default function ProfileClientPage() {
   const { toast } = useToast();
   const [isClient, setIsClient] = useState(false);
   const [friendStatus, setFriendStatus] = useState<FriendStatus>('add');
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isFriendActionLoading, setIsFriendActionLoading] = useState(false);
   const [photoViewerIndex, setPhotoViewerIndex] = useState<number | null>(null);
@@ -260,6 +261,7 @@ export default function ProfileClientPage() {
         const userProfileData = await getUserProfile(currentUser.uid);
         if (userProfileData?.friends?.includes(profileId)) {
             setFriendStatus('friends');
+            setPendingRequestId(null);
             return;
         }
 
@@ -272,15 +274,17 @@ export default function ProfileClientPage() {
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             if (!snapshot.empty) {
-                const request = snapshot.docs[0].data();
-                if (request.senderId === currentUser.uid) {
+                const request = snapshot.docs[0];
+                if (request.data().senderId === currentUser.uid) {
                     setFriendStatus('pending_sent');
+                    setPendingRequestId(request.id);
                 } else {
                     setFriendStatus('pending_received');
+                    setPendingRequestId(null);
                 }
             } else {
-                 // Si aucune demande en attente, vérifier s'ils sont déjà amis
-                const checkAgain = async () => {
+                 setPendingRequestId(null);
+                 const checkAgain = async () => {
                     const updatedUserProfile = await getUserProfile(currentUser.uid);
                      if (updatedUserProfile?.friends?.includes(profileId)) {
                         setFriendStatus('friends');
@@ -531,7 +535,7 @@ export default function ProfileClientPage() {
     toast({ title: `Le profil de ${profile?.firstName} a été signalé.` });
   };
   
-  const handleFriendAction = async (action: 'add' | 'remove' | 'accept' | 'decline') => {
+  const handleFriendAction = async (action: 'add' | 'remove' | 'accept' | 'decline' | 'cancel') => {
     if (!currentUser || !profileId || isFriendActionLoading || currentUser.uid === profileId) return;
     setIsFriendActionLoading(true);
 
@@ -541,6 +545,7 @@ export default function ProfileClientPage() {
                  const result = await removeFriend(currentUser.uid, profileId);
                 if (result.success) {
                     setFriendStatus('add');
+                    setPendingRequestId(null);
                     toast({ title: 'Ami retiré' });
                 } else {
                     toast({ variant: 'destructive', title: 'Erreur', description: result.error });
@@ -555,13 +560,16 @@ export default function ProfileClientPage() {
                     });
                     return;
                 }
-                await addDoc(collection(db, "friend_requests"), {
+                const newRequestRef = await addDoc(collection(db, "friend_requests"), {
                     senderId: currentUser.uid,
                     receiverId: profileId,
                     status: "pending",
                     createdAt: serverTimestamp(),
                 });
                 
+                setFriendStatus('pending_sent');
+                setPendingRequestId(newRequestRef.id);
+
                 await addDoc(collection(db, `users/${profileId}/notifications`), {
                     type: "friend_request",
                     senderId: currentUser.uid,
@@ -571,8 +579,16 @@ export default function ProfileClientPage() {
                     read: false,
                 });
 
-                setFriendStatus('pending_sent');
                 toast({ title: 'Demande d\'ami envoyée !' });
+                break;
+            case 'cancel':
+                if (!pendingRequestId) {
+                    toast({ variant: 'destructive', title: 'Erreur', description: "Impossible d'annuler une demande introuvable." });
+                    return;
+                }
+                await deleteDoc(doc(db, "friend_requests", pendingRequestId));
+                // Le listener onSnapshot s'occupera de mettre à jour le statut.
+                toast({ title: "Demande d'ami annulée" });
                 break;
             case 'accept':
             case 'decline':
@@ -586,6 +602,7 @@ export default function ProfileClientPage() {
                 if (requestSnapshot.empty) {
                     toast({ title: "Demande introuvable", variant: "destructive" });
                     setFriendStatus('add');
+                    setPendingRequestId(null);
                     return;
                 }
                 const requestDoc = requestSnapshot.docs[0];
@@ -602,10 +619,12 @@ export default function ProfileClientPage() {
                         read: false,
                     });
                     setFriendStatus('friends');
+                    setPendingRequestId(null);
                     toast({ title: 'Ami ajouté !'});
                 } else { // decline
                     await updateDoc(requestDoc.ref, { status: 'rejected' });
                     setFriendStatus('add');
+                    setPendingRequestId(null);
                     toast({ title: 'Demande refusée' });
                 }
                 break;
@@ -643,9 +662,24 @@ export default function ProfileClientPage() {
             );
         case 'pending_sent':
             return (
-                <Button variant="secondary" size="sm" className="h-8" disabled>
-                    <History className="mr-2 h-4 w-4" /> Demande envoyée
-                </Button>
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="secondary" size="sm" className="h-8" disabled={isFriendActionLoading || !pendingRequestId}>
+                            <History className="mr-2 h-4 w-4" /> Demande envoyée
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                         <AlertDialogHeader>
+                            <AlertDialogTitle>Annuler votre demande d'ami ?</AlertDialogTitle>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Non</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleFriendAction('cancel')}>
+                                Oui, annuler
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             );
         case 'pending_received':
              return (
