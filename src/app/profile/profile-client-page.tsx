@@ -547,6 +547,14 @@ export default function ProfileClientPage() {
                 }
                 break;
             case 'add':
+                if (!canSendFriendRequest) {
+                    toast({
+                        variant: "default",
+                        title: "Demandes d'ami restreintes",
+                        description: "Cet utilisateur n'accepte pas les demandes d'ami pour le moment.",
+                    });
+                    return;
+                }
                 await addDoc(collection(db, "friend_requests"), {
                     senderId: currentUser.uid,
                     receiverId: profileId,
@@ -653,10 +661,12 @@ export default function ProfileClientPage() {
         case 'add':
         default:
             return (
-                <Button onClick={() => handleFriendAction('add')} size="sm" variant="secondary" disabled={isFriendActionLoading}>
-                    {isFriendActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
-                    Ajouter
-                </Button>
+                canSendFriendRequest && (
+                    <Button onClick={() => handleFriendAction('add')} size="sm" variant="secondary" disabled={isFriendActionLoading}>
+                        {isFriendActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
+                        Ajouter
+                    </Button>
+                )
             );
     }
 };
@@ -698,6 +708,30 @@ export default function ProfileClientPage() {
   // Messaging Policy Logic
   const messagingPolicy = profile?.privacy?.messagingPolicy || 'all';
   const canSendMessage = !isOwner && (messagingPolicy === 'all' || (messagingPolicy === 'friends' && friendStatus === 'friends'));
+
+  // Friend Request Policy Logic
+  const friendRequestPolicy = profile?.privacy?.friendRequestPolicy || 'all';
+  let canSendFriendRequest = false;
+  if (!isOwner && friendStatus === 'add') {
+      switch (friendRequestPolicy) {
+          case 'all':
+              canSendFriendRequest = true;
+              break;
+          case 'friends_of_friends':
+              const myFriends = currentUserProfile?.friends || [];
+              const theirFriends = profile?.friends || [];
+              const myFriendsSet = new Set(myFriends);
+              const hasMutualFriend = theirFriends.some((friendId: string) => myFriendsSet.has(friendId));
+              canSendFriendRequest = hasMutualFriend;
+              break;
+          case 'none':
+          default:
+              canSendFriendRequest = false;
+              break;
+      }
+  } else if (friendStatus !== 'add') {
+      canSendFriendRequest = false;
+  }
 
   const handleSendMessageClick = () => {
     if (canSendMessage) {
