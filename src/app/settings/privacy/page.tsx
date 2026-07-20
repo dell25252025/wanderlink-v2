@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -37,6 +36,9 @@ export default function PrivacySettingsPage() {
 
         // Messaging Policy
         setMessagingPolicy(privacySettings.messagingPolicy || 'all');
+        
+        // Friend Request Policy
+        setFriendRequestPolicy(privacySettings.friendRequestPolicy || 'all');
       }
     });
 
@@ -88,6 +90,18 @@ export default function PrivacySettingsPage() {
     }
   };
 
+  const handleFriendRequestPolicyChange = async (value: string) => {
+    if (!currentUser?.uid) return;
+    const userRef = doc(db, 'users', currentUser.uid);
+    try {
+        setFriendRequestPolicy(value); // Optimistic UI update
+        await updateDoc(userRef, {
+            'privacy.friendRequestPolicy': value
+        });
+    } catch (error) {
+        console.error("Error updating friend request policy:", error);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -156,13 +170,13 @@ export default function PrivacySettingsPage() {
                         <CardTitle className="flex items-center gap-2 text-base"><UserPlus className="h-5 w-5"/> Qui peut m'envoyer une demande d'ami ?</CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 pt-0">
-                        <RadioGroup value={friendRequestPolicy} onValueChange={setFriendRequestPolicy} className="space-y-2">
+                        <RadioGroup value={friendRequestPolicy} onValueChange={handleFriendRequestPolicyChange} className="space-y-2">
                            <div className="flex items-center space-x-3">
                                <RadioGroupItem value="all" id="fr-all" />
                                <Label htmlFor="fr-all" className="text-sm font-normal">Tout le monde</Label>
                            </div>
                            <div className="flex items-center space-x-3">
-                               <RadioGroupItem value="friends" id="fr-friends" />
+                               <RadioGroupItem value="friends_of_friends" id="fr-friends" />
                                <Label htmlFor="fr-friends" className="text-sm font-normal">Amis de mes amis</Label>
                            </div>
                            <div className="flex items-center space-x-3">
