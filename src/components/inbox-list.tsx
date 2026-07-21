@@ -84,7 +84,7 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
            )}
         </div>
       </div>
-      <span>X</span>
+      <span>🗑️</span>
     </li>
   );
 };
