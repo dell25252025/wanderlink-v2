@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -60,7 +59,7 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
             <AvatarFallback>{otherParticipant.firstName?.charAt(0) || 'U'}</AvatarFallback>
           </Avatar>
           {chat.otherParticipant.isOnline && (
-              <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background" />
+              <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background"></div>
           )}
         </div>
         <div className="flex-1 overflow-hidden">
@@ -97,7 +96,6 @@ export default function InboxList() {
   const [currentUser] = useAuthState(auth);
   const [currentUserProfile, setCurrentUserProfile] = useState<DocumentData | null>(null);
 
-  // STEP 1: Listen for real-time updates on the current user's profile
   useEffect(() => {
     if (currentUser) {
       const userDocRef = doc(db, 'users', currentUser.uid);
@@ -115,7 +113,6 @@ export default function InboxList() {
   }, [currentUser]);
 
 
-  // STEP 2: Fetch and filter chats, now reacting to real-time profile changes
   useEffect(() => {
     if (!currentUser || !currentUserProfile) {
         setLoading(false);
@@ -123,7 +120,7 @@ export default function InboxList() {
         return;
     }
 
-    setLoading(true); // Start loading when we begin fetching chats
+    setLoading(true);
 
     const q = query(collection(db, 'chats'), where('participants', 'array-contains', currentUser.uid));
 
@@ -148,15 +145,11 @@ export default function InboxList() {
           return;
       }
 
-      // --- SYMMETRICAL BLOCKING LOGIC --- //
-      // 1. Who I have blocked (from our real-time profile)
       const iHaveBlockedIds = new Set(currentUserProfile.blockedUsers || []);
 
-      // 2. Who has blocked me (fresh query)
       const usersWhoBlockedMeQuery = query(collection(db, 'users'), where('blockedUsers', 'array-contains', currentUser.uid));
       const usersWhoBlockedMeSnapshot = await getDocs(usersWhoBlockedMeQuery);
       const usersWhoBlockedMeIds = new Set(usersWhoBlockedMeSnapshot.docs.map(doc => doc.id));
-      // --- END OF LOGIC --- //
 
       const usersSnapshot = await getDocs(query(collection(db, 'users'), where(documentId(), 'in', otherParticipantIds)));
       const usersData = new Map(usersSnapshot.docs.map(doc => [doc.id, doc.data()]));
@@ -166,7 +159,6 @@ export default function InboxList() {
           const otherParticipantId = chat.participants.find(p => p !== currentUser.uid);
           if (!otherParticipantId) return null;
 
-          // Symmetrical Filter: The chat is hidden if either user has blocked the other.
           if (iHaveBlockedIds.has(otherParticipantId) || usersWhoBlockedMeIds.has(otherParticipantId)) {
             return null;
           }
@@ -179,7 +171,7 @@ export default function InboxList() {
                 id: otherParticipantId!,
                 firstName: otherParticipantData.firstName,
                 profilePictures: otherParticipantData.profilePictures,
-                isOnline: false, // Default value
+                isOnline: false,
               },
             };
           }
@@ -192,7 +184,7 @@ export default function InboxList() {
     });
 
     return () => unsubscribe();
-  }, [currentUser, currentUserProfile]); // Re-run when profile is loaded
+  }, [currentUser, currentUserProfile]);
 
    useEffect(() => {
     if (chats.length === 0) return;
@@ -230,7 +222,7 @@ export default function InboxList() {
     <ul className="divide-y divide-border">
       {chats.map(chat => (
         <ChatListItem key={chat.id} chat={chat} />
-      ))
+      ))}
     </ul>
   );
 }
