@@ -51,40 +51,41 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
 
   return (
     <li
-      onClick={handleClick}
       className="flex items-center gap-4 p-3 hover:bg-muted/50 cursor-pointer transition-colors"
     >
-      <div className="relative">
-        <Avatar className="h-12 w-12">
-          <AvatarImage src={otherParticipant.profilePictures?.[0]} alt={otherParticipant.firstName} />
-          <AvatarFallback>{otherParticipant.firstName?.charAt(0) || 'U'}</AvatarFallback>
-        </Avatar>
-        {chat.otherParticipant.isOnline && (
-            <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background" />
-        )}
-      </div>
-      <div className="flex-1 overflow-hidden">
-        <div className="flex justify-between items-center">
-          <p className="font-semibold truncate">{otherParticipant.firstName || 'Utilisateur'}</p>
-          {lastMessageTimestamp && (
-            <p className="text-xs text-muted-foreground whitespace-nowrap">
-              {formatDistanceToNow(lastMessageTimestamp, { addSuffix: true, locale: fr })}
-            </p>
+      <div onClick={handleClick} className="contents">
+        <div className="relative">
+          <Avatar className="h-12 w-12">
+            <AvatarImage src={otherParticipant.profilePictures?.[0]} alt={otherParticipant.firstName} />
+            <AvatarFallback>{otherParticipant.firstName?.charAt(0) || 'U'}</AvatarFallback>
+          </Avatar>
+          {chat.otherParticipant.isOnline && (
+              <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background" />
           )}
         </div>
-        <div className="flex justify-between items-start">
-            <p className={cn(
-                "text-sm truncate w-11/12",
-                isLastMessageUnread ? "text-foreground font-bold" : "text-muted-foreground"
-            )}>
-             {lastMessage?.text || 'Pas encore de messages'}
-           </p>
-           {isLastMessageUnread && (
-             <div className="h-2 w-2 rounded-full bg-primary mt-1.5"></div>
-           )}
+        <div className="flex-1 overflow-hidden">
+          <div className="flex justify-between items-center">
+            <p className="font-semibold truncate">{otherParticipant.firstName || 'Utilisateur'}</p>
+            {lastMessageTimestamp && (
+              <p className="text-xs text-muted-foreground whitespace-nowrap">
+                {formatDistanceToNow(lastMessageTimestamp, { addSuffix: true, locale: fr })}
+              </p>
+            )}
+          </div>
+          <div className="flex justify-between items-start">
+              <p className={cn(
+                  "text-sm truncate w-11/12",
+                  isLastMessageUnread ? "text-foreground font-bold" : "text-muted-foreground"
+              )}>
+               {lastMessage?.text || 'Pas encore de messages'}
+             </p>
+             {isLastMessageUnread && (
+               <div className="h-2 w-2 rounded-full bg-primary mt-1.5"></div>
+             )}
+          </div>
         </div>
       </div>
-      <span>🗑️</span>
+      <span onClick={() => {}}>🗑️</span>
     </li>
   );
 };
@@ -229,7 +230,7 @@ export default function InboxList() {
     <ul className="divide-y divide-border">
       {chats.map(chat => (
         <ChatListItem key={chat.id} chat={chat} />
-      ))}
+      ))
     </ul>
   );
 }
