@@ -50,7 +50,7 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
   const isLastMessageUnread = lastMessage && lastMessage.senderId !== currentUser.uid && !lastMessage.read;
 
   return (
-    <li 
+    <li
       onClick={handleClick}
       className="flex items-center gap-4 p-3 hover:bg-muted/50 cursor-pointer transition-colors"
     >
@@ -84,6 +84,7 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
            )}
         </div>
       </div>
+      <span>X</span>
     </li>
   );
 };
@@ -129,7 +130,7 @@ export default function InboxList() {
       const baseChats: Chat[] = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() } as Chat))
         .filter(chat => chat.participants.some(p => p !== currentUser.uid));
-      
+
       if (baseChats.length === 0) {
         setChats([]);
         setLoading(false);
@@ -145,7 +146,7 @@ export default function InboxList() {
           setLoading(false);
           return;
       }
-      
+
       // --- SYMMETRICAL BLOCKING LOGIC --- //
       // 1. Who I have blocked (from our real-time profile)
       const iHaveBlockedIds = new Set(currentUserProfile.blockedUsers || []);
@@ -203,9 +204,9 @@ export default function InboxList() {
       return onSnapshot(userDocRef, (userDoc) => {
         if (userDoc.exists()) {
             const isOnline = userDoc.data().isOnline || false;
-            setChats(prevChats => prevChats.map(chat => 
-                chat.otherParticipant.id === id 
-                ? { ...chat, otherParticipant: { ...chat.otherParticipant, isOnline } } 
+            setChats(prevChats => prevChats.map(chat =>
+                chat.otherParticipant.id === id
+                ? { ...chat, otherParticipant: { ...chat.otherParticipant, isOnline } }
                 : chat
             ));
         }
