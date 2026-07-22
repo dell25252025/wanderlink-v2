@@ -45,11 +45,13 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
     router.push(`/chat?id=${chat.otherParticipant.id}`);
   };
 
-  const handleDeleteClick = () => {
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Empêche l'événement de clic de se propager au conteneur parent
     setChatToDelete(chat.id);
   };
 
-  const confirmDelete = async () => {
+  const confirmDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (chatToDelete) {
       try {
         await deleteDoc(doc(db, "chats", chatToDelete));
@@ -61,6 +63,11 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
     }
   };
 
+  const cancelDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setChatToDelete(null);
+  }
+
   if (!currentUser) return null;
 
   const { otherParticipant, lastMessage } = chat;
@@ -69,46 +76,45 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
 
   return (
     <li
-      className="flex items-center gap-4 p-3"
+      className="flex items-center gap-4 p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+      onClick={handleNavigate}
     >
-      <div onClick={handleNavigate} className="flex flex-1 items-center gap-4 cursor-pointer overflow-hidden hover:bg-muted/50 transition-colors -m-3 p-3">
-        <div className="relative">
-          <Avatar className="h-12 w-12">
-            <AvatarImage src={otherParticipant.profilePictures?.[0]} alt={otherParticipant.firstName} />
-            <AvatarFallback>{otherParticipant.firstName?.charAt(0) || 'U'}</AvatarFallback>
-          </Avatar>
-          {chat.otherParticipant.isOnline && (
-              <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background"></div>
+      <div className="relative">
+        <Avatar className="h-12 w-12">
+          <AvatarImage src={otherParticipant.profilePictures?.[0]} alt={otherParticipant.firstName} />
+          <AvatarFallback>{otherParticipant.firstName?.charAt(0) || 'U'}</AvatarFallback>
+        </Avatar>
+        {chat.otherParticipant.isOnline && (
+            <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-background"></div>
+        )}
+      </div>
+      <div className="flex-1 overflow-hidden">
+        <div className="flex justify-between items-center">
+          <p className="font-semibold truncate">{otherParticipant.firstName || 'Utilisateur'}</p>
+          {lastMessageTimestamp && (
+            <p className="text-xs text-muted-foreground whitespace-nowrap">
+              {formatDistanceToNow(lastMessageTimestamp, { addSuffix: true, locale: fr })}
+            </p>
           )}
         </div>
-        <div className="flex-1 overflow-hidden">
-          <div className="flex justify-between items-center">
-            <p className="font-semibold truncate">{otherParticipant.firstName || 'Utilisateur'}</p>
-            {lastMessageTimestamp && (
-              <p className="text-xs text-muted-foreground whitespace-nowrap">
-                {formatDistanceToNow(lastMessageTimestamp, { addSuffix: true, locale: fr })}
-              </p>
-            )}
-          </div>
-          <div className="flex justify-between items-start">
-              <p className={cn(
-                  "text-sm truncate w-11/12",
-                  isLastMessageUnread ? "text-foreground font-bold" : "text-muted-foreground"
-              )}>
-               {lastMessage?.text || 'Pas encore de messages'}
-             </p>
-             {isLastMessageUnread && (
-               <div className="h-2 w-2 rounded-full bg-primary mt-1.5"></div>
-             )}
-          </div>
+        <div className="flex justify-between items-start">
+            <p className={cn(
+                "text-sm truncate w-11/12",
+                isLastMessageUnread ? "text-foreground font-bold" : "text-muted-foreground"
+            )}>
+             {lastMessage?.text || 'Pas encore de messages'}
+           </p>
+           {isLastMessageUnread && (
+             <div className="h-2 w-2 rounded-full bg-primary mt-1.5"></div>
+           )}
         </div>
       </div>
-      <span onClick={handleDeleteClick} className="cursor-pointer p-3 -m-3 z-10">
-        🗑️
-      </span>
+      <div onClick={handleDeleteClick} className="p-3 -m-3 z-10">
+        <span className="cursor-pointer">🗑️</span>
+      </div>
 
       <Dialog open={!!chatToDelete} onOpenChange={(isOpen) => !isOpen && setChatToDelete(null)}>
-        <DialogContent>
+        <DialogContent onClick={(e) => e.stopPropagation()}>
             <DialogHeader>
                 <DialogTitle>Supprimer la conversation</DialogTitle>
                 <DialogDescription>
@@ -116,7 +122,7 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
                 </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-                <Button variant="secondary" onClick={() => setChatToDelete(null)}>Annuler</Button>
+                <Button variant="secondary" onClick={cancelDelete}>Annuler</Button>
                 <Button variant="destructive" onClick={confirmDelete}>Supprimer</Button>
             </DialogFooter>
         </DialogContent>
@@ -258,7 +264,7 @@ export default function InboxList() {
     <ul className="divide-y divide-border">
       {chats.map(chat => (
         <ChatListItem key={chat.id} chat={chat} />
-      ))}
+      ))
     </ul>
   );
 }
