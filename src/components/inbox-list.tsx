@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, query, where, onSnapshot, getDocs, documentId, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, documentId, doc, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -10,6 +10,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { DocumentData } from 'firebase/firestore';
 
 // Interfaces
@@ -37,13 +39,26 @@ interface EnrichedChat extends Chat {
 const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
   const router = useRouter();
   const [currentUser] = useAuthState(auth);
+  const [chatToDelete, setChatToDelete] = useState<string | null>(null);
 
-  const handleClick = () => {
+  const handleNavigate = () => {
     router.push(`/chat?id=${chat.otherParticipant.id}`);
   };
 
-  const handleDelete = () => {
-    console.log("Tentative de suppression du chat:", chat.id);
+  const handleDeleteClick = () => {
+    setChatToDelete(chat.id);
+  };
+
+  const confirmDelete = async () => {
+    if (chatToDelete) {
+      try {
+        await deleteDoc(doc(db, "chats", chatToDelete));
+        setChatToDelete(null);
+      } catch (error) {
+        console.error("Erreur lors de la suppression du chat: ", error);
+        setChatToDelete(null);
+      }
+    }
   };
 
   if (!currentUser) return null;
@@ -56,7 +71,7 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
     <li
       className="flex items-center gap-4 p-3"
     >
-      <div onClick={handleClick} className="flex flex-1 items-center gap-4 cursor-pointer overflow-hidden hover:bg-muted/50 transition-colors -m-3 p-3">
+      <div onClick={handleNavigate} className="flex flex-1 items-center gap-4 cursor-pointer overflow-hidden hover:bg-muted/50 transition-colors -m-3 p-3">
         <div className="relative">
           <Avatar className="h-12 w-12">
             <AvatarImage src={otherParticipant.profilePictures?.[0]} alt={otherParticipant.firstName} />
@@ -88,9 +103,24 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
           </div>
         </div>
       </div>
-      <span onClick={handleDelete} className="cursor-pointer p-3 -m-3">
+      <span onClick={handleDeleteClick} className="cursor-pointer p-3 -m-3 z-10">
         🗑️
       </span>
+
+      <Dialog open={!!chatToDelete} onOpenChange={(isOpen) => !isOpen && setChatToDelete(null)}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Supprimer la conversation</DialogTitle>
+                <DialogDescription>
+                    Êtes-vous sûr de vouloir supprimer cette conversation ? Cette action est irréversible et supprimera tous les messages.
+                </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+                <Button variant="secondary" onClick={() => setChatToDelete(null)}>Annuler</Button>
+                <Button variant="destructive" onClick={confirmDelete}>Supprimer</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </li>
   );
 };
