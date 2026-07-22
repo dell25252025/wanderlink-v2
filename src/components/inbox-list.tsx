@@ -264,7 +264,7 @@ export default function InboxList() {
     <ul className="divide-y divide-border">
       {chats.map(chat => (
         <ChatListItem key={chat.id} chat={chat} />
-      ))
+      ))}
     </ul>
   );
 }
