@@ -42,6 +42,10 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
     router.push(`/chat?id=${chat.otherParticipant.id}`);
   };
 
+  const handleDelete = () => {
+    console.log("Tentative de suppression du chat:", chat.id);
+  };
+
   if (!currentUser) return null;
 
   const { otherParticipant, lastMessage } = chat;
@@ -50,9 +54,9 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
 
   return (
     <li
-      className="flex items-center gap-4 p-3 hover:bg-muted/50 cursor-pointer transition-colors"
+      className="flex items-center gap-4 p-3"
     >
-      <div onClick={handleClick} className="contents">
+      <div onClick={handleClick} className="flex flex-1 items-center gap-4 cursor-pointer overflow-hidden hover:bg-muted/50 transition-colors -m-3 p-3">
         <div className="relative">
           <Avatar className="h-12 w-12">
             <AvatarImage src={otherParticipant.profilePictures?.[0]} alt={otherParticipant.firstName} />
@@ -84,7 +88,9 @@ const ChatListItem = ({ chat }: { chat: EnrichedChat }) => {
           </div>
         </div>
       </div>
-      <span onClick={() => {}}>🗑️</span>
+      <span onClick={handleDelete} className="cursor-pointer p-3 -m-3">
+        🗑️
+      </span>
     </li>
   );
 };
