@@ -4,7 +4,9 @@ import { useEffect, useRef } from 'react';
 import { 
   addDoc, 
   collection, 
-  serverTimestamp
+  serverTimestamp,
+  doc,
+  getDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { User } from 'firebase/auth';
@@ -30,6 +32,27 @@ export function useProfileVisitNotification(profileId: string | null, currentUse
 
     const createNotification = async () => {
       try {
+        const userRef = doc(db, 'users', profileId);
+        const userDoc = await getDoc(userRef);
+        const userData = userDoc.data();
+
+        const profileVisitsEnabled = userData?.notificationSettings?.profileVisits ?? true;
+
+        if (!profileVisitsEnabled) {
+          console.log(
+            "[Profile Visit] Recipient:", profileId,
+            "setting: false",
+            "Notification skipped"
+          );
+          return;
+        } else {
+          console.log(
+            "[Profile Visit] Recipient:", profileId,
+            "setting: true",
+            "Notification allowed"
+          );
+        }
+        
         // Crée la notification à chaque fois.
         await addDoc(collection(db, `users/${profileId}/notifications`), {
           type: 'profile_visit',
