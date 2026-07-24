@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-// LA SOLUTION FINALE : setDoc avec { merge: true }
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 import { Bell, Mail } from 'lucide-react';
@@ -19,9 +18,13 @@ export default function NotificationSettingsPage() {
   const { toast } = useToast();
 
   const [isLoading, setIsLoading] = useState(true);
+  // État pour les messages (existant et fonctionnel)
   const [messagesEnabled, setMessagesEnabled] = useState(true);
+  // NOUVEAU: État pour les visites de profil
+  const [profileVisitsEnabled, setProfileVisitsEnabled] = useState(true);
 
-  const [mockPush, setMockPush] = useState({ profileVisits: true, newMatches: true });
+  // Mocks pour les autres interrupteurs, qui seront remplacés plus tard
+  const [mockPush, setMockPush] = useState({ newMatches: true });
   const [mockEmail, setMockEmail] = useState({ newsAndUpdates: true, weeklyDigest: false });
 
   useEffect(() => {
@@ -34,7 +37,10 @@ export default function NotificationSettingsPage() {
     const unsubscribe = onSnapshot(userRef, (doc) => {
       if (doc.exists()) {
         const data = doc.data();
+        // Lecture pour les messages (existant)
         setMessagesEnabled(data.notificationSettings?.messages ?? true);
+        // NOUVEAU: Lecture pour les visites de profil (valeur par défaut : true)
+        setProfileVisitsEnabled(data.notificationSettings?.profileVisits ?? true);
       }
       setIsLoading(false);
     });
@@ -42,28 +48,33 @@ export default function NotificationSettingsPage() {
     return () => unsubscribe();
   }, [currentUser]);
 
+  // Fonction pour les messages (existante et fonctionnelle)
   const handleToggleMessages = async (checked: boolean) => {
-    if (!currentUser?.uid) {
-      toast({ title: 'Erreur', description: 'Utilisateur non authentifié.', variant: 'destructive' });
-      return;
-    }
-
+    if (!currentUser?.uid) return;
     setMessagesEnabled(checked);
     const userRef = doc(db, 'users', currentUser.uid);
-
     try {
-      // LA CORRECTION : Utiliser setDoc avec { merge: true } pour créer l'objet s'il n'existe pas
-      await setDoc(userRef, {
-        notificationSettings: {
-          messages: checked
-        }
-      }, { merge: true });
-
+      await setDoc(userRef, { notificationSettings: { messages: checked } }, { merge: true });
       toast({ title: 'Préférences mises à jour' });
     } catch (error) {
-      console.error("Erreur lors de la mise à jour des paramètres:", error);
-      toast({ title: 'Erreur', description: 'Impossible de sauvegarder votre préférence.', variant: 'destructive' });
+      console.error("Erreur:", error);
+      toast({ title: 'Erreur', variant: 'destructive' });
       setMessagesEnabled(!checked);
+    }
+  };
+
+  // NOUVEAU: Fonction pour les visites de profil
+  const handleToggleProfileVisits = async (checked: boolean) => {
+    if (!currentUser?.uid) return;
+    setProfileVisitsEnabled(checked);
+    const userRef = doc(db, 'users', currentUser.uid);
+    try {
+      await setDoc(userRef, { notificationSettings: { profileVisits: checked } }, { merge: true });
+      toast({ title: 'Préférences mises à jour' });
+    } catch (error) {
+      console.error("Erreur:", error);
+      toast({ title: 'Erreur', variant: 'destructive' });
+      setProfileVisitsEnabled(!checked);
     }
   };
 
@@ -90,9 +101,14 @@ export default function NotificationSettingsPage() {
                   onCheckedChange={handleToggleMessages} 
                 />
               </div>
+              {/* SWITCH MIS À JOUR */}
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <Label htmlFor="push-visits" className="text-sm">Visites de profil</Label>
-                <Switch id="push-visits" checked={mockPush.profileVisits} onCheckedChange={(checked) => setMockPush(prev => ({...prev, profileVisits: checked}))} />
+                <Switch 
+                  id="push-visits" 
+                  checked={profileVisitsEnabled}
+                  onCheckedChange={handleToggleProfileVisits}
+                />
               </div>
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <Label htmlFor="push-matches" className="text-sm">Nouveaux matches</Label>
