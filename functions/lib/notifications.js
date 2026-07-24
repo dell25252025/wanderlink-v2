@@ -7,12 +7,10 @@ if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 const db = admin.firestore();
-// ÉTAPE 1: Simplifier l'ancienne fonction. Elle ne fait plus qu'écrire dans la BDD.
-// La nouvelle fonction (plus bas) se chargera d'envoyer le push.
 exports.sendNewMessageNotification = functions.firestore
     .document("chats/{chatId}/messages/{messageId}")
     .onCreate(async (snapshot, context) => {
-    var _a;
+    var _a, _b, _c, _d;
     const messageData = snapshot.data();
     const { chatId } = context.params;
     if (!messageData)
@@ -38,7 +36,24 @@ exports.sendNewMessageNotification = functions.firestore
     const recipientId = participants.find(id => id !== senderId);
     if (!recipientId)
         return;
-    // La fonction s'arrête ici : elle crée la notif dans Firestore, et c'est tout.
+    // --- DÉBUT DE LA MODIFICATION ---
+    try {
+        const userDoc = await db.collection('users').doc(recipientId).get();
+        const messagesEnabled = (_d = (_c = (_b = userDoc.data()) === null || _b === void 0 ? void 0 : _b.notificationSettings) === null || _c === void 0 ? void 0 : _c.messages) !== null && _d !== void 0 ? _d : true; // true par défaut
+        if (!messagesEnabled) {
+            console.log(`[Messages Notification] Recipient: ${recipientId} messages setting: false Notification skipped`);
+            return; // On quitte la fonction
+        }
+        else {
+            console.log(`[Messages Notification] Recipient: ${recipientId} messages setting: true Notification allowed`);
+        }
+    }
+    catch (error) {
+        console.error(`[Messages Notification] Erreur lors de la lecture des paramètres de ${recipientId}:`, error);
+        // En cas d'erreur de lecture, on continue par sécurité pour ne pas bloquer les notifs
+    }
+    // --- FIN DE LA MODIFICATION ---
+    // Le code existant continue ici, sans aucune modification
     try {
         await db.collection(`users/${recipientId}/notifications`).add({
             type: "message",
@@ -54,7 +69,6 @@ exports.sendNewMessageNotification = functions.firestore
         console.error("Erreur lors de la création de la notif dans Firestore:", error);
     }
 });
-// ÉTAPE 2: Nouvelle fonction universelle qui envoie un PUSH pour TOUTES les notifications.
 exports.onNotificationCreated = functions.firestore
     .document("users/{userId}/notifications/{notificationId}")
     .onCreate(async (snapshot, context) => {

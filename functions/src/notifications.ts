@@ -8,8 +8,6 @@ if (admin.apps.length === 0) {
 
 const db = admin.firestore();
 
-// ÉTAPE 1: Simplifier l'ancienne fonction. Elle ne fait plus qu'écrire dans la BDD.
-// La nouvelle fonction (plus bas) se chargera d'envoyer le push.
 export const sendNewMessageNotification = functions.firestore
   .document("chats/{chatId}/messages/{messageId}")
   .onCreate(async (snapshot, context) => {
@@ -37,7 +35,24 @@ export const sendNewMessageNotification = functions.firestore
     const recipientId = participants.find(id => id !== senderId);
     if (!recipientId) return;
 
-    // La fonction s'arrête ici : elle crée la notif dans Firestore, et c'est tout.
+    // --- DÉBUT DE LA MODIFICATION ---
+    try {
+      const userDoc = await db.collection('users').doc(recipientId).get();
+      const messagesEnabled = userDoc.data()?.notificationSettings?.messages ?? true; // true par défaut
+
+      if (!messagesEnabled) {
+        console.log(`[Messages Notification] Recipient: ${recipientId} messages setting: false Notification skipped`);
+        return; // On quitte la fonction
+      } else {
+        console.log(`[Messages Notification] Recipient: ${recipientId} messages setting: true Notification allowed`);
+      }
+    } catch (error) {
+      console.error(`[Messages Notification] Erreur lors de la lecture des paramètres de ${recipientId}:`, error);
+      // En cas d'erreur de lecture, on continue par sécurité pour ne pas bloquer les notifs
+    }
+    // --- FIN DE LA MODIFICATION ---
+
+    // Le code existant continue ici, sans aucune modification
     try {
         await db.collection(`users/${recipientId}/notifications`).add({
             type: "message",
@@ -53,7 +68,6 @@ export const sendNewMessageNotification = functions.firestore
     }
   });
 
-// ÉTAPE 2: Nouvelle fonction universelle qui envoie un PUSH pour TOUTES les notifications.
 export const onNotificationCreated = functions.firestore
     .document("users/{userId}/notifications/{notificationId}")
     .onCreate(async (snapshot, context) => {
