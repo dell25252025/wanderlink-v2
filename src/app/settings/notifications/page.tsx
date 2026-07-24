@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-// REPRODUCTION DE L'ARCHITECTURE DE LA PAGE CONFIDENTIALITÉ
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+// LA SOLUTION FINALE : setDoc avec { merge: true }
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
 import { Bell, Mail } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,14 +19,11 @@ export default function NotificationSettingsPage() {
   const { toast } = useToast();
 
   const [isLoading, setIsLoading] = useState(true);
-  // L'état local pour l'interrupteur "Nouveaux messages"
   const [messagesEnabled, setMessagesEnabled] = useState(true);
 
-  // États pour les maquettes des autres interrupteurs (inchangés)
   const [mockPush, setMockPush] = useState({ profileVisits: true, newMatches: true });
   const [mockEmail, setMockEmail] = useState({ newsAndUpdates: true, weeklyDigest: false });
 
-  // LECTURE DES DONNÉES : Reproduction de la méthode onSnapshot
   useEffect(() => {
     if (!currentUser?.uid) {
       setIsLoading(false);
@@ -37,7 +34,6 @@ export default function NotificationSettingsPage() {
     const unsubscribe = onSnapshot(userRef, (doc) => {
       if (doc.exists()) {
         const data = doc.data();
-        // Si notificationSettings.messages n'existe pas, la valeur par défaut est true
         setMessagesEnabled(data.notificationSettings?.messages ?? true);
       }
       setIsLoading(false);
@@ -46,26 +42,27 @@ export default function NotificationSettingsPage() {
     return () => unsubscribe();
   }, [currentUser]);
 
-  // ÉCRITURE DES DONNÉES : Reproduction de la méthode updateDoc
   const handleToggleMessages = async (checked: boolean) => {
     if (!currentUser?.uid) {
       toast({ title: 'Erreur', description: 'Utilisateur non authentifié.', variant: 'destructive' });
       return;
     }
 
-    // Mise à jour de l'état local pour une réactivité immédiate
     setMessagesEnabled(checked);
-
     const userRef = doc(db, 'users', currentUser.uid);
+
     try {
-      await updateDoc(userRef, {
-        'notificationSettings.messages': checked
-      });
+      // LA CORRECTION : Utiliser setDoc avec { merge: true } pour créer l'objet s'il n'existe pas
+      await setDoc(userRef, {
+        notificationSettings: {
+          messages: checked
+        }
+      }, { merge: true });
+
       toast({ title: 'Préférences mises à jour' });
     } catch (error) {
-      console.error("Erreur lors de la mise à jour des paramètres de notification:", error);
+      console.error("Erreur lors de la mise à jour des paramètres:", error);
       toast({ title: 'Erreur', description: 'Impossible de sauvegarder votre préférence.', variant: 'destructive' });
-      // En cas d'erreur, on revient à l'état précédent
       setMessagesEnabled(!checked);
     }
   };
@@ -93,7 +90,6 @@ export default function NotificationSettingsPage() {
                   onCheckedChange={handleToggleMessages} 
                 />
               </div>
-              {/* Les interrupteurs suivants restent des maquettes */}
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <Label htmlFor="push-visits" className="text-sm">Visites de profil</Label>
                 <Switch id="push-visits" checked={mockPush.profileVisits} onCheckedChange={(checked) => setMockPush(prev => ({...prev, profileVisits: checked}))} />
@@ -122,7 +118,6 @@ export default function NotificationSettingsPage() {
             </CardContent>
           </Card>
 
-          {/* LE BOUTON ENREGISTRER A ÉTÉ SUPPRIMÉ */}
         </div>
       </main>
     </div>
