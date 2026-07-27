@@ -743,7 +743,7 @@ export default function ProfileClientPage() {
 
   // Photo Visibility Logic
   const photoVisibility = profile?.privacy?.photoVisibility || 'all';
-  const canViewPhotos = isOwner || photoVisibility === 'all' || (photoVisibility === 'friends' && friendStatus === 'friends';
+  const canViewPhotos = isOwner || photoVisibility === 'all' || (photoVisibility === 'friends' && friendStatus === 'friends');
   const profilePictures = canViewPhotos && profile.profilePictures && profile.profilePictures.length > 0 ? profile.profilePictures : [];
   
   // Messaging Policy Logic
