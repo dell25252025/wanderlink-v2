@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { getUserProfile, addProfilePicture, removeProfilePicture, addFriend, removeFriend, signOutFromGoogle, blockUser } from '@/lib/firebase-actions';
-import { type DocumentData, addDoc, collection, serverTimestamp, query, where, getDocs, onSnapshot, updateDoc, Timestamp, orderBy, limit, doc, arrayUnion, deleteDoc } from 'firebase/firestore';
+import { type DocumentData, addDoc, collection, serverTimestamp, query, where, getDocs, onSnapshot, updateDoc, Timestamp, orderBy, limit, doc, arrayUnion, deleteDoc, getDoc } from 'firebase/firestore';
 import { Loader2, Plane, MapPin, Languages, Backpack, Cigarette, Wine, Calendar, Camera, Trash2, PlusCircle, LogOut, Edit, Ruler, Scale, ZoomIn, ZoomOut, ArrowLeft, ArrowRight, X, Sparkles, BriefcaseBusiness, Coins, Users, MoreVertical, ShieldAlert, Ban, Send, UserPlus, Heart, UserCheck, UserX, CheckCircle, ShieldCheck, History } from 'lucide-react';
 import Image from 'next/image';
 import { Badge } from '@/components/ui/badge';
@@ -536,7 +536,7 @@ export default function ProfileClientPage() {
   };
   
   const handleFriendAction = async (action: 'add' | 'remove' | 'accept' | 'decline' | 'cancel') => {
-    if (!currentUser || !profileId || isFriendActionLoading || currentUser.uid === profileId) return;
+    if (!currentUser || !profileId || !currentUserProfile || isFriendActionLoading || currentUser.uid === profileId) return;
     setIsFriendActionLoading(true);
 
     try {
@@ -570,14 +570,21 @@ export default function ProfileClientPage() {
                 setFriendStatus('pending_sent');
                 setPendingRequestId(newRequestRef.id);
 
-                await addDoc(collection(db, `users/${profileId}/notifications`), {
-                    type: "friend_request",
-                    senderId: currentUser.uid,
-                    senderName: currentUser.displayName || "Un utilisateur",
-                    text: "vous a envoyé une demande d’ami 👥",
-                    createdAt: serverTimestamp(),
-                    read: false,
-                });
+                // LECTURE DU PARAMETRE AVANT ENVOI NOTIFICATION
+                const userDoc = await getDoc(doc(db, 'users', profileId));
+                if (userDoc.exists()) {
+                    const recipientSettings = userDoc.data().notificationSettings;
+                    if (recipientSettings?.friendRequests !== false) { // Ne pas envoyer si c'est explicitement false
+                        await addDoc(collection(db, `users/${profileId}/notifications`), {
+                            type: "friend_request",
+                            senderId: currentUser.uid,
+                            senderName: currentUserProfile.firstName || "Un utilisateur",
+                            text: "vous a envoyé une demande d’ami 👥",
+                            createdAt: serverTimestamp(),
+                            read: false,
+                        });
+                    }
+                }
 
                 toast({ title: 'Demande d\'ami envoyée !' });
                 break;
@@ -736,7 +743,7 @@ export default function ProfileClientPage() {
 
   // Photo Visibility Logic
   const photoVisibility = profile?.privacy?.photoVisibility || 'all';
-  const canViewPhotos = isOwner || photoVisibility === 'all' || (photoVisibility === 'friends' && friendStatus === 'friends');
+  const canViewPhotos = isOwner || photoVisibility === 'all' || (photoVisibility === 'friends' && friendStatus === 'friends';
   const profilePictures = canViewPhotos && profile.profilePictures && profile.profilePictures.length > 0 ? profile.profilePictures : [];
   
   // Messaging Policy Logic
