@@ -570,11 +570,10 @@ export default function ProfileClientPage() {
                 setFriendStatus('pending_sent');
                 setPendingRequestId(newRequestRef.id);
 
-                // LECTURE DU PARAMETRE AVANT ENVOI NOTIFICATION
-                const userDoc = await getDoc(doc(db, 'users', profileId));
-                if (userDoc.exists()) {
-                    const recipientSettings = userDoc.data().notificationSettings;
-                    if (recipientSettings?.friendRequests !== false) { // Ne pas envoyer si c'est explicitement false
+                const recipientDoc = await getDoc(doc(db, 'users', profileId));
+                if (recipientDoc.exists()) {
+                    const recipientSettings = recipientDoc.data().notificationSettings;
+                    if (recipientSettings?.friendRequests !== false) {
                         await addDoc(collection(db, `users/${profileId}/notifications`), {
                             type: "friend_request",
                             senderId: currentUser.uid,
@@ -594,7 +593,6 @@ export default function ProfileClientPage() {
                     return;
                 }
                 await deleteDoc(doc(db, "friend_requests", pendingRequestId));
-                // Le listener onSnapshot s'occupera de mettre à jour le statut.
                 toast({ title: "Demande d'ami annulée" });
                 break;
             case 'accept':
@@ -617,14 +615,22 @@ export default function ProfileClientPage() {
                 if (action === 'accept') {
                     await addFriend(currentUser.uid, profileId);
                     await updateDoc(requestDoc.ref, { status: 'accepted' });
-                     await addDoc(collection(db, `users/${profileId}/notifications`), {
-                        type: "friend_accept",
-                        senderId: currentUser.uid,
-                        senderName: currentUser.displayName || "Un utilisateur",
-                        text: "a accepté votre demande d’ami.",
-                        createdAt: serverTimestamp(),
-                        read: false,
-                    });
+
+                    const senderDoc = await getDoc(doc(db, 'users', profileId));
+                    if (senderDoc.exists()) {
+                        const senderSettings = senderDoc.data().notificationSettings;
+                        if (senderSettings?.friendAccepts !== false) {
+                            await addDoc(collection(db, `users/${profileId}/notifications`), {
+                                type: "friend_accept",
+                                senderId: currentUser.uid,
+                                senderName: currentUserProfile.firstName || "Un utilisateur",
+                                text: "a accepté votre demande d’ami.",
+                                createdAt: serverTimestamp(),
+                                read: false,
+                            });
+                        }
+                    }
+
                     setFriendStatus('friends');
                     setPendingRequestId(null);
                     toast({ title: 'Ami ajouté !'});
