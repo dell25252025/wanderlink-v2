@@ -18,10 +18,10 @@ export default function NotificationSettingsPage() {
   const { toast } = useToast();
 
   const [isLoading, setIsLoading] = useState(true);
-  // État pour les messages (existant et fonctionnel)
   const [messagesEnabled, setMessagesEnabled] = useState(true);
-  // NOUVEAU: État pour les visites de profil
   const [profileVisitsEnabled, setProfileVisitsEnabled] = useState(true);
+  // ÉTAT POUR LES DEMANDES D'AMI
+  const [friendRequestsEnabled, setFriendRequestsEnabled] = useState(true);
 
   // Mocks pour les autres interrupteurs, qui seront remplacés plus tard
   const [mockPush, setMockPush] = useState({ newMatches: true });
@@ -37,10 +37,10 @@ export default function NotificationSettingsPage() {
     const unsubscribe = onSnapshot(userRef, (doc) => {
       if (doc.exists()) {
         const data = doc.data();
-        // Lecture pour les messages (existant)
         setMessagesEnabled(data.notificationSettings?.messages ?? true);
-        // NOUVEAU: Lecture pour les visites de profil (valeur par défaut : true)
         setProfileVisitsEnabled(data.notificationSettings?.profileVisits ?? true);
+        // LECTURE POUR LES DEMANDES D'AMI
+        setFriendRequestsEnabled(data.notificationSettings?.friendRequests ?? true);
       }
       setIsLoading(false);
     });
@@ -48,7 +48,6 @@ export default function NotificationSettingsPage() {
     return () => unsubscribe();
   }, [currentUser]);
 
-  // Fonction pour les messages (existante et fonctionnelle)
   const handleToggleMessages = async (checked: boolean) => {
     if (!currentUser?.uid) return;
     setMessagesEnabled(checked);
@@ -63,7 +62,6 @@ export default function NotificationSettingsPage() {
     }
   };
 
-  // NOUVEAU: Fonction pour les visites de profil
   const handleToggleProfileVisits = async (checked: boolean) => {
     if (!currentUser?.uid) return;
     setProfileVisitsEnabled(checked);
@@ -75,6 +73,21 @@ export default function NotificationSettingsPage() {
       console.error("Erreur:", error);
       toast({ title: 'Erreur', variant: 'destructive' });
       setProfileVisitsEnabled(!checked);
+    }
+  };
+
+  // FONCTION POUR LES DEMANDES D'AMI
+  const handleToggleFriendRequests = async (checked: boolean) => {
+    if (!currentUser?.uid) return;
+    setFriendRequestsEnabled(checked);
+    const userRef = doc(db, 'users', currentUser.uid);
+    try {
+      await setDoc(userRef, { notificationSettings: { friendRequests: checked } }, { merge: true });
+      toast({ title: 'Préférences mises à jour' });
+    } catch (error) {
+      console.error("Erreur:", error);
+      toast({ title: 'Erreur', variant: 'destructive' });
+      setFriendRequestsEnabled(!checked);
     }
   };
 
@@ -101,13 +114,21 @@ export default function NotificationSettingsPage() {
                   onCheckedChange={handleToggleMessages} 
                 />
               </div>
-              {/* SWITCH MIS À JOUR */}
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <Label htmlFor="push-visits" className="text-sm">Visites de profil</Label>
                 <Switch 
                   id="push-visits" 
                   checked={profileVisitsEnabled}
                   onCheckedChange={handleToggleProfileVisits}
+                />
+              </div>
+              {/* INTERRUPTEUR POUR LES DEMANDES D'AMI */}
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <Label htmlFor="push-friend-requests" className="text-sm">Demandes d'ami</Label>
+                <Switch 
+                  id="push-friend-requests" 
+                  checked={friendRequestsEnabled}
+                  onCheckedChange={handleToggleFriendRequests}
                 />
               </div>
               <div className="flex items-center justify-between rounded-lg border p-4">
