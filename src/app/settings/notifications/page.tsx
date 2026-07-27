@@ -20,10 +20,11 @@ export default function NotificationSettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [messagesEnabled, setMessagesEnabled] = useState(true);
   const [profileVisitsEnabled, setProfileVisitsEnabled] = useState(true);
-  // ÉTAT POUR LES DEMANDES D'AMI
   const [friendRequestsEnabled, setFriendRequestsEnabled] = useState(true);
+  // NOUVEAU: État pour les acceptations d'ami
+  const [friendAcceptsEnabled, setFriendAcceptsEnabled] = useState(true);
 
-  // Mocks pour les autres interrupteurs, qui seront remplacés plus tard
+  // Mocks
   const [mockPush, setMockPush] = useState({ newMatches: true });
   const [mockEmail, setMockEmail] = useState({ newsAndUpdates: true, weeklyDigest: false });
 
@@ -39,8 +40,9 @@ export default function NotificationSettingsPage() {
         const data = doc.data();
         setMessagesEnabled(data.notificationSettings?.messages ?? true);
         setProfileVisitsEnabled(data.notificationSettings?.profileVisits ?? true);
-        // LECTURE POUR LES DEMANDES D'AMI
         setFriendRequestsEnabled(data.notificationSettings?.friendRequests ?? true);
+        // NOUVEAU: Lecture pour les acceptations d'ami
+        setFriendAcceptsEnabled(data.notificationSettings?.friendAccepts ?? true);
       }
       setIsLoading(false);
     });
@@ -48,48 +50,28 @@ export default function NotificationSettingsPage() {
     return () => unsubscribe();
   }, [currentUser]);
 
-  const handleToggleMessages = async (checked: boolean) => {
-    if (!currentUser?.uid) return;
-    setMessagesEnabled(checked);
-    const userRef = doc(db, 'users', currentUser.uid);
-    try {
-      await setDoc(userRef, { notificationSettings: { messages: checked } }, { merge: true });
-      toast({ title: 'Préférences mises à jour' });
-    } catch (error) {
-      console.error("Erreur:", error);
-      toast({ title: 'Erreur', variant: 'destructive' });
-      setMessagesEnabled(!checked);
-    }
+  const createToggleHandler = (setter: React.Dispatch<React.SetStateAction<boolean>>, settingName: string) => {
+    return async (checked: boolean) => {
+      if (!currentUser?.uid) return;
+      setter(checked);
+      const userRef = doc(db, 'users', currentUser.uid);
+      try {
+        await setDoc(userRef, { notificationSettings: { [settingName]: checked } }, { merge: true });
+        toast({ title: 'Préférences mises à jour' });
+      } catch (error) {
+        console.error(`Erreur pour ${settingName}:`, error);
+        toast({ title: 'Erreur', variant: 'destructive' });
+        setter(!checked);
+      }
+    };
   };
 
-  const handleToggleProfileVisits = async (checked: boolean) => {
-    if (!currentUser?.uid) return;
-    setProfileVisitsEnabled(checked);
-    const userRef = doc(db, 'users', currentUser.uid);
-    try {
-      await setDoc(userRef, { notificationSettings: { profileVisits: checked } }, { merge: true });
-      toast({ title: 'Préférences mises à jour' });
-    } catch (error) {
-      console.error("Erreur:", error);
-      toast({ title: 'Erreur', variant: 'destructive' });
-      setProfileVisitsEnabled(!checked);
-    }
-  };
+  const handleToggleMessages = createToggleHandler(setMessagesEnabled, 'messages');
+  const handleToggleProfileVisits = createToggleHandler(setProfileVisitsEnabled, 'profileVisits');
+  const handleToggleFriendRequests = createToggleHandler(setFriendRequestsEnabled, 'friendRequests');
+  // NOUVEAU: Handler pour les acceptations d'ami
+  const handleToggleFriendAccepts = createToggleHandler(setFriendAcceptsEnabled, 'friendAccepts');
 
-  // FONCTION POUR LES DEMANDES D'AMI
-  const handleToggleFriendRequests = async (checked: boolean) => {
-    if (!currentUser?.uid) return;
-    setFriendRequestsEnabled(checked);
-    const userRef = doc(db, 'users', currentUser.uid);
-    try {
-      await setDoc(userRef, { notificationSettings: { friendRequests: checked } }, { merge: true });
-      toast({ title: 'Préférences mises à jour' });
-    } catch (error) {
-      console.error("Erreur:", error);
-      toast({ title: 'Erreur', variant: 'destructive' });
-      setFriendRequestsEnabled(!checked);
-    }
-  };
 
   if (isLoading) {
     return <NotificationSettingsSkeleton />;
@@ -122,13 +104,21 @@ export default function NotificationSettingsPage() {
                   onCheckedChange={handleToggleProfileVisits}
                 />
               </div>
-              {/* INTERRUPTEUR POUR LES DEMANDES D'AMI */}
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <Label htmlFor="push-friend-requests" className="text-sm">Demandes d'ami</Label>
                 <Switch 
                   id="push-friend-requests" 
                   checked={friendRequestsEnabled}
                   onCheckedChange={handleToggleFriendRequests}
+                />
+              </div>
+               {/* NOUVEAU: Interrupteur pour les acceptations d'ami */}
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <Label htmlFor="push-friend-accepts" className="text-sm">Acceptations d'ami</Label>
+                <Switch 
+                  id="push-friend-accepts" 
+                  checked={friendAcceptsEnabled}
+                  onCheckedChange={handleToggleFriendAccepts}
                 />
               </div>
               <div className="flex items-center justify-between rounded-lg border p-4">
