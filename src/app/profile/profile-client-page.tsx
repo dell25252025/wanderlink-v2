@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
@@ -79,28 +80,37 @@ const PhotoViewer = ({ images, startIndex, onClose, profile, currentUser }: { im
     };
     
     const handleLike = async () => {
+        console.log('[LIKE DEBUG] handleLike START', { newLikedState: !isLiked, uid: currentUser?.uid, profileId: profile?.id, profileObj: profile, currentUserObj: currentUser });
         const newLikedState = !isLiked;
         setIsLiked(newLikedState);
         toast({
             title: newLikedState ? "Photo aimée !" : "J'aime retiré",
         });
 
+        console.log('[LIKE DEBUG] BEFORE NEW LIKED STATE', { newLikedState });
         if (newLikedState) {
+            console.log('[LIKE DEBUG] BEFORE GUARD', { hasCurrentUser: !!currentUser, hasProfile: !!profile, isOwner: currentUser?.uid === profile?.id });
             if (!currentUser || !profile || currentUser.uid === profile.id) {
                 return;
             }
+            console.log('[LIKE DEBUG] PASSED GUARD');
 
+            console.log('[LIKE DEBUG] BEFORE TRY / ADDDOC');
             try {
-                await addDoc(collection(db, `users/${profile.id}/notifications`), {
+                const notificationData = {
                     type: "like",
                     senderId: currentUser.uid,
                     senderName: currentUser.displayName || "Un utilisateur",
-                    photoUrl: images[currentIndex], 
+                    photoUrl: images[currentIndex],
                     text: "a aimé votre photo ❤️",
                     createdAt: serverTimestamp(),
                     read: false,
-                });
+                };
+                console.log('[LIKE DEBUG] ABOUT TO CALL ADDDOC', { path: `users/${profile.id}/notifications`, data: notificationData });
+                const docRef = await addDoc(collection(db, `users/${profile.id}/notifications`), notificationData);
+                console.log('[LIKE DEBUG] ADDDOC SUCCESS', { docId: docRef.id });
             } catch (error) {
+                console.error("[LIKE DEBUG] ADDDOC ERROR", error);
                 console.error("Error creating like notification:", error);
                 toast({
                     variant: "destructive",
