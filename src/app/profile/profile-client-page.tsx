@@ -331,7 +331,7 @@ export default function ProfileClientPage() {
       const docRef = doc(db, "users", profileId as string);
       const unsubscribe = onSnapshot(docRef, (docSnap) => {
         if (docSnap.exists()) {
-          setProfile(docSnap.data());
+          setProfile({ id: docSnap.id, ...docSnap.data() });
         } else {
           console.error("No such document!");
           toast({
