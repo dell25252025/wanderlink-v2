@@ -6,7 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
-import { Bell, Mail } from 'lucide-react';
+import { Bell, Mail, Heart } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -21,8 +21,8 @@ export default function NotificationSettingsPage() {
   const [messagesEnabled, setMessagesEnabled] = useState(true);
   const [profileVisitsEnabled, setProfileVisitsEnabled] = useState(true);
   const [friendRequestsEnabled, setFriendRequestsEnabled] = useState(true);
-  // NOUVEAU: État pour les acceptations d'ami
   const [friendAcceptsEnabled, setFriendAcceptsEnabled] = useState(true);
+  const [photoLikesEnabled, setPhotoLikesEnabled] = useState(true);
 
   // Mocks
   const [mockPush, setMockPush] = useState({ newMatches: true });
@@ -41,8 +41,8 @@ export default function NotificationSettingsPage() {
         setMessagesEnabled(data.notificationSettings?.messages ?? true);
         setProfileVisitsEnabled(data.notificationSettings?.profileVisits ?? true);
         setFriendRequestsEnabled(data.notificationSettings?.friendRequests ?? true);
-        // NOUVEAU: Lecture pour les acceptations d'ami
         setFriendAcceptsEnabled(data.notificationSettings?.friendAccepts ?? true);
+        setPhotoLikesEnabled(data.notificationSettings?.photoLikes ?? true);
       }
       setIsLoading(false);
     });
@@ -69,8 +69,8 @@ export default function NotificationSettingsPage() {
   const handleToggleMessages = createToggleHandler(setMessagesEnabled, 'messages');
   const handleToggleProfileVisits = createToggleHandler(setProfileVisitsEnabled, 'profileVisits');
   const handleToggleFriendRequests = createToggleHandler(setFriendRequestsEnabled, 'friendRequests');
-  // NOUVEAU: Handler pour les acceptations d'ami
   const handleToggleFriendAccepts = createToggleHandler(setFriendAcceptsEnabled, 'friendAccepts');
+  const handleTogglePhotoLikes = createToggleHandler(setPhotoLikesEnabled, 'photoLikes');
 
 
   if (isLoading) {
@@ -112,7 +112,6 @@ export default function NotificationSettingsPage() {
                   onCheckedChange={handleToggleFriendRequests}
                 />
               </div>
-               {/* NOUVEAU: Interrupteur pour les acceptations d'ami */}
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <Label htmlFor="push-friend-accepts" className="text-sm">Acceptations d'ami</Label>
                 <Switch 
@@ -122,8 +121,14 @@ export default function NotificationSettingsPage() {
                 />
               </div>
               <div className="flex items-center justify-between rounded-lg border p-4">
-                <Label htmlFor="push-matches" className="text-sm">Nouveaux matches</Label>
-                <Switch id="push-matches" checked={mockPush.newMatches} onCheckedChange={(checked) => setMockPush(prev => ({...prev, newMatches: checked}))} />
+                <Label htmlFor="push-photo-likes" className="flex items-center text-sm">
+                  <Heart className="mr-2 h-4 w-4 text-red-500" /> J'aime sur les photos
+                </Label>
+                <Switch 
+                  id="push-photo-likes" 
+                  checked={photoLikesEnabled}
+                  onCheckedChange={handleTogglePhotoLikes}
+                />
               </div>
             </CardContent>
           </Card>
@@ -163,6 +168,8 @@ function NotificationSettingsSkeleton() {
                 <Skeleton className="h-4 w-64 mt-1" />
             </CardHeader>
             <CardContent className="space-y-3 p-4 pt-0">
+              <Skeleton className="h-[68px] w-full rounded-lg" />
+              <Skeleton className="h-[68px] w-full rounded-lg" />
               <Skeleton className="h-[68px] w-full rounded-lg" />
               <Skeleton className="h-[68px] w-full rounded-lg" />
               <Skeleton className="h-[68px] w-full rounded-lg" />

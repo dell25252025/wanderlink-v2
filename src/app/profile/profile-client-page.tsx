@@ -47,7 +47,7 @@ const MAX_PHOTOS = 6;
 
 type FriendStatus = 'add' | 'pending_sent' | 'pending_received' | 'friends';
 
-const PhotoViewer = ({ images, startIndex, onClose, profile, currentUser }: { images: string[], startIndex: number, onClose: () => void, profile: DocumentData | null, currentUser: User | null }) => {
+const PhotoViewer = ({ images, startIndex, onClose, profile, currentUser, currentUserProfile }: { images: string[], startIndex: number, onClose: () => void, profile: DocumentData | null, currentUser: User | null, currentUserProfile: DocumentData | null }) => {
     const [currentIndex, setCurrentIndex] = useState(startIndex);
     const [scale, setScale] = useState(1);
     const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -86,20 +86,26 @@ const PhotoViewer = ({ images, startIndex, onClose, profile, currentUser }: { im
         });
 
         if (newLikedState) {
-            if (!currentUser || !profile || currentUser.uid === profile.id) {
+            if (!currentUser || !profile || !currentUserProfile || currentUser.uid === profile.id) {
                 return;
             }
 
             try {
-                await addDoc(collection(db, `users/${profile.id}/notifications`), {
-                    type: "like",
-                    senderId: currentUser.uid,
-                    senderName: currentUser.displayName || "Un utilisateur",
-                    photoUrl: images[currentIndex], 
-                    text: "a aimé votre photo ❤️",
-                    createdAt: serverTimestamp(),
-                    read: false,
-                });
+                const recipientDoc = await getDoc(doc(db, 'users', profile.id));
+                if (recipientDoc.exists()) {
+                    const recipientSettings = recipientDoc.data().notificationSettings;
+                    if (recipientSettings?.photoLikes !== false) {
+                        await addDoc(collection(db, `users/${profile.id}/notifications`), {
+                            type: "like",
+                            senderId: currentUser.uid,
+                            senderName: currentUserProfile.firstName || "Un utilisateur",
+                            photoUrl: images[currentIndex], 
+                            text: "a aimé votre photo ❤️",
+                            createdAt: serverTimestamp(),
+                            read: false,
+                        });
+                    }
+                }
             } catch (error) {
                 console.error("Error creating like notification:", error);
                 toast({
@@ -868,6 +874,7 @@ export default function ProfileClientPage() {
                                     onClose={() => setPhotoViewerIndex(null)}
                                     profile={profile}
                                     currentUser={currentUser}
+                                    currentUserProfile={currentUserProfile}
                                 />
                             )}
                         </Dialog>
