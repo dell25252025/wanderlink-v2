@@ -11,6 +11,7 @@ import { agoraConfig } from '@/lib/agora-config';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { getUserProfile, sendCallSystemMessage } from '@/lib/firebase-actions';
+import CallKit from '@/app/callkit'; // Import correct depuis le fichier local
 
 import { Loader2 } from 'lucide-react';
 import CallControls from '@/components/CallControls';
@@ -109,6 +110,12 @@ export default function CallPage() {
                     read: false
                 })
             ]);
+            
+            try {
+                CallKit.dismissCall();
+            } catch (error) {
+                console.error('[CallKit.dismissCall Error]', error);
+            }
         } catch (error) {
             console.error('[Missed Call Actions Error]', error);
         }

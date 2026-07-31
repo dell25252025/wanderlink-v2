@@ -42,12 +42,12 @@ public class CallKitPlugin extends Plugin {
     @PluginMethod
     public void dismissCall(PluginCall call) {
         Log.d(TAG, "dismissCall called");
-
-        Intent intent = new Intent(getContext(), CallForegroundService.class);
-        intent.setAction(CallForegroundService.ACTION_DISMISS_CALL);
-
-        getContext().startService(intent);
-
+ 
+        // Envoyer un broadcast qui sera intercepté par CallNotificationActionReceiver
+        Intent broadcastIntent = new Intent(getContext(), CallNotificationActionReceiver.class);
+        broadcastIntent.setAction(CallForegroundService.ACTION_DISMISS_CALL);
+        getContext().sendBroadcast(broadcastIntent);
+ 
         call.resolve();
     }
 }
