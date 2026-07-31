@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, setDoc } from 'firebase/firestore'; // Ajout de updateDoc
 
 import { Bell, Mail, Heart, Phone } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,7 +19,7 @@ export default function NotificationSettingsPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [messagesEnabled, setMessagesEnabled] = useState(true);
-  const [videoCallsEnabled, setVideoCallsEnabled] = useState(true); // Ajout
+  const [videoCallsEnabled, setVideoCallsEnabled] = useState(true);
   const [profileVisitsEnabled, setProfileVisitsEnabled] = useState(true);
   const [friendRequestsEnabled, setFriendRequestsEnabled] = useState(true);
   const [friendAcceptsEnabled, setFriendAcceptsEnabled] = useState(true);
@@ -40,7 +40,7 @@ export default function NotificationSettingsPage() {
         const data = doc.data();
         const settings = data.notificationSettings || {};
         setMessagesEnabled(settings.messages ?? true);
-        setVideoCallsEnabled(settings.videoCalls ?? true); // Ajout
+        setVideoCallsEnabled(settings.videoCalls ?? true);
         setProfileVisitsEnabled(settings.profileVisits ?? true);
         setFriendRequestsEnabled(settings.friendRequests ?? true);
         setFriendAcceptsEnabled(settings.friendAccepts ?? true);
@@ -58,18 +58,21 @@ export default function NotificationSettingsPage() {
       setter(checked);
       const userRef = doc(db, 'users', currentUser.uid);
       try {
-        await setDoc(userRef, { notificationSettings: { [settingName]: checked } }, { merge: true });
+        // Correction: Utilisation de updateDoc avec la notation par points pour ne mettre à jour que le champ spécifique.
+        await updateDoc(userRef, {
+          [`notificationSettings.${settingName}`]: checked
+        });
         toast({ title: 'Préférences mises à jour' });
       } catch (error) {
         console.error(`Erreur pour ${settingName}:`, error);
-        toast({ title: 'Erreur', variant: 'destructive' });
-        setter(!checked);
+        toast({ title: 'Erreur', description: 'La modification n\'a pas pu être enregistrée.', variant: 'destructive' });
+        setter(!checked); // Rétablir en cas d'erreur
       }
     };
   };
 
   const handleToggleMessages = createToggleHandler(setMessagesEnabled, 'messages');
-  const handleToggleVideoCalls = createToggleHandler(setVideoCallsEnabled, 'videoCalls'); // Ajout
+  const handleToggleVideoCalls = createToggleHandler(setVideoCallsEnabled, 'videoCalls');
   const handleToggleProfileVisits = createToggleHandler(setProfileVisitsEnabled, 'profileVisits');
   const handleToggleFriendRequests = createToggleHandler(setFriendRequestsEnabled, 'friendRequests');
   const handleToggleFriendAccepts = createToggleHandler(setFriendAcceptsEnabled, 'friendAccepts');
@@ -192,7 +195,7 @@ function NotificationSettingsSkeleton() {
              <CardHeader className="p-4">
                 <Skeleton className="h-6 w-48" />
                 <Skeleton className="h-4 w-64 mt-1" />
-            </CardHeader>
+            </KardHeader>
             <CardContent className="space-y-3 p-4 pt-0">
               <Skeleton className="h-[68px] w-full rounded-lg" />
               <Skeleton className="h-[68px] w-full rounded-lg" />
