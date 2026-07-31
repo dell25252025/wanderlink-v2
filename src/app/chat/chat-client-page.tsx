@@ -343,7 +343,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     if (status === 'denied') {
       toast({
         title: 'Permission requise',
-        description: "Veuillez autoriser l'accès à la caméra dans les réglages du téléphone.",
+        description: "Veuillez autoriser l\'accès à la caméra dans les réglages du téléphone.",
       });
       return false;
     }
@@ -370,7 +370,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       }
       toast({
         title: 'Permission requise',
-        description: "L'accès au microphone a été refusé.",
+        description: "L\'accès au microphone a été refusé.",
         variant: 'destructive'
       });
       return false;
@@ -378,7 +378,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       console.error('Error requesting microphone permission:', error);
       toast({
         title: 'Erreur de permission',
-        description: "Impossible de demander l'accès au microphone.",
+        description: "Impossible de demander l\'accès au microphone.",
         variant: 'destructive'
       });
       return false;
@@ -407,7 +407,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   
         toast({
           title: 'Permission requise',
-          description: "L'accès aux photos a été refusé.",
+          description: "L\'accès aux photos a été refusé.",
           variant: 'destructive'
         });
         return false;
@@ -415,7 +415,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         console.error('Error requesting storage permission:', error);
         toast({
             title: 'Erreur de permission',
-            description: "Impossible de demander l'accès aux photos.",
+            description: "Impossible de demander l\'accès aux photos.",
             variant: 'destructive'
         });
         return false;
@@ -515,7 +515,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
       await setDoc(chatDocRef, { participants: [currentUser.uid, otherUserId], lastMessage: { id: newDocRef.id, text: lastMessageText, senderId: currentUser.uid, timestamp: serverTimestamp(), read: false } }, { merge: true });
     } catch (error) {
-      console.error("Erreur lors de l'envoi du message:", error);
+      console.error("Erreur lors de l\'envoi du message:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
       if (messageData.type !== 'video_call' && messageData.type !== 'missed_call') {
           setNewMessage(text);
@@ -560,7 +560,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         }
     } catch (error) {
         console.error("Error reacting to message: ", error);
-        toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible d'ajouter une réaction.' });
+        toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible d\'ajouter une réaction.' });
     }
     setShowReactionPopoverFor(null);
   }, [currentUser, otherUser, toast]);
