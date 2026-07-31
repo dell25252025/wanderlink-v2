@@ -6,7 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 
-import { Bell, Mail, Heart } from 'lucide-react';
+import { Bell, Mail, Heart, Phone } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -19,13 +19,13 @@ export default function NotificationSettingsPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [messagesEnabled, setMessagesEnabled] = useState(true);
+  const [videoCallsEnabled, setVideoCallsEnabled] = useState(true); // Ajout
   const [profileVisitsEnabled, setProfileVisitsEnabled] = useState(true);
   const [friendRequestsEnabled, setFriendRequestsEnabled] = useState(true);
   const [friendAcceptsEnabled, setFriendAcceptsEnabled] = useState(true);
   const [photoLikesEnabled, setPhotoLikesEnabled] = useState(true);
 
   // Mocks
-  const [mockPush, setMockPush] = useState({ newMatches: true });
   const [mockEmail, setMockEmail] = useState({ newsAndUpdates: true, weeklyDigest: false });
 
   useEffect(() => {
@@ -38,11 +38,13 @@ export default function NotificationSettingsPage() {
     const unsubscribe = onSnapshot(userRef, (doc) => {
       if (doc.exists()) {
         const data = doc.data();
-        setMessagesEnabled(data.notificationSettings?.messages ?? true);
-        setProfileVisitsEnabled(data.notificationSettings?.profileVisits ?? true);
-        setFriendRequestsEnabled(data.notificationSettings?.friendRequests ?? true);
-        setFriendAcceptsEnabled(data.notificationSettings?.friendAccepts ?? true);
-        setPhotoLikesEnabled(data.notificationSettings?.photoLikes ?? true);
+        const settings = data.notificationSettings || {};
+        setMessagesEnabled(settings.messages ?? true);
+        setVideoCallsEnabled(settings.videoCalls ?? true); // Ajout
+        setProfileVisitsEnabled(settings.profileVisits ?? true);
+        setFriendRequestsEnabled(settings.friendRequests ?? true);
+        setFriendAcceptsEnabled(settings.friendAccepts ?? true);
+        setPhotoLikesEnabled(settings.photoLikes ?? true);
       }
       setIsLoading(false);
     });
@@ -67,6 +69,7 @@ export default function NotificationSettingsPage() {
   };
 
   const handleToggleMessages = createToggleHandler(setMessagesEnabled, 'messages');
+  const handleToggleVideoCalls = createToggleHandler(setVideoCallsEnabled, 'videoCalls'); // Ajout
   const handleToggleProfileVisits = createToggleHandler(setProfileVisitsEnabled, 'profileVisits');
   const handleToggleFriendRequests = createToggleHandler(setFriendRequestsEnabled, 'friendRequests');
   const handleToggleFriendAccepts = createToggleHandler(setFriendAcceptsEnabled, 'friendAccepts');
@@ -94,6 +97,16 @@ export default function NotificationSettingsPage() {
                   id="push-messages" 
                   checked={messagesEnabled}
                   onCheckedChange={handleToggleMessages} 
+                />
+              </div>
+               <div className="flex items-center justify-between rounded-lg border p-4">
+                <Label htmlFor="push-video-calls" className="flex items-center text-sm">
+                    <Phone className="mr-2 h-4 w-4" /> Appels vidéo entrants
+                </Label>
+                <Switch 
+                  id="push-video-calls" 
+                  checked={videoCallsEnabled}
+                  onCheckedChange={handleToggleVideoCalls}
                 />
               </div>
               <div className="flex items-center justify-between rounded-lg border p-4">

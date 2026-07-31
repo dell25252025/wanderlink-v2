@@ -5,7 +5,7 @@ import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
 import { db } from '@/lib/firebase';
 
-import { Eye, MessageSquare, UserPlus, Image } from 'lucide-react';
+import { Eye, MessageSquare, UserPlus, Image, Phone } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -18,6 +18,7 @@ export default function PrivacySettingsPage() {
   const [photoVisibility, setPhotoVisibility] = useState('all');
   const [messagingPolicy, setMessagingPolicy] = useState('all');
   const [friendRequestPolicy, setFriendRequestPolicy] = useState('all');
+  const [videoCallPolicy, setVideoCallPolicy] = useState('all'); // Ajout
 
   useEffect(() => {
     if (!currentUser?.uid) return;
@@ -28,17 +29,11 @@ export default function PrivacySettingsPage() {
         const userData = doc.data();
         const privacySettings = userData.privacy || {};
 
-        // Online Status
         setShowOnlineStatus(userData.showOnlineStatus !== false);
-
-        // Photo Visibility
         setPhotoVisibility(privacySettings.photoVisibility || 'all');
-
-        // Messaging Policy
         setMessagingPolicy(privacySettings.messagingPolicy || 'all');
-        
-        // Friend Request Policy
         setFriendRequestPolicy(privacySettings.friendRequestPolicy || 'all');
+        setVideoCallPolicy(privacySettings.videoCalls || 'all'); // Ajout
       }
     });
 
@@ -58,49 +53,32 @@ export default function PrivacySettingsPage() {
     }
   };
 
-  const handlePhotoVisibilityChange = async (value: string) => {
+  const handlePrivacyChange = async (key: string, value: string) => {
     if (!currentUser?.uid) return;
     const userRef = doc(db, 'users', currentUser.uid);
     try {
-        setPhotoVisibility(value); // Optimistic UI update
-        await updateDoc(userRef, {
-            'privacy.photoVisibility': value
-        });
+      await updateDoc(userRef, { [`privacy.${key}`]: value });
     } catch (error) {
-        console.error("Error updating photo visibility:", error);
-    }
-  };
-  
-  const handleMessagingPolicyChange = async (value: string) => {
-    console.log('[Privacy Page] handleMessagingPolicyChange triggered with value:', value);
-    if (!currentUser?.uid) {
-        console.log('[Privacy Page] User not found, aborting update.');
-        return;
-    }
-    const userRef = doc(db, 'users', currentUser.uid);
-    try {
-        setMessagingPolicy(value);
-        console.log('[Privacy Page] Attempting to update Firestore...');
-        await updateDoc(userRef, {
-            'privacy.messagingPolicy': value
-        });
-        console.log('[Privacy Page] Firestore update successful!');
-    } catch (error) {
-        console.error("[Privacy Page] Error updating messaging policy:", error);
+      console.error(`Error updating ${key}:`, error);
     }
   };
 
-  const handleFriendRequestPolicyChange = async (value: string) => {
-    if (!currentUser?.uid) return;
-    const userRef = doc(db, 'users', currentUser.uid);
-    try {
-        setFriendRequestPolicy(value); // Optimistic UI update
-        await updateDoc(userRef, {
-            'privacy.friendRequestPolicy': value
-        });
-    } catch (error) {
-        console.error("Error updating friend request policy:", error);
-    }
+  // Fonctions spécifiques pour chaque réglage
+  const handlePhotoVisibilityChange = (value: string) => {
+    setPhotoVisibility(value);
+    handlePrivacyChange('photoVisibility', value);
+  };
+  const handleMessagingPolicyChange = (value: string) => {
+    setMessagingPolicy(value);
+    handlePrivacyChange('messagingPolicy', value);
+  };
+  const handleFriendRequestPolicyChange = (value: string) => {
+    setFriendRequestPolicy(value);
+    handlePrivacyChange('friendRequestPolicy', value);
+  };
+  const handleVideoCallPolicyChange = (value: string) => {
+    setVideoCallPolicy(value);
+    handlePrivacyChange('videoCalls', value);
   };
 
   return (
@@ -160,6 +138,28 @@ export default function PrivacySettingsPage() {
                            <div className="flex items-center space-x-3">
                                <RadioGroupItem value="none" id="m-none" />
                                <Label htmlFor="m-none" className="text-sm font-normal">Personne</Label>
+                           </div>
+                        </RadioGroup>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="p-4">
+                        <CardTitle className="flex items-center gap-2 text-base"><Phone className="h-5 w-5"/> Qui peut vous appeler en vidéo ?</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-0">
+                        <RadioGroup value={videoCallPolicy} onValueChange={handleVideoCallPolicyChange} className="space-y-2">
+                           <div className="flex items-center space-x-3">
+                               <RadioGroupItem value="all" id="vc-all" />
+                               <Label htmlFor="vc-all" className="text-sm font-normal">Tout le monde</Label>
+                           </div>
+                           <div className="flex items-center space-x-3">
+                               <RadioGroupItem value="friends" id="vc-friends" />
+                               <Label htmlFor="vc-friends" className="text-sm font-normal">Seulement mes amis</Label>
+                           </div>
+                           <div className="flex items-center space-x-3">
+                               <RadioGroupItem value="none" id="vc-none" />
+                               <Label htmlFor="vc-none" className="text-sm font-normal">Personne</Label>
                            </div>
                         </RadioGroup>
                     </CardContent>
