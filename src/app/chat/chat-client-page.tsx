@@ -19,7 +19,7 @@ import Picker, { type EmojiClickData, EmojiStyle } from 'emoji-picker-react';
 import { Textarea } from '@/components/ui/textarea';
 import { ReportAbuseDialog } from '@/components/report-abuse-dialog';
 import { useMediaQuery } from '@/hooks/use-media-query';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDocs, limit, deleteField } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDocs, limit, deleteField, getDoc } from 'firebase/firestore';
 import type { DocumentData, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject, uploadString } from "firebase/storage";
 import { Camera, CameraResultType, CameraSource, PermissionState } from '@capacitor/camera';
@@ -515,7 +515,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
       await setDoc(chatDocRef, { participants: [currentUser.uid, otherUserId], lastMessage: { id: newDocRef.id, text: lastMessageText, senderId: currentUser.uid, timestamp: serverTimestamp(), read: false } }, { merge: true });
     } catch (error) {
-      console.error("Erreur lors de l\'envoi du message:", error);
+      console.error("Erreur lors de l'envoi du message:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
       if (messageData.type !== 'video_call' && messageData.type !== 'missed_call') {
           setNewMessage(text);
@@ -560,7 +560,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         }
     } catch (error) {
         console.error("Error reacting to message: ", error);
-        toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible d\'ajouter une réaction.' });
+        toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible d'ajouter une réaction.' });
     }
     setShowReactionPopoverFor(null);
   }, [currentUser, otherUser, toast]);
@@ -660,10 +660,10 @@ const takePicture = useCallback(async (source: CameraSource) => {
   }, [currentUser, otherUser, handleSendMessage, toast, isUploading]);
 
 
-  const handleStartCall = useCallback(async (isVideo: boolean) => {
+ const handleStartCall = useCallback(async (isVideo: boolean) => {
     if (!currentUser || !otherUser) return;
 
-    // Demander les permissions AVANT de créer le message dans le chat
+    // 1. Demander les permissions
     const audioOk = await requestMicrophonePermission();
     if (!audioOk) return;
 
@@ -672,38 +672,42 @@ const takePicture = useCallback(async (source: CameraSource) => {
         if (!videoOk) return;
     }
 
-    // Créer le message d'appel dans le chat en PREMIER
-    await handleSendMessage(undefined, { type: 'video_call', text: 'Appel vidéo' });
-
-    // Ensuite, initier l'appel via Agora
+    // 2. Tenter d'initier l'appel (qui a maintenant la vérification de confidentialité)
     const result = await initiateCall(currentUser.uid, otherUserId, isVideo);
 
+    // 3. Si l'appel est autorisé et initié avec succès...
     if (result.success && result.channelId) {
-        // Envoyer la notification push APRES avoir initié l'appel
-        try {
-            const chatId = getChatId(currentUser.uid, otherUserId);
-            await addDoc(collection(db, `users/${otherUserId}/notifications`), {
-                type: 'video_call',
-                senderId: currentUser.uid,
-                senderName: currentUser.displayName || 'Un utilisateur',
-                senderPhotoURL: currentUser.photoURL || null,
-                chatId: chatId,
-                text: 'vous appelle en vidéo 📹',
-                createdAt: serverTimestamp(),
-                read: false
-            });
-        } catch (error) {
-            console.error('[Call Notification Error]', error);
-        }
+        // Créer le message "Appel vidéo" dans le chat
+        await handleSendMessage(undefined, { type: 'video_call', text: 'Appel vidéo' });
 
-        // Finalement, naviguer vers la page d'appel
+        // 4. Vérifier les paramètres de notification avant d'envoyer le Push
+        const allowNotification = otherUser?.notificationSettings?.videoCalls ?? true;
+
+        if (allowNotification) {
+            try {
+                const chatId = getChatId(currentUser.uid, otherUserId);
+                await addDoc(collection(db, `users/${otherUserId}/notifications`), {
+                    type: 'video_call',
+                    senderId: currentUser.uid,
+                    senderName: currentUser.displayName || 'Un utilisateur',
+                    senderPhotoURL: currentUser.photoURL || null,
+                    chatId: chatId,
+                    text: 'vous appelle en vidéo 📹',
+                    createdAt: serverTimestamp(),
+                    read: false
+                });
+            } catch (error) {
+                console.error('[Call Notification Error]', error);
+            }
+        }
+        
+        // 5. Finalement, naviguer vers la page d'appel
         router.push(`/call/${result.channelId}`);
 
     } else {
-        // En cas d'erreur avec Agora, on pourrait envisager de supprimer le message d'appel
-        // ou de le mettre à jour pour indiquer une erreur. Pour l'instant, on notifie l'utilisateur.
+        // Si initiateCall a échoué (à cause de la confidentialité ou autre), notifier l'utilisateur.
         toast({
-            title: "Erreur lors du lancement de l'appel",
+            title: "Impossible de lancer l'appel",
             description: result.error ?? "Une erreur inconnue est survenue.",
             variant: "destructive"
         });
@@ -716,10 +720,9 @@ const takePicture = useCallback(async (source: CameraSource) => {
     router, 
     toast, 
     otherUser, 
-    handleSendMessage, // Ajout de handleSendMessage comme dépendance
-    initiateCall       // Ajout de initiateCall comme dépendance
+    handleSendMessage,
+    initiateCall
 ]);
-
 
   const handleStartRecording = useCallback(async () => {
     const hasPermission = await requestMicrophonePermission(); 

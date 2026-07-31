@@ -1,7 +1,35 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write access to any authenticated user for any document.
+
+    // Règles pour la collection /calls
+    match /calls/{callId} {
+      // Lecture: Autorisée si l'utilisateur est l'appelant ou le destinataire.
+      allow read: if request.auth != null && (request.auth.uid == resource.data.callerId || request.auth.uid == resource.data.receiverId);
+
+      // Création: Logique de confidentialité pour les appels vidéo.
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.callerId && (
+        // Les appels audio sont toujours autorisés
+        request.resource.data.isVideo == false ||
+        // Vérification pour les appels vidéo
+        (request.resource.data.isVideo == true && (
+          // Règle 1: La politique est 'all'
+          get(/databases/$(database)/documents/users/$(request.resource.data.receiverId)).data.privacy.videoCalls == 'all' ||
+          // Règle 2: La politique est 'friends' et l'appelant est dans la liste d'amis
+          (get(/databases/$(database)/documents/users/$(request.resource.data.receiverId)).data.privacy.videoCalls == 'friends' &&
+           request.auth.uid in get(/databases/$(database)/documents/users/$(request.resource.data.receiverId)).data.friends)
+        ))
+      );
+
+      // Mise à jour: Autorisée si l'utilisateur est l'appelant ou le destinataire.
+      // Des règles plus granulaires pourraient être ajoutées ici (ex: seul le destinataire peut changer le statut à 'answered').
+      allow update: if request.auth != null && (request.auth.uid == resource.data.callerId || request.auth.uid == resource.data.receiverId);
+
+      // Suppression: Autorisée si l'utilisateur est l'appelant ou le destinataire.
+      allow delete: if request.auth != null && (request.auth.uid == resource.data.callerId || request.auth.uid == resource.data.receiverId);
+    }
+
+    // Règle par défaut pour toutes les autres collections
     match /{document=**} {
       allow read, write: if request.auth != null;
     }

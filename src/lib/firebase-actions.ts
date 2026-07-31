@@ -201,6 +201,29 @@ export async function initiateCall(callerId: string, receiverId: string, isVideo
   if (!callerId || !receiverId) {
     return { success: false, error: "Caller and receiver IDs are required." };
   }
+
+  // Phase 1: Confidentialité
+  if (isVideo) {
+    const receiverDoc = await getDoc(doc(db, "users", receiverId));
+    if (!receiverDoc.exists()) {
+      return { success: false, error: "L'utilisateur que vous essayez d'appeler n'existe pas." };
+    }
+
+    const receiverData = receiverDoc.data();
+    const videoCallPolicy = receiverData.privacy?.videoCalls || 'all';
+
+    if (videoCallPolicy === 'none') {
+      return { success: false, error: "Cette personne n'accepte pas les appels vidéo." };
+    }
+
+    if (videoCallPolicy === 'friends') {
+      const receiverFriends = receiverData.friends || [];
+      if (!receiverFriends.includes(callerId)) {
+        return { success: false, error: "Cette personne n'accepte les appels vidéo que de ses amis." };
+      }
+    }
+  }
+
   try {
     const channelId = [callerId, receiverId].sort().join('_');
     const callDocRef = doc(db, 'calls', channelId);
