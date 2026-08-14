@@ -683,6 +683,8 @@ const takePicture = useCallback(async (source: CameraSource) => {
         // 4. Vérifier les paramètres de notification avant d'envoyer le Push
         const allowNotification = otherUser?.notificationSettings?.videoCalls ?? true;
 
+        console.log(`[DIAGNOSTIC] Appel vidéo vers ${otherUserId}. Paramètre lu: ${otherUser?.notificationSettings?.videoCalls}. Décision finale: ${allowNotification}`);
+
         if (allowNotification) {
             try {
                 const chatId = getChatId(currentUser.uid, otherUserId);
