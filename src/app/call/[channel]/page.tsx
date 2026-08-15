@@ -98,17 +98,7 @@ export default function CallPage() {
         
         try {
             await Promise.all([
-                sendCallSystemMessage(chatId, callerId, receiverId, 'missed_call'),
-                addDoc(collection(db, `users/${receiverId}/notifications`), {
-                    type: 'missed_call',
-                    senderId: callerId,
-                    senderName: currentUser.displayName || 'Un utilisateur',
-                    senderPhotoURL: currentUser.photoURL || null,
-                    chatId: chatId,
-                    text: 'a essayé de vous appeler 📞',
-                    createdAt: serverTimestamp(),
-                    read: false
-                })
+                sendCallSystemMessage(chatId, callerId, receiverId, 'missed_call')
             ]);
             
             try {

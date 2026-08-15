@@ -85,6 +85,16 @@ export const onNotificationCreated = functions.firestore
             return;
         }
 
+        if (notifData.type === 'missed_call') {
+            const recipientSettings = userDoc.data()?.notificationSettings;
+            const missedCallsEnabled = recipientSettings?.missedCalls ?? true;
+        
+            if (missedCallsEnabled === false) {
+                console.log(`L'utilisateur ${userId} a désactivé les notifications d'appels manqués. Envoi annulé.`);
+                return;
+            }
+        }
+
         const tokens: string[] = userDoc.data()!.fcmTokens;
         if (tokens.length === 0) {
             console.log(`L'utilisateur ${userId} n'a pas de token valide.`);

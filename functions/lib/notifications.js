@@ -72,7 +72,7 @@ exports.sendNewMessageNotification = functions.firestore
 exports.onNotificationCreated = functions.firestore
     .document("users/{userId}/notifications/{notificationId}")
     .onCreate(async (snapshot, context) => {
-    var _a;
+    var _a, _b, _c;
     const { userId } = context.params;
     const notifData = snapshot.data();
     if (!notifData) {
@@ -83,6 +83,14 @@ exports.onNotificationCreated = functions.firestore
     if (!userDoc.exists || !((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.fcmTokens)) {
         console.log(`L'utilisateur ${userId} n'a pas de tokens FCM.`);
         return;
+    }
+    if (notifData.type === 'missed_call') {
+        const recipientSettings = (_b = userDoc.data()) === null || _b === void 0 ? void 0 : _b.notificationSettings;
+        const missedCallsEnabled = (_c = recipientSettings === null || recipientSettings === void 0 ? void 0 : recipientSettings.missedCalls) !== null && _c !== void 0 ? _c : true;
+        if (missedCallsEnabled === false) {
+            console.log(`L'utilisateur ${userId} a désactivé les notifications d'appels manqués. Envoi annulé.`);
+            return;
+        }
     }
     const tokens = userDoc.data().fcmTokens;
     if (tokens.length === 0) {
