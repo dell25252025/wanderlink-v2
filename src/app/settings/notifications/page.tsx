@@ -6,7 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, updateDoc, setDoc } from 'firebase/firestore'; // Ajout de updateDoc
 
-import { Bell, Mail, Heart, Phone } from 'lucide-react';
+import { Bell, Mail, Heart, Phone, PhoneMissed } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -20,6 +20,7 @@ export default function NotificationSettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [messagesEnabled, setMessagesEnabled] = useState(true);
   const [videoCallsEnabled, setVideoCallsEnabled] = useState(true);
+  const [missedCallsEnabled, setMissedCallsEnabled] = useState(true);
   const [profileVisitsEnabled, setProfileVisitsEnabled] = useState(true);
   const [friendRequestsEnabled, setFriendRequestsEnabled] = useState(true);
   const [friendAcceptsEnabled, setFriendAcceptsEnabled] = useState(true);
@@ -41,6 +42,7 @@ export default function NotificationSettingsPage() {
         const settings = data.notificationSettings || {};
         setMessagesEnabled(settings.messages ?? true);
         setVideoCallsEnabled(settings.videoCalls ?? true);
+        setMissedCallsEnabled(settings.missedCalls ?? true);
         setProfileVisitsEnabled(settings.profileVisits ?? true);
         setFriendRequestsEnabled(settings.friendRequests ?? true);
         setFriendAcceptsEnabled(settings.friendAccepts ?? true);
@@ -73,6 +75,7 @@ export default function NotificationSettingsPage() {
 
   const handleToggleMessages = createToggleHandler(setMessagesEnabled, 'messages');
   const handleToggleVideoCalls = createToggleHandler(setVideoCallsEnabled, 'videoCalls');
+  const handleToggleMissedCalls = createToggleHandler(setMissedCallsEnabled, 'missedCalls');
   const handleToggleProfileVisits = createToggleHandler(setProfileVisitsEnabled, 'profileVisits');
   const handleToggleFriendRequests = createToggleHandler(setFriendRequestsEnabled, 'friendRequests');
   const handleToggleFriendAccepts = createToggleHandler(setFriendAcceptsEnabled, 'friendAccepts');
@@ -110,6 +113,16 @@ export default function NotificationSettingsPage() {
                   id="push-video-calls" 
                   checked={videoCallsEnabled}
                   onCheckedChange={handleToggleVideoCalls}
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <Label htmlFor="push-missed-calls" className="flex items-center text-sm">
+                    <PhoneMissed className="mr-2 h-4 w-4 text-red-500" /> Appels manqués
+                </Label>
+                <Switch 
+                  id="push-missed-calls" 
+                  checked={missedCallsEnabled}
+                  onCheckedChange={handleToggleMissedCalls}
                 />
               </div>
               <div className="flex items-center justify-between rounded-lg border p-4">
