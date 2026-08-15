@@ -694,6 +694,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                     senderName: currentUser.displayName || 'Un utilisateur',
                     senderPhotoURL: currentUser.photoURL || null,
                     chatId: chatId,
+                    channelId: result.channelId,
                     text: 'vous appelle en vidéo 📹',
                     createdAt: serverTimestamp(),
                     read: false

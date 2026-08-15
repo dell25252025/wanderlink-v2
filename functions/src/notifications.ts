@@ -102,6 +102,7 @@ export const onNotificationCreated = functions.firestore
                 chatId: notifData.chatId || '',
                 photoUrl: notifData.photoUrl || '',
                 senderId: notifData.senderId || '',
+                channelId: notifData.channelId || '',
             },
             android: {
                 priority: "high",
