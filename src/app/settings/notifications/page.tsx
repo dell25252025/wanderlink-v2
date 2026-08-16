@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, updateDoc, setDoc } from 'firebase/firestore'; // Ajout de updateDoc
+import { doc, onSnapshot, updateDoc, setDoc } from 'firebase/firestore';
 
-import { Bell, Mail, Heart, Phone, PhoneMissed } from 'lucide-react';
+import { Bell, Mail, Heart, Phone, PhoneMissed, MessageSquare, Video, User, UserPlus, UserCheck } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -60,7 +60,6 @@ export default function NotificationSettingsPage() {
       setter(checked);
       const userRef = doc(db, 'users', currentUser.uid);
       try {
-        // Correction: Utilisation de updateDoc avec la notation par points pour ne mettre à jour que le champ spécifique.
         await updateDoc(userRef, {
           [`notificationSettings.${settingName}`]: checked
         });
@@ -93,12 +92,12 @@ export default function NotificationSettingsPage() {
         <div className="mx-auto max-w-2xl space-y-4">
           <Card>
             <CardHeader className="p-4">
-              <CardTitle className="flex items-center gap-2 text-base"><Bell className="h-5 w-5" /> Notifications Push</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base"><Bell className="h-5 w-5 text-white" /> Notifications Push</CardTitle>
               <CardDescription className="text-sm">Recevez des alertes en temps réel.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 p-4 pt-0">
               <div className="flex items-center justify-between rounded-lg border p-4">
-                <Label htmlFor="push-messages" className="text-sm">Nouveaux messages</Label>
+                <Label htmlFor="push-messages" className="flex items-center text-sm"><MessageSquare className="mr-2 h-4 w-4 text-white" />Nouveaux messages</Label>
                 <Switch 
                   id="push-messages" 
                   checked={messagesEnabled}
@@ -107,7 +106,7 @@ export default function NotificationSettingsPage() {
               </div>
                <div className="flex items-center justify-between rounded-lg border p-4">
                 <Label htmlFor="push-video-calls" className="flex items-center text-sm">
-                    <Phone className="mr-2 h-4 w-4" /> Appels vidéo entrants
+                    <Video className="mr-2 h-4 w-4 text-white" /> Appels vidéo entrants
                 </Label>
                 <Switch 
                   id="push-video-calls" 
@@ -117,7 +116,7 @@ export default function NotificationSettingsPage() {
               </div>
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <Label htmlFor="push-missed-calls" className="flex items-center text-sm">
-                    <PhoneMissed className="mr-2 h-4 w-4 text-red-500" /> Appels manqués
+                    <PhoneMissed className="mr-2 h-4 w-4 text-white" /> Appels manqués
                 </Label>
                 <Switch 
                   id="push-missed-calls" 
@@ -126,7 +125,7 @@ export default function NotificationSettingsPage() {
                 />
               </div>
               <div className="flex items-center justify-between rounded-lg border p-4">
-                <Label htmlFor="push-visits" className="text-sm">Visites de profil</Label>
+                <Label htmlFor="push-visits" className="flex items-center text-sm"><User className="mr-2 h-4 w-4 text-white" />Visites de profil</Label>
                 <Switch 
                   id="push-visits" 
                   checked={profileVisitsEnabled}
@@ -134,7 +133,7 @@ export default function NotificationSettingsPage() {
                 />
               </div>
               <div className="flex items-center justify-between rounded-lg border p-4">
-                <Label htmlFor="push-friend-requests" className="text-sm">Demandes d'ami</Label>
+                <Label htmlFor="push-friend-requests" className="flex items-center text-sm"><UserPlus className="mr-2 h-4 w-4 text-white" />Demandes d'ami</Label>
                 <Switch 
                   id="push-friend-requests" 
                   checked={friendRequestsEnabled}
@@ -142,7 +141,7 @@ export default function NotificationSettingsPage() {
                 />
               </div>
               <div className="flex items-center justify-between rounded-lg border p-4">
-                <Label htmlFor="push-friend-accepts" className="text-sm">Acceptations d'ami</Label>
+                <Label htmlFor="push-friend-accepts" className="flex items-center text-sm"><UserCheck className="mr-2 h-4 w-4 text-white" />Acceptations d'ami</Label>
                 <Switch 
                   id="push-friend-accepts" 
                   checked={friendAcceptsEnabled}
@@ -151,7 +150,7 @@ export default function NotificationSettingsPage() {
               </div>
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <Label htmlFor="push-photo-likes" className="flex items-center text-sm">
-                  <Heart className="mr-2 h-4 w-4 text-red-500" /> J'aime sur les photos
+                  <Heart className="mr-2 h-4 w-4 text-white" /> J'aime sur les photos
                 </Label>
                 <Switch 
                   id="push-photo-likes" 
@@ -164,13 +163,13 @@ export default function NotificationSettingsPage() {
 
           <Card>
             <CardHeader className="p-4">
-              <CardTitle className="flex items-center gap-2 text-base"><Mail className="h-5 w-5" /> Notifications par e-mail</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-base"><Mail className="h-5 w-5 text-white" /> Notifications par e-mail</CardTitle>
               <CardDescription className="text-sm">Recevez des résumés dans votre boîte de réception.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 p-4 pt-0">
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <Label htmlFor="email-news" className="text-sm">Promotions & actualités</Label>
-                <Switch id="email-news" checked={mockEmail.newsAndUpdates} onCheckedChange={(checked) => setMockEmail(prev => ({...prev, newsAndUpdates: checked}))} />
+                <Switch id="email-news" checked={mockEmail.newsAndUpdates} onCheckedChange={(checked) => setMockEmail(prev => ({...prev, newsAnduates: checked}))} />
               </div>
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <Label htmlFor="email-digest" className="text-sm">Résumé hebdomadaire</Label>
@@ -195,7 +194,7 @@ function NotificationSettingsSkeleton() {
              <CardHeader className="p-4">
                 <Skeleton className="h-6 w-48" />
                 <Skeleton className="h-4 w-64 mt-1" />
-            </CardHeader>
+            </Header>
             <CardContent className="space-y-3 p-4 pt-0">
               <Skeleton className="h-[68px] w-full rounded-lg" />
               <Skeleton className="h-[68px] w-full rounded-lg" />
