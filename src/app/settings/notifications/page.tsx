@@ -169,7 +169,7 @@ export default function NotificationSettingsPage() {
             <CardContent className="space-y-3 p-4 pt-0">
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <Label htmlFor="email-news" className="text-sm">Promotions & actualités</Label>
-                <Switch id="email-news" checked={mockEmail.newsAndUpdates} onCheckedChange={(checked) => setMockEmail(prev => ({...prev, newsAnduates: checked}))} />
+                <Switch id="email-news" checked={mockEmail.newsAndUpdates} onCheckedChange={(checked) => setMockEmail(prev => ({...prev, newsAndUpdates: checked}))} />
               </div>
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <Label htmlFor="email-digest" className="text-sm">Résumé hebdomadaire</Label>
@@ -194,7 +194,7 @@ function NotificationSettingsSkeleton() {
              <CardHeader className="p-4">
                 <Skeleton className="h-6 w-48" />
                 <Skeleton className="h-4 w-64 mt-1" />
-            </Header>
+            </CardHeader>
             <CardContent className="space-y-3 p-4 pt-0">
               <Skeleton className="h-[68px] w-full rounded-lg" />
               <Skeleton className="h-[68px] w-full rounded-lg" />
