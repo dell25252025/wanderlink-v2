@@ -17,8 +17,18 @@ export const formSchema = z.object({
   // --- Step 2 --- //
   languages: z.array(z.string()), // Déjà optionnel
   location: z.string().optional(),
-  height: z.number().optional(),
-  weight: z.number().optional(),
+  height: z.preprocess(
+    (val) => (val === '' || val === null ? undefined : val),
+    z.coerce.number({
+      invalid_type_error: 'La taille doit être un nombre.',
+    }).positive('La taille doit être un nombre positif.').optional(),
+  ),
+  weight: z.preprocess(
+    (val) => (val === '' || val === null ? undefined : val),
+    z.coerce.number({
+      invalid_type_error: 'Le poids doit être un nombre.',
+    }).positive('Le poids doit être un nombre positif.').optional(),
+  ),
 
   // --- Step 3 --- //
   tobacco: z.string().optional(),
