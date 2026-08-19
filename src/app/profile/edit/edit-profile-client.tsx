@@ -34,6 +34,7 @@ export default function EditProfileClientPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const profileId = searchParams.get('id');
+    const source = searchParams.get('source');
     const { toast } = useToast();
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [authLoading, setAuthLoading] = useState(true);
@@ -193,8 +194,9 @@ export default function EditProfileClientPage() {
     const onSubmit = async (data: FormData) => {
         if (!currentUser) return;
         setIsSubmitting(true);
+
+        const isOnboarding = source === 'onboarding';
         
-        // Sanitize date data before submitting
         const sanitizedData = { ...data };
         if (sanitizedData.dates?.from && isNaN(new Date(sanitizedData.dates.from).getTime())) {
             sanitizedData.dates.from = undefined;
@@ -204,10 +206,27 @@ export default function EditProfileClientPage() {
         }
 
         try {
-            const result = await updateUserProfile(currentUser.uid, sanitizedData);
-            if (!result.success) throw new Error(result.error);
-            toast({ title: 'Profil mis à jour avec succès !' });
-            router.push(`/profile?id=${currentUser.uid}`);
+            if (isOnboarding) {
+                if (!sanitizedData.age || !sanitizedData.gender) {
+                    toast({
+                        variant: 'destructive',
+                        title: 'Informations manquantes',
+                        description: 'Veuillez renseigner votre âge et votre genre pour finaliser votre profil.',
+                    });
+                    setIsSubmitting(false);
+                    return;
+                }
+                const dataToSubmit = { ...sanitizedData, onboardingCompleted: true };
+                const result = await updateUserProfile(currentUser.uid, dataToSubmit);
+                if (!result.success) throw new Error(result.error);
+                toast({ title: 'Profil finalisé avec succès !', description: 'Bienvenue sur WanderLink !' });
+                router.push('/');
+            } else {
+                const result = await updateUserProfile(currentUser.uid, sanitizedData);
+                if (!result.success) throw new Error(result.error);
+                toast({ title: 'Profil mis à jour avec succès !' });
+                router.push(`/profile?id=${currentUser.uid}`);
+            }
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Une erreur inconnue est survenue.';
             toast({ variant: 'destructive', title: 'Erreur de mise à jour', description: errorMessage });
