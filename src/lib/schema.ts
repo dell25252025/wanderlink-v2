@@ -4,7 +4,12 @@ import * as z from 'zod';
 export const formSchema = z.object({
   // --- Step 1 --- //
   firstName: z.string().min(2, 'Le prénom doit contenir au moins 2 caractères.'),
-  age: z.number().optional(), // Rendu optionnel
+  age: z.coerce
+    .number({ invalid_type_error: 'L\'âge doit être un nombre.' })
+    .min(18, 'Vous devez avoir au moins 18 ans.')
+    .max(99, 'L\'âge doit être inférieur à 100 ans.')
+    .optional()
+    .or(z.literal(undefined)),
   gender: z.string().optional(), // Rendu optionnel
   profilePictures: z.array(z.string()),
   bio: z.string().max(500, 'La description ne peut pas dépasser 500 caractères.').optional(),
