@@ -13,7 +13,7 @@ import Step3 from '@/components/profile-creation/step3';
 import Step4 from '@/components/profile-creation/step4';
 import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { createUserProfile } from '@/lib/firebase-actions';
+import { createUserProfile, updateUserProfile } from '@/lib/firebase-actions';
 import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, type User } from 'firebase/auth';
@@ -180,11 +180,29 @@ function ProfileCreationForm() {
     }
   }, [currentUser, router, toast, isSubmitting]);
 
+  const handleGoogleOnboardingSubmit = useCallback(async () => {
+    if (isSubmitting) return;
+    if (!currentUser) { toast({ variant: 'destructive', title: 'Erreur d\'authentification' }); return; }
+    setIsSubmitting(true);
+    try {
+        const partialData = getValues();
+        const result = await updateUserProfile(currentUser.uid, partialData);
+        if (!result.success) {
+            throw new Error(result.error || "La sauvegarde du profil a échoué.");
+        }
+        router.push(`/profile/edit?id=${currentUser.uid}&source=onboarding`);
+    } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Une erreur inconnue est survenue.';
+        toast({ variant: 'destructive', title: 'Erreur lors de la redirection', description: msg });
+        setIsSubmitting(false);
+    }
+  }, [currentUser, getValues, isSubmitting, router, toast]);
+
   useEffect(() => {
     if ( isGoogleOnboarding && currentStep === steps.length - 1 && watchedIntention && !isSubmitting ) {
-      handleSubmit(onSubmit)();
+      handleGoogleOnboardingSubmit();
     }
-  }, [watchedIntention, isGoogleOnboarding, currentStep, isSubmitting, handleSubmit, onSubmit]);
+  }, [watchedIntention, isGoogleOnboarding, currentStep, isSubmitting, handleGoogleOnboardingSubmit]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
