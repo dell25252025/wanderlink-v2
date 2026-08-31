@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   appName: 'WanderLink',
   webDir: 'out',
   server: {
-    url: 'https://googleads.github.io/googleads-mobile-android-examples/webview-api/',
+    url: 'https://googleads.github.io/googleads-mobile-android-examples/webview-api/index.html',
     cleartext: true
   },
   plugins: {
