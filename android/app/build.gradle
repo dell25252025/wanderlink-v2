@@ -55,6 +55,7 @@ dependencies {
     // Dépendance pour Firebase Cloud Messaging (Nécessaire pour les notifications)
     implementation 'com.google.firebase:firebase-messaging'
     implementation 'com.google.firebase:firebase-analytics'
+    implementation 'com.google.android.gms:play-services-ads:23.1.0'
 
     // Ajout de la dépendance pour CircleImageView
     implementation 'de.hdodenhof:circleimageview:3.1.0'
