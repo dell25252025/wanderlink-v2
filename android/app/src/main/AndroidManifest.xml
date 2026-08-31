@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.wanderlink.app">
 
-    <!-- Permissions pour l'écran de verrouillage et les notifications -->
+    <!-- Permissions pour l'Ã©cran de verrouillage et les notifications -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -21,10 +21,15 @@
             android:name="com.codetrixstudio.capacitor.GoogleAuth.Theme"
             android:value="@style/TransparentTheme" />
 
-        <!-- NOUVELLE META-DATA POUR LE CANAL DE NOTIFICATION PAR DÉFAUT -->
+        <!-- NOUVELLE META-DATA POUR LE CANAL DE NOTIFICATION PAR DÃ‰FAUT -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="messages" />
+
+        <!-- ID D'APPLICATION ADMOB -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-9129126817397448~1569480928" />
 
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
@@ -41,8 +46,8 @@
             </intent-filter>
 
         </activity>
-        
-        <!-- DÉCLARATION DE NOTRE NOUVELLE ACTIVITÉ D'APPEL -->
+
+        <!-- DÃ‰CLARATION DE NOTRE NOUVELLE ACTIVITÃ‰ D'APPEL -->
         <activity
             android:name=".CallActivity"
             android:exported="true"
@@ -50,7 +55,7 @@
             android:theme="@style/Theme.AppCompat.NoActionBar"
             android:showOnLockScreen="true"
             android:turnScreenOn="true" />
-            
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -81,14 +86,14 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-    
+
     <!-- Microphone -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- Geolocation -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    
+
     <!-- Features -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
