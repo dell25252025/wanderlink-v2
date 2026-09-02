@@ -6,12 +6,15 @@ import android.app.NotificationManager;
 import android.os.Build;
 
 import com.getcapacitor.BridgeActivity;
+import com.google.android.gms.ads.MobileAds;
 import java.util.ArrayList;
 
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        MobileAds.registerWebView(this.bridge.getWebView());
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(

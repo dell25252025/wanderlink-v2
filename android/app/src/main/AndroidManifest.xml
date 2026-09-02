@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.wanderlink.app">
 
-    <!-- Permissions pour l'Ã©cran de verrouillage et les notifications -->
+    <!-- Permissions pour l'écran de verrouillage et les notifications -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -30,6 +30,11 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-9129126817397448~1569480928" />
+
+        <!-- Déclaration pour l'API WebView -->
+        <meta-data
+            android:name="com.google.android.gms.ads.INTEGRATION_MANAGER"
+            android:value="webview" />
 
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
