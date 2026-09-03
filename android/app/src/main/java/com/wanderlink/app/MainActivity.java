@@ -6,8 +6,6 @@ import android.app.NotificationManager;
 import android.os.Build;
 import android.util.DisplayMetrics;
 import android.view.Display;
-import android.widget.RelativeLayout;
-
 import com.getcapacitor.BridgeActivity;
 import com.google.android.gms.ads.MobileAds;
 import com.google.android.gms.ads.initialization.InitializationStatus;
@@ -15,8 +13,6 @@ import com.google.android.gms.ads.initialization.OnInitializationCompleteListene
 import com.google.android.gms.ads.AdRequest;
 import com.google.android.gms.ads.AdSize;
 import com.google.android.gms.ads.AdView;
-
-import java.util.ArrayList;
 
 public class MainActivity extends BridgeActivity {
 
@@ -33,12 +29,10 @@ public class MainActivity extends BridgeActivity {
             }
         });
 
-        // Nous allons maintenant charger la bannière de manière programmatique
-        RelativeLayout container = findViewById(R.id.container);
-        adView = new AdView(this);
-        adView.setAdUnitId("ca-app-pub-3940256099942544/9214589741");
-        container.addView(adView);
+        // Trouver la AdView définie dans le layout XML
+        adView = findViewById(R.id.adView);
 
+        // Charger la bannière avec la taille adaptative
         loadBanner();
 
         // Logique existante pour les canaux de notification
@@ -58,15 +52,13 @@ public class MainActivity extends BridgeActivity {
 
     private void loadBanner() {
         AdRequest adRequest = new AdRequest.Builder().build();
-
         AdSize adSize = getAdSize();
         adView.setAdSize(adSize);
-
         adView.loadAd(adRequest);
     }
 
     private AdSize getAdSize() {
-        // Determine the screen width (less decorations) to use for the ad width.
+        // Déterminer la largeur de l'écran pour la bannière adaptative
         Display display = getWindowManager().getDefaultDisplay();
         DisplayMetrics outMetrics = new DisplayMetrics();
         display.getMetrics(outMetrics);
@@ -76,18 +68,17 @@ public class MainActivity extends BridgeActivity {
 
         int adWidth = (int) (widthPixels / density);
 
-        // Get a portrait-anchored adaptive banner ad size.
         return AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this, adWidth);
     }
 
     @Override
-    protected void onStart() {
+    public void onStart() {
         super.onStart();
         registerPlugin(CallKitPlugin.class);
     }
 
     @Override
-    protected void onPause() {
+    public void onPause() {
         if (adView != null) {
             adView.pause();
         }
@@ -95,7 +86,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onResume() {
+    public void onResume() {
         super.onResume();
         if (adView != null) {
             adView.resume();
@@ -103,7 +94,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onDestroy() {
+    public void onDestroy() {
         if (adView != null) {
             adView.destroy();
         }
