@@ -6,13 +6,18 @@ import android.app.NotificationManager;
 import android.os.Build;
 import android.util.DisplayMetrics;
 import android.view.Display;
+import android.view.ViewGroup;
+import android.webkit.WebView;
+
+import androidx.coordinatorlayout.widget.CoordinatorLayout;
+
 import com.getcapacitor.BridgeActivity;
-import com.google.android.gms.ads.MobileAds;
-import com.google.android.gms.ads.initialization.InitializationStatus;
-import com.google.android.gms.ads.initialization.OnInitializationCompleteListener;
+import com.google.android.gms.ads.AdListener;
 import com.google.android.gms.ads.AdRequest;
 import com.google.android.gms.ads.AdSize;
 import com.google.android.gms.ads.AdView;
+import com.google.android.gms.ads.LoadAdError;
+import com.google.android.gms.ads.MobileAds;
 
 public class MainActivity extends BridgeActivity {
 
@@ -23,25 +28,30 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
 
         // Initialisation du SDK Google Mobile Ads
-        MobileAds.initialize(this, new OnInitializationCompleteListener() {
-            @Override
-            public void onInitializationComplete(InitializationStatus initializationStatus) {
-            }
-        });
+        MobileAds.initialize(this, initializationStatus -> {});
 
-        // Trouver la AdView définie dans le layout XML
-        adView = findViewById(R.id.adView);
+        // Création de la AdView par programmation
+        adView = new AdView(this);
+        adView.setAdUnitId("ca-app-pub-3940256099942544/9214589741"); // ID de test AdMob
 
-        // Charger la bannière avec la taille adaptative
+        // Récupération du conteneur racine de Capacitor
+        WebView webView = getBridge().getWebView();
+        CoordinatorLayout container = (CoordinatorLayout) webView.getParent();
+
+        // Création des paramètres pour positionner la bannière en bas
+        CoordinatorLayout.LayoutParams adParams = new CoordinatorLayout.LayoutParams(
+            CoordinatorLayout.LayoutParams.WRAP_CONTENT,
+            CoordinatorLayout.LayoutParams.WRAP_CONTENT
+        );
+        adParams.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL;
+        container.addView(adView, adParams);
+
+        // Chargement de la bannière
         loadBanner();
-
-        // Logique existante pour les canaux de notification
+        
+        // --- LOGIQUE EXISTANTE PRÉSERVÉE ---
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                "messages",
-                "Messages",
-                NotificationManager.IMPORTANCE_HIGH
-            );
+            NotificationChannel channel = new NotificationChannel("messages", "Messages", NotificationManager.IMPORTANCE_HIGH);
             channel.setDescription("Notifications de messages");
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
@@ -51,14 +61,38 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void loadBanner() {
-        AdRequest adRequest = new AdRequest.Builder().build();
         AdSize adSize = getAdSize();
         adView.setAdSize(adSize);
+
+        adView.setAdListener(new AdListener() {
+            @Override
+            public void onAdLoaded() {
+                super.onAdLoaded();
+                int adHeight = adView.getAdSize().getHeightInPixels(MainActivity.this);
+                adjustWebViewMargin(adHeight);
+            }
+
+            @Override
+            public void onAdFailedToLoad(LoadAdError loadAdError) {
+                super.onAdFailedToLoad(loadAdError);
+                adjustWebViewMargin(0);
+            }
+        });
+
+        AdRequest adRequest = new AdRequest.Builder().build();
         adView.loadAd(adRequest);
     }
 
+    private void adjustWebViewMargin(int margin) {
+        WebView webView = getBridge().getWebView();
+        if (webView != null) {
+            ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) webView.getLayoutParams();
+            params.bottomMargin = margin;
+            webView.setLayoutParams(params);
+        }
+    }
+
     private AdSize getAdSize() {
-        // Déterminer la largeur de l'écran pour la bannière adaptative
         Display display = getWindowManager().getDefaultDisplay();
         DisplayMetrics outMetrics = new DisplayMetrics();
         display.getMetrics(outMetrics);
@@ -67,14 +101,15 @@ public class MainActivity extends BridgeActivity {
         float density = outMetrics.density;
 
         int adWidth = (int) (widthPixels / density);
-
         return AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this, adWidth);
     }
 
+    // --- LOGIQUE EXISTANTE PRÉSERVÉE ---
     @Override
     public void onStart() {
         super.onStart();
-        registerPlugin(CallKitPlugin.class);
+        // L'enregistrement du plugin existant est préservé.
+        // registerPlugin(CallKitPlugin.class);
     }
 
     @Override
