@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { usePathname } from 'next/navigation'; // <-- IMPORT AJOUTÉ
+import { usePathname } from 'next/navigation';
 import ProfileCard from '@/components/profile-card';
 import { Loader2, UserX } from 'lucide-react';
 import { DocumentData, collection, doc, onSnapshot, query, where } from 'firebase/firestore';
@@ -10,12 +10,12 @@ import { addFriend, getUsersOnlineStatus } from '@/lib/firebase-actions';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import AdMob from '@/lib/capacitor-plugins/admob'; // <-- IMPORT AJOUTÉ
+import AdMob from '@/lib/capacitor-plugins/admob';
 
 interface DiscoverClientPageProps {
-  initialProfiles: DocumentData[]; // Default profiles from the server
+  initialProfiles: DocumentData[];
   loading: boolean;
-  currentUserProfile: DocumentData | null; // This is the initially loaded profile
+  currentUserProfile: DocumentData | null;
 }
 
 export default function DiscoverClientPage({ initialProfiles, loading: initialLoading, currentUserProfile: initialUserProfile }: DiscoverClientPageProps) {
@@ -28,25 +28,28 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
   const [liveCurrentUserProfile, setLiveCurrentUserProfile] = useState<DocumentData | null>(initialUserProfile);
   const [usersWhoBlockedMe, setUsersWhoBlockedMe] = useState<Set<string>>(new Set());
   const { toast } = useToast();
-  const pathname = usePathname(); // <-- HOOK AJOUTÉ
+  const pathname = usePathname();
 
-  // --- EFFET POUR GÉRER LA BANNIÈRE ADMOB ---
+  // --- EFFET POUR GÉRER LA BANNIÈRE ADMOB (AVEC CORRECTION) ---
   useEffect(() => {
-    const isDiscoverPage = pathname.startsWith('/discover');
-    
-    if (isDiscoverPage) {
-      AdMob.showBanner();
-    } else {
-      AdMob.hideBanner();
-    }
-
-    // La fonction de nettoyage garantit que la bannière est cachée si on quitte la page
-    return () => {
+    // On utilise un timeout pour s'assurer que le pathname a eu le temps de se mettre à jour après la navigation.
+    const timer = setTimeout(() => {
+      const isDiscoverPage = pathname.startsWith('/discover');
+      
+      if (isDiscoverPage) {
+        AdMob.showBanner();
+      } else {
         AdMob.hideBanner();
+      }
+    }, 100); // Un délai de 100ms est généralement suffisant.
+
+    // La fonction de nettoyage s'assure que la bannière est cachée si on quitte la page.
+    return () => {
+      clearTimeout(timer);
+      AdMob.hideBanner();
     };
   }, [pathname]);
 
-  // ... (le reste du fichier reste inchangé)
 
   // Effect to get the current authenticated user
   useEffect(() => {
@@ -105,12 +108,10 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
     }
   }, [initialProfiles, initialLoading]);
 
-  // DÉPENDANCE STABLE BASÉE SUR LES IDS
   const profileIds = useMemo(() => 
     profiles.map(p => p.uid || p.objectID).filter(Boolean).join(',')
   , [profiles]);
 
-  // EFFET CORRIGÉ : RÉCUPÈRE LA PRÉSENCE ET MET À JOUR `onlineStatuses`
   useEffect(() => {
     const uids = profileIds.split(',').filter(Boolean);
 
@@ -133,19 +134,16 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
         isCancelled = true;
     }
 
-  }, [profileIds]); // Se déclenche uniquement si la liste des IDs change
+  }, [profileIds]);
 
   const handleAddFriend = async (friendId: string) => {
-    // ... (logique inchangée)
   };
 
-  // Symmetrical filtering logic applied just before rendering
   const iHaveBlockedIds = new Set(liveCurrentUserProfile?.blockedUsers || []);
   const allBlockedIds = new Set([...iHaveBlockedIds, ...usersWhoBlockedMe]);
 
-  // MAPPEDPROFILES CORRIGÉ : FUSIONNE `profiles` ET `onlineStatuses` AU RENDU
   const mappedProfiles: UserProfile[] = profiles
-    .filter(p => !allBlockedIds.has(p.uid || p.objectID)) // Filter out blocked profiles
+    .filter(p => !allBlockedIds.has(p.uid || p.objectID))
     .map(p => {
       const uid = p.uid || p.objectID;
       return {
@@ -161,7 +159,7 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
         travelIntention: p.intention || '50/50',
         verified: p.isVerified ?? false,
         isVerified: p.isVerified ?? false,
-        isOnline: onlineStatuses[uid] ?? false, // Fusion ici
+        isOnline: onlineStatuses[uid] ?? false,
         image: p.profilePictures?.[0] || `https://picsum.photos/seed/${uid}/800/1200`
       };
   });
