@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { usePathname } from 'next/navigation';
 import ProfileCard from '@/components/profile-card';
 import { Loader2, UserX } from 'lucide-react';
 import { DocumentData, collection, doc, onSnapshot, query, where } from 'firebase/firestore';
@@ -10,19 +9,14 @@ import { addFriend, getUsersOnlineStatus } from '@/lib/firebase-actions';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import AdMob from '@/lib/capacitor-plugins/admob';
 
 interface DiscoverClientPageProps {
-  initialProfiles: DocumentData[];
+  initialProfiles: DocumentData[]; // Default profiles from the server
   loading: boolean;
-  currentUserProfile: DocumentData | null;
+  currentUserProfile: DocumentData | null; // This is the initially loaded profile
 }
 
-const LOG_TAG = '[AdMob]';
-
 export default function DiscoverClientPage({ initialProfiles, loading: initialLoading, currentUserProfile: initialUserProfile }: DiscoverClientPageProps) {
-  console.log(LOG_TAG, 'Component rendering or re-rendering.');
-
   const [profiles, setProfiles] = useState<DocumentData[]>([]);
   const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -32,32 +26,6 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
   const [liveCurrentUserProfile, setLiveCurrentUserProfile] = useState<DocumentData | null>(initialUserProfile);
   const [usersWhoBlockedMe, setUsersWhoBlockedMe] = useState<Set<string>>(new Set());
   const { toast } = useToast();
-  const pathname = usePathname();
-
-  console.log(LOG_TAG, `Current pathname is: ${pathname}`);
-
-  // --- EFFET POUR GÉRER LA BANNIÈRE ADMOB (AVEC LOGS) ---
-  useEffect(() => {
-    console.log(LOG_TAG, `Banner effect is running for pathname: ${pathname}`);
-
-    const isDiscoverPage = pathname.startsWith('/discover');
-    console.log(LOG_TAG, `isDiscoverPage condition is: ${isDiscoverPage}`);
-
-    if (isDiscoverPage) {
-      console.log(LOG_TAG, 'Calling AdMob.showBanner()');
-      AdMob.showBanner();
-    } else {
-      console.log(LOG_TAG, 'Calling AdMob.hideBanner()');
-      AdMob.hideBanner();
-    }
-
-    // Cleanup function
-    return () => {
-      console.log(LOG_TAG, `Cleanup effect for pathname: ${pathname}. Hiding banner.`);
-      AdMob.hideBanner();
-    };
-  }, [pathname]);
-
 
   // Effect to get the current authenticated user
   useEffect(() => {
@@ -145,6 +113,7 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
   }, [profileIds]);
 
   const handleAddFriend = async (friendId: string) => {
+    // ... (logique inchangée)
   };
 
   const iHaveBlockedIds = new Set(liveCurrentUserProfile?.blockedUsers || []);
@@ -167,7 +136,7 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
         travelIntention: p.intention || '50/50',
         verified: p.isVerified ?? false,
         isVerified: p.isVerified ?? false,
-        isOnline: onlineStatuses[uid] ?? false,
+        isOnline: onlineStatuses[uid] ?? false, // Fusion ici
         image: p.profilePictures?.[0] || `https://picsum.photos/seed/${uid}/800/1200`
       };
   });

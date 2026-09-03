@@ -12,6 +12,7 @@ import { getUserProfile } from '@/lib/firebase-actions';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import AdMob from '@/lib/capacitor-plugins/admob'; // <<< IMPORT ADMOB AJOUTÉ
 
 // --- COMPOSANT D'UN ÉLÉMENT DE NAVIGATION --- //
 interface NavItemProps {
@@ -52,6 +53,22 @@ const BottomNav = () => {
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const pathname = usePathname();
 
+  // <<< LOGIQUE DE LA BANNIÈRE ADMOB AJOUTÉE ICI >>>
+  useEffect(() => {
+    const isDiscoverPage = pathname.startsWith('/discover');
+    
+    if (isDiscoverPage) {
+      AdMob.showBanner();
+    } else {
+      AdMob.hideBanner();
+    }
+
+    // La fonction de nettoyage garantit que la bannière est cachée si on quitte la page
+    return () => {
+        AdMob.hideBanner();
+    };
+  }, [pathname]);
+
   // Gère l'état de l'utilisateur et sa photo de profil
   useEffect(() => {
     const unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
@@ -85,7 +102,6 @@ const BottomNav = () => {
       const unreadFromOthers = snapshot.docs.some(doc => {
         const data = doc.data();
         const lastMessage = data.lastMessage;
-        // La notification s'affiche si le dernier message n'est pas lu ET qu'il ne vient pas de nous
         return lastMessage && lastMessage.read === false && lastMessage.senderId !== currentUser.uid;
       });
       setHasUnreadMessages(unreadFromOthers);
