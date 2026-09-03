@@ -18,7 +18,11 @@ interface DiscoverClientPageProps {
   currentUserProfile: DocumentData | null;
 }
 
+const LOG_TAG = '[AdMob]';
+
 export default function DiscoverClientPage({ initialProfiles, loading: initialLoading, currentUserProfile: initialUserProfile }: DiscoverClientPageProps) {
+  console.log(LOG_TAG, 'Component rendering or re-rendering.');
+
   const [profiles, setProfiles] = useState<DocumentData[]>([]);
   const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -30,22 +34,26 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
   const { toast } = useToast();
   const pathname = usePathname();
 
-  // --- EFFET POUR GÉRER LA BANNIÈRE ADMOB (AVEC CORRECTION) ---
-  useEffect(() => {
-    // On utilise un timeout pour s'assurer que le pathname a eu le temps de se mettre à jour après la navigation.
-    const timer = setTimeout(() => {
-      const isDiscoverPage = pathname.startsWith('/discover');
-      
-      if (isDiscoverPage) {
-        AdMob.showBanner();
-      } else {
-        AdMob.hideBanner();
-      }
-    }, 100); // Un délai de 100ms est généralement suffisant.
+  console.log(LOG_TAG, `Current pathname is: ${pathname}`);
 
-    // La fonction de nettoyage s'assure que la bannière est cachée si on quitte la page.
+  // --- EFFET POUR GÉRER LA BANNIÈRE ADMOB (AVEC LOGS) ---
+  useEffect(() => {
+    console.log(LOG_TAG, `Banner effect is running for pathname: ${pathname}`);
+
+    const isDiscoverPage = pathname.startsWith('/discover');
+    console.log(LOG_TAG, `isDiscoverPage condition is: ${isDiscoverPage}`);
+
+    if (isDiscoverPage) {
+      console.log(LOG_TAG, 'Calling AdMob.showBanner()');
+      AdMob.showBanner();
+    } else {
+      console.log(LOG_TAG, 'Calling AdMob.hideBanner()');
+      AdMob.hideBanner();
+    }
+
+    // Cleanup function
     return () => {
-      clearTimeout(timer);
+      console.log(LOG_TAG, `Cleanup effect for pathname: ${pathname}. Hiding banner.`);
       AdMob.hideBanner();
     };
   }, [pathname]);
