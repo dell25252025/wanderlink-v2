@@ -6,6 +6,7 @@ import android.app.NotificationManager;
 import android.os.Build;
 import android.util.DisplayMetrics;
 import android.view.Display;
+import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
 
@@ -22,9 +23,12 @@ import com.google.android.gms.ads.MobileAds;
 public class MainActivity extends BridgeActivity {
 
     private AdView adView;
+    private boolean isBannerRequestedVisible = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Enregistrement du plugin local AVANT super.onCreate()
+        registerPlugin(AdMobPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Initialisation du SDK Google Mobile Ads
@@ -46,9 +50,13 @@ public class MainActivity extends BridgeActivity {
         adParams.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL;
         container.addView(adView, adParams);
 
-        // Chargement de la bannière
+        // État initial : bannière cachée et marge à zéro
+        adView.setVisibility(View.GONE);
+        adjustWebViewMargin(0);
+
+        // Chargement de la bannière en arrière-plan
         loadBanner();
-        
+
         // --- LOGIQUE EXISTANTE PRÉSERVÉE ---
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel("messages", "Messages", NotificationManager.IMPORTANCE_HIGH);
@@ -60,6 +68,26 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    public void showBanner() {
+        runOnUiThread(() -> {
+            isBannerRequestedVisible = true;
+            adView.setVisibility(View.VISIBLE);
+            // Si la pub est déjà chargée, on applique la marge. Sinon, le listener le fera.
+            if (adView.getAdSize() != null) {
+                int adHeight = adView.getAdSize().getHeightInPixels(MainActivity.this);
+                adjustWebViewMargin(adHeight);
+            }
+        });
+    }
+
+    public void hideBanner() {
+        runOnUiThread(() -> {
+            isBannerRequestedVisible = false;
+            adView.setVisibility(View.GONE);
+            adjustWebViewMargin(0);
+        });
+    }
+
     private void loadBanner() {
         AdSize adSize = getAdSize();
         adView.setAdSize(adSize);
@@ -68,13 +96,17 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onAdLoaded() {
                 super.onAdLoaded();
-                int adHeight = adView.getAdSize().getHeightInPixels(MainActivity.this);
-                adjustWebViewMargin(adHeight);
+                // Appliquer la marge uniquement si la bannière est censée être visible
+                if (isBannerRequestedVisible) {
+                    int adHeight = adView.getAdSize().getHeightInPixels(MainActivity.this);
+                    adjustWebViewMargin(adHeight);
+                }
             }
 
             @Override
             public void onAdFailedToLoad(LoadAdError loadAdError) {
                 super.onAdFailedToLoad(loadAdError);
+                // Si la bannière échoue, s'assurer que la marge est à zéro
                 adjustWebViewMargin(0);
             }
         });
@@ -87,8 +119,10 @@ public class MainActivity extends BridgeActivity {
         WebView webView = getBridge().getWebView();
         if (webView != null) {
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) webView.getLayoutParams();
-            params.bottomMargin = margin;
-            webView.setLayoutParams(params);
+            if (params.bottomMargin != margin) {
+                params.bottomMargin = margin;
+                webView.setLayoutParams(params);
+            }
         }
     }
 
@@ -108,7 +142,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onStart() {
         super.onStart();
-        // L'enregistrement du plugin existant est préservé.
+        // L'enregistrement du plugin existant est préservé (commenté).
         // registerPlugin(CallKitPlugin.class);
     }
 

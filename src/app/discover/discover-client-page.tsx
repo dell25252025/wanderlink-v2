@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { usePathname } from 'next/navigation'; // <-- IMPORT AJOUTÉ
 import ProfileCard from '@/components/profile-card';
 import { Loader2, UserX } from 'lucide-react';
 import { DocumentData, collection, doc, onSnapshot, query, where } from 'firebase/firestore';
@@ -9,6 +10,7 @@ import { addFriend, getUsersOnlineStatus } from '@/lib/firebase-actions';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import AdMob from '@/lib/capacitor-plugins/admob'; // <-- IMPORT AJOUTÉ
 
 interface DiscoverClientPageProps {
   initialProfiles: DocumentData[]; // Default profiles from the server
@@ -18,7 +20,7 @@ interface DiscoverClientPageProps {
 
 export default function DiscoverClientPage({ initialProfiles, loading: initialLoading, currentUserProfile: initialUserProfile }: DiscoverClientPageProps) {
   const [profiles, setProfiles] = useState<DocumentData[]>([]);
-  const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({}); // NOUVEL ÉTAT POUR LA PRÉSENCE
+  const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [friends, setFriends] = useState<string[]>([]);
   const [isAddingFriend, setIsAddingFriend] = useState<string | null>(null);
@@ -26,8 +28,25 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
   const [liveCurrentUserProfile, setLiveCurrentUserProfile] = useState<DocumentData | null>(initialUserProfile);
   const [usersWhoBlockedMe, setUsersWhoBlockedMe] = useState<Set<string>>(new Set());
   const { toast } = useToast();
+  const pathname = usePathname(); // <-- HOOK AJOUTÉ
 
-  // ... (les autres useEffect restent inchangés)
+  // --- EFFET POUR GÉRER LA BANNIÈRE ADMOB ---
+  useEffect(() => {
+    const isDiscoverPage = pathname.startsWith('/discover');
+    
+    if (isDiscoverPage) {
+      AdMob.showBanner();
+    } else {
+      AdMob.hideBanner();
+    }
+
+    // La fonction de nettoyage garantit que la bannière est cachée si on quitte la page
+    return () => {
+        AdMob.hideBanner();
+    };
+  }, [pathname]);
+
+  // ... (le reste du fichier reste inchangé)
 
   // Effect to get the current authenticated user
   useEffect(() => {
@@ -148,11 +167,20 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
   });
 
   if (isLoading) {
-    // ... (rendu inchangé)
+      return (
+        <div className="flex justify-center items-center h-screen">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+      );
   }
 
   if (mappedProfiles.length === 0) {
-    // ... (rendu inchangé)
+    return (
+      <div className="text-center py-10">
+        <p className="text-lg font-semibold">Aucun profil trouvé</p>
+        <p className="text-muted-foreground">Ajustez vos critères de recherche pour voir plus de voyageurs.</p>
+      </div>
+    );
   }
 
   return (
