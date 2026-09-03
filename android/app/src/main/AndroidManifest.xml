@@ -31,11 +31,6 @@
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-9129126817397448~1569480928" />
 
-        <!-- Déclaration pour l'API WebView -->
-        <meta-data
-            android:name="com.google.android.gms.ads.INTEGRATION_MANAGER"
-            android:value="webview" />
-
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:name=".MainActivity"
