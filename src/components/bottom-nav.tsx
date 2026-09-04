@@ -187,6 +187,9 @@ const BottomNav = () => {
             <NavItem href="/inbox" icon={MessageSquare} label="Messages" active={areMessagesActive} hasNotification={hasUnreadMessages} />
             <NavItem href="/settings" icon={Settings} label="Paramètres" active={areSettingsActive} />
 
+            {/* B-8 TEMPORARY TEST LINK */}
+            <NavItem href="/ad-test" icon={User} label="Ad Test" active={currentPathname === '/ad-test'} />
+
           </div>
         </nav>
       </div>
