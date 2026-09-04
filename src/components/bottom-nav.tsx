@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -54,52 +53,49 @@ const BottomNav = () => {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
-  const initialPathname = usePathname();
+  const currentPathname = usePathname();
 
-  // --- LOGIQUE DE LA BANNIÈRE ADMOB AVEC CAPACITOR APP LISTENER ---
+  // --- LOGIQUE DE LA BANNIÈRE ADMOB ---
+
+  // EFFET 1: Gère la visibilité de la bannière en fonction de la navigation interne (Next.js).
+  // Dépend de `currentPathname` pour être réactif.
+  useEffect(() => {
+    console.log(LOG_TAG, `Pathname changed to: ${currentPathname}. Evaluating banner visibility.`);
+    if (currentPathname === '/' || currentPathname.startsWith('/discover')) {
+        console.log(LOG_TAG, 'Path is a discover page. Calling AdMob.showBanner()');
+        AdMob.showBanner();
+    } else {
+        console.log(LOG_TAG, 'Path is not a discover page. Calling AdMob.hideBanner()');
+        AdMob.hideBanner();
+    }
+  }, [currentPathname]);
+
+  // EFFET 2: Gère le listener Capacitor pour les deep links externes. Ne s'exécute qu'une fois.
   useEffect(() => {
     const handleBannerForUrl = (url: string) => {
         try {
             const path = new URL(url).pathname;
-            console.log(LOG_TAG, `Handling banner for path: ${path}`);
-            const isDiscoverPage = path.startsWith('/discover');
-
-            if (isDiscoverPage) {
-                console.log(LOG_TAG, 'Condition is true. Calling AdMob.showBanner()');
+            if (path === '/' || path.startsWith('/discover')) {
                 AdMob.showBanner();
             } else {
-                console.log(LOG_TAG, 'Condition is false. Calling AdMob.hideBanner()');
                 AdMob.hideBanner();
             }
         } catch (error) {
-            console.error(LOG_TAG, 'Error handling banner for URL:', url, error);
             AdMob.hideBanner(); // Sécurité : cacher la bannière en cas d'erreur
         }
     };
 
-    // Gérer l'état initial au chargement du composant
-    console.log(LOG_TAG, `Initial path check: ${initialPathname}`);
-    if (initialPathname === '/' || initialPathname.startsWith('/discover')) {
-        console.log(LOG_TAG, 'Initial path is discover. Calling AdMob.showBanner()');
-        AdMob.showBanner();
-    } else {
-        console.log(LOG_TAG, 'Initial path is not discover. Calling AdMob.hideBanner()');
-        AdMob.hideBanner();
-    }
-
-    // Mettre en place l'écouteur pour les changements de route futurs
     const listener = App.addListener('appUrlOpen', (data) => {
       console.log(LOG_TAG, `appUrlOpen event fired with URL: ${data.url}`);
       handleBannerForUrl(data.url);
     });
 
-    // Fonction de nettoyage pour supprimer l'écouteur
     return () => {
       console.log(LOG_TAG, 'Cleaning up App URL listener.');
       listener.remove();
       AdMob.hideBanner(); // Cacher la bannière en quittant
     };
-  }, [initialPathname]); // Exécuter seulement au montage et si le chemin initial change
+  }, []); // Le tableau vide assure que cet effet ne s'exécute qu'une seule fois.
 
   // Gère l'état de l'utilisateur et sa photo de profil
   useEffect(() => {
@@ -142,8 +138,6 @@ const BottomNav = () => {
     return () => unsubscribeChats();
   }, [currentUser]);
 
-  // Utiliser le hook usePathname() pour les états actifs, car c'est son rôle.
-  const currentPathname = usePathname();
   const isDiscoverActive = currentPathname.startsWith('/discover');
   const areMessagesActive = currentPathname.startsWith('/inbox');
   const areSettingsActive = currentPathname.startsWith('/settings');
