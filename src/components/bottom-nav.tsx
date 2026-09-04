@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import AdMob from '@/lib/capacitor-plugins/admob';
+import { App } from '@capacitor/app';
 
 const LOG_TAG = '[AdMob]';
 
@@ -53,27 +54,52 @@ const BottomNav = () => {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
-  const pathname = usePathname();
+  const initialPathname = usePathname();
 
-  // --- LOGIQUE DE LA BANNIÈRE ADMOB SANS DÉPENDANCE --- 
+  // --- LOGIQUE DE LA BANNIÈRE ADMOB AVEC CAPACITOR APP LISTENER ---
   useEffect(() => {
-    console.log(LOG_TAG, `Banner effect is running for pathname: ${pathname}`);
-    const isDiscoverPage = pathname.startsWith('/discover');
-    console.log(LOG_TAG, `isDiscoverPage condition is: ${isDiscoverPage}`);
+    const handleBannerForUrl = (url: string) => {
+        try {
+            const path = new URL(url).pathname;
+            console.log(LOG_TAG, `Handling banner for path: ${path}`);
+            const isDiscoverPage = path.startsWith('/discover');
 
-    if (isDiscoverPage) {
-      console.log(LOG_TAG, 'Calling AdMob.showBanner()');
-      AdMob.showBanner();
+            if (isDiscoverPage) {
+                console.log(LOG_TAG, 'Condition is true. Calling AdMob.showBanner()');
+                AdMob.showBanner();
+            } else {
+                console.log(LOG_TAG, 'Condition is false. Calling AdMob.hideBanner()');
+                AdMob.hideBanner();
+            }
+        } catch (error) {
+            console.error(LOG_TAG, 'Error handling banner for URL:', url, error);
+            AdMob.hideBanner(); // Sécurité : cacher la bannière en cas d'erreur
+        }
+    };
+
+    // Gérer l'état initial au chargement du composant
+    console.log(LOG_TAG, `Initial path check: ${initialPathname}`);
+    if (initialPathname.startsWith('/discover')) {
+        console.log(LOG_TAG, 'Initial path is discover. Calling AdMob.showBanner()');
+        AdMob.showBanner();
     } else {
-      console.log(LOG_TAG, 'Calling AdMob.hideBanner()');
-      AdMob.hideBanner();
+        console.log(LOG_TAG, 'Initial path is not discover. Calling AdMob.hideBanner()');
+        AdMob.hideBanner();
     }
 
+    // Mettre en place l'écouteur pour les changements de route futurs
+    const listener = App.addListener('appUrlOpen', (data) => {
+      console.log(LOG_TAG, `appUrlOpen event fired with URL: ${data.url}`);
+      handleBannerForUrl(data.url);
+    });
+
+    // Fonction de nettoyage pour supprimer l'écouteur
     return () => {
-      console.log(LOG_TAG, `Cleanup effect for pathname: ${pathname}. Hiding banner.`);
-      AdMob.hideBanner();
+      console.log(LOG_TAG, 'Cleaning up App URL listener.');
+      listener.remove();
+      AdMob.hideBanner(); // Cacher la bannière en quittant
     };
-  }); // <-- Tableau de dépendances retiré
+  }, [initialPathname]); // Exécuter seulement au montage et si le chemin initial change
 
   // Gère l'état de l'utilisateur et sa photo de profil
   useEffect(() => {
@@ -116,12 +142,12 @@ const BottomNav = () => {
     return () => unsubscribeChats();
   }, [currentUser]);
 
-  // Définition des états actifs en fonction du chemin
-  const isDiscoverActive = pathname.startsWith('/discover');
-  const isHomeActive = pathname === '/';
-  const areMessagesActive = pathname.startsWith('/inbox');
-  const areSettingsActive = pathname.startsWith('/settings');
-  const areFriendsActive = pathname.startsWith('/friends');
+  // Utiliser le hook usePathname() pour les états actifs, car c'est son rôle.
+  const currentPathname = usePathname();
+  const isDiscoverActive = currentPathname.startsWith('/discover');
+  const areMessagesActive = currentPathname.startsWith('/inbox');
+  const areSettingsActive = currentPathname.startsWith('/settings');
+  const areFriendsActive = currentPathname.startsWith('/friends');
   
   const getProfileContent = () => {
     if (currentUser) {
@@ -139,7 +165,7 @@ const BottomNav = () => {
   };
   
   const profileHref = currentUser ? `/profile?id=${currentUser.uid}` : '/login';
-  const isProfileActive = currentUser ? pathname === '/profile' && new URLSearchParams(window.location.search).get('id') === currentUser.uid : false;
+  const isProfileActive = currentUser ? currentPathname === '/profile' && new URLSearchParams(window.location.search).get('id') === currentUser.uid : false;
 
   return (
     <TooltipProvider>
