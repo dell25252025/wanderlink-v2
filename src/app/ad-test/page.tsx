@@ -1,96 +1,62 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
-declare global {
-  interface Window {
-    googletag?: any;
-  }
-}
+// B-12: Ce diagnostic vérifie à la fois la présence du tag SCRIPT dans le DOM
+// et l\'initialisation de l\'API googletag.
 
 const AdTestPage = () => {
+  const [status, setStatus] = useState('Démarrage du diagnostic...');
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
-    console.log('[B-10] AdTestPage useEffect triggered.');
+    console.log('[B-12 DIAGNOSTIC] Test B-12 démarré.');
 
-    const executeGpt = () => {
-      console.log('[B-10] Attempting to execute GPT commands.');
-      
-      window.googletag = window.googletag || { cmd: [] };
-      const googletag = window.googletag;
+    const performChecks = () => {
+      const scriptElement = document.getElementById('gpt-script-manual');
+      const gptApiReady = (window as any).googletag && (window as any).googletag.apiReady;
 
-      googletag.cmd.push(() => {
-        try {
-          console.log('[B-10] googletag.cmd function is executing.');
-          
-          console.log('[B-10] Defining ad slot...');
-          googletag.defineSlot('/6355419/Travel/Europe', [300, 250], 'div-gpt-ad-1').addService(googletag.pubads());
-          console.log('[B-10] Ad slot defined.');
+      // Log des états
+      console.log(`[B-12 DIAGNOSTIC] Statut - Tag SCRIPT présent: ${!!scriptElement}, API GPT prête: ${!!gptApiReady}`);
 
-          googletag.pubads().enableSingleRequest();
-          googletag.enableServices();
-          console.log('[B-10] Pubads services enabled.');
-
-          googletag.display('div-gpt-ad-1');
-          console.log('[B-10] googletag.display() called for div-gpt-ad-1.');
-
-        } catch (e) {
-          console.error('[B-10] An error occurred within googletag.cmd:', e);
-        }
-      });
+      if (gptApiReady) {
+        setStatus('✅ SUCCÈS : Le tag SCRIPT est présent et l\'API GPT est prête.');
+        console.log('[B-12 DIAGNOSTIC] Le script a été exécuté avec succès.');
+        if (intervalRef.current) clearInterval(intervalRef.current);
+      } else if (scriptElement) {
+        setStatus('⚠️ Le tag SCRIPT est présent dans le DOM, mais l\'API GPT n\'est pas encore prête.');
+      } else {
+        setStatus('❌ Le tag SCRIPT n\'est pas encore présent dans le DOM.');
+      }
     };
 
-    if (window.googletag && window.googletag.apiReady) {
-      console.log('[B-10] GPT API is ready on initial load.');
-      executeGpt();
-    } else {
-      console.log('[B-10] GPT API not ready, will check again.');
-      const interval = setInterval(() => {
-        if (window.googletag && window.googletag.apiReady) {
-          console.log('[B-10] GPT API became ready after polling.');
-          clearInterval(interval);
-          executeGpt();
-        } else {
-          console.log('[B-10] Polling... GPT not ready yet.');
-        }
-      }, 100);
+    intervalRef.current = setInterval(performChecks, 1000); // Vérification chaque seconde
 
-      const timeout = setTimeout(() => {
-        clearInterval(interval);
-        console.error('[B-10] Timed out waiting for GPT API to become ready.');
-      }, 5000);
-
-      return () => {
-        clearInterval(interval);
-        clearTimeout(timeout);
-        if (window.googletag && window.googletag.cmd) {
-            window.googletag.cmd.push(() => {
-                console.log('[B-10] Cleaning up ad slots on unmount.');
-                window.googletag.destroySlots();
-            });
+    const timeoutId = setTimeout(() => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        const scriptElement = document.getElementById('gpt-script-manual');
+        const gptApiReady = (window as any).googletag && (window as any).googletag.apiReady;
+        if (!gptApiReady) {
+            const finalState = `État final - Tag SCRIPT présent: ${!!scriptElement}, API GPT prête: ${!!gptApiReady}`;
+            console.error(`[B-12 DIAGNOSTIC] Timeout après 15 secondes. ${finalState}`);
+            setStatus(`❌ ÉCHEC : Timeout. ${finalState}`);
         }
-      };
-    }
+      }
+    }, 15000);
 
     return () => {
-        if (window.googletag && window.googletag.cmd) {
-            window.googletag.cmd.push(() => {
-                console.log('[B-10] Cleaning up ad slots on unmount.');
-                window.googletag.destroySlots();
-            });
-        }
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      clearTimeout(timeoutId);
     };
   }, []);
 
   return (
-    <div style={{ padding: '20px', textAlign: 'center' }}>
-      <h1>B-10: GPT Inline Ad POC</h1>
-      <p>This page attempts to load a 300x250 web ad from Google Ad Manager using a test ad unit.</p>
-      
-      <div id="div-gpt-ad-1" style={{ width: '300px', height: '250px', margin: '20px auto', border: '1px solid black' }}>
-      </div>
-
-      <p>If successful, a test ad will appear inside the bordered box above.</p>
-      <p>The native banner should NOT be visible on this page (as per existing logic).</p>
+    <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
+      <h1>Diagnostic Publicitaire (Test B-12)</h1>
+      <p>Ce test vérifie si le script GPT est injecté dans le DOM et s'il s'exécute correctement.</p>
+      <hr />
+      <p><b>Statut :</b> {status}</p>
     </div>
   );
 };
