@@ -14,10 +14,9 @@ import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import AdMob from '@/lib/capacitor-plugins/admob';
 
-// --- CONSTANTE POUR LES LOGS ---
 const LOG_TAG = '[AdMob]';
 
-// --- COMPOSANT D'UN ÉLÉÉMENT DE NAVIGATION --- //
+// --- COMPOSANT D'UN ÉLÉMENT DE NAVIGATION --- //
 interface NavItemProps {
   href: string;
   icon: React.ElementType;
@@ -56,7 +55,7 @@ const BottomNav = () => {
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const pathname = usePathname();
 
-  // --- LOGIQUE DE LA BANNIÈRE ADMOB AVEC LOGS ---
+  // --- LOGIQUE DE LA BANNIÈRE ADMOB SANS DÉPENDANCE --- 
   useEffect(() => {
     console.log(LOG_TAG, `Banner effect is running for pathname: ${pathname}`);
     const isDiscoverPage = pathname.startsWith('/discover');
@@ -74,7 +73,7 @@ const BottomNav = () => {
       console.log(LOG_TAG, `Cleanup effect for pathname: ${pathname}. Hiding banner.`);
       AdMob.hideBanner();
     };
-  }, [pathname]);
+  }); // <-- Tableau de dépendances retiré
 
   // Gère l'état de l'utilisateur et sa photo de profil
   useEffect(() => {
