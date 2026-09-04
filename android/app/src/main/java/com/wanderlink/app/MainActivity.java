@@ -43,6 +43,11 @@ public class MainActivity extends BridgeActivity {
             Log.d(ADMOB_TAG, "MobileAds.initialize() onInitializationComplete.");
         });
 
+        // B-7 Change: Register the WebView to enable communication with the Google Mobile Ads SDK for inline ads.
+        Log.d(ADMOB_TAG, "Registering WebView with Mobile Ads SDK...");
+        MobileAds.registerWebView(this.getBridge().getWebView());
+        Log.d(ADMOB_TAG, "WebView registered.");
+
         Log.d(ADMOB_TAG, "Creating new AdView...");
         adView = new AdView(this);
         adView.setAdUnitId("ca-app-pub-3940256099942544/9214589741"); // ID de test AdMob
