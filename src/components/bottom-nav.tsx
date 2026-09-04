@@ -79,7 +79,7 @@ const BottomNav = () => {
 
     // Gérer l'état initial au chargement du composant
     console.log(LOG_TAG, `Initial path check: ${initialPathname}`);
-    if (initialPathname.startsWith('/discover')) {
+    if (initialPathname === '/' || initialPathname.startsWith('/discover')) {
         console.log(LOG_TAG, 'Initial path is discover. Calling AdMob.showBanner()');
         AdMob.showBanner();
     } else {
