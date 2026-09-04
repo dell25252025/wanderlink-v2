@@ -11,6 +11,7 @@ import android.view.Display;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
+import android.webkit.CookieManager;
 
 import androidx.coordinatorlayout.widget.CoordinatorLayout;
 
@@ -49,6 +50,14 @@ public class MainActivity extends BridgeActivity {
         Log.d(ADMOB_TAG, "Ad Unit ID set.");
 
         WebView webView = getBridge().getWebView();
+
+        // --- DEBUT DE LA MODIFICATION STRICTE (Test B-1) ---
+        if (webView != null) {
+            CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
+            MobileAds.registerWebView(webView);
+        }
+        // --- FIN DE LA MODIFICATION STRICTE ---
+
         CoordinatorLayout container = (CoordinatorLayout) webView.getParent();
 
         CoordinatorLayout.LayoutParams adParams = new CoordinatorLayout.LayoutParams(
