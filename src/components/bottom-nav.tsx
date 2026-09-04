@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { Compass, Users, MessageSquare, User, UserPlus, Settings, TestTube } from 'lucide-react';
+import { Compass, Users, MessageSquare, User, UserPlus, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { auth, db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
@@ -139,9 +139,9 @@ const BottomNav = () => {
   }, [currentUser]);
 
   const isDiscoverActive = currentPathname.startsWith('/discover');
+  const areFriendsActive = currentPathname.startsWith('/friends');
   const areMessagesActive = currentPathname.startsWith('/inbox');
   const areSettingsActive = currentPathname.startsWith('/settings');
-  const isTestActive = currentPathname === '/ad-test'; // B-10: Ajout de la variable pour le test
   
   const getProfileContent = () => {
     if (currentUser) {
@@ -168,9 +168,7 @@ const BottomNav = () => {
           <div className="grid h-full grid-cols-5 items-center justify-around">
             
             <NavItem href="/discover" icon={Compass} label="Rechercher" active={isDiscoverActive} />
-
-            {/* B-10: Remplacement temporaire du lien Amis par le lien de Test */}
-            <NavItem href="/ad-test" icon={TestTube} label="Ad Test" active={isTestActive} />
+            <NavItem href="/friends" icon={Users} label="Amis" active={areFriendsActive} />
 
             {/* Bouton central de profil */}
             <div className="relative flex justify-center items-center h-full">
