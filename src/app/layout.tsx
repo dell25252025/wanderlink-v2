@@ -1,5 +1,6 @@
 
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import { ThemeProvider } from '@/components/theme-provider';
@@ -56,6 +57,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fr" suppressHydrationWarning>
+      <head>
+        {/* B-10: Load Google Publisher Tag library */}
+        <Script
+          id="gpt-script"
+          strategy="beforeInteractive"
+          async
+          src="https://securepubads.g.doubleclick.net/pagead/js/gpt.js"
+        />
+      </head>
       <body className={cn("font-sans antialiased", poppins.variable, playfair.variable, ptsans.variable)}>
         <script
           dangerouslySetInnerHTML={{
