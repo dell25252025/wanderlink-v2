@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { Compass, Users, MessageSquare, User, UserPlus, Settings } from 'lucide-react';
+import { Compass, Users, MessageSquare, User, UserPlus, Settings, TestTube } from 'lucide-react';
 import Link from 'next/link';
 import { auth, db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
@@ -141,7 +141,7 @@ const BottomNav = () => {
   const isDiscoverActive = currentPathname.startsWith('/discover');
   const areMessagesActive = currentPathname.startsWith('/inbox');
   const areSettingsActive = currentPathname.startsWith('/settings');
-  const areFriendsActive = currentPathname.startsWith('/friends');
+  const isTestActive = currentPathname === '/ad-test'; // B-10: Ajout de la variable pour le test
   
   const getProfileContent = () => {
     if (currentUser) {
@@ -168,7 +168,9 @@ const BottomNav = () => {
           <div className="grid h-full grid-cols-5 items-center justify-around">
             
             <NavItem href="/discover" icon={Compass} label="Rechercher" active={isDiscoverActive} />
-            <NavItem href="/friends" icon={Users} label="Amis" active={areFriendsActive} />
+
+            {/* B-10: Remplacement temporaire du lien Amis par le lien de Test */}
+            <NavItem href="/ad-test" icon={TestTube} label="Ad Test" active={isTestActive} />
 
             {/* Bouton central de profil */}
             <div className="relative flex justify-center items-center h-full">
@@ -186,9 +188,6 @@ const BottomNav = () => {
 
             <NavItem href="/inbox" icon={MessageSquare} label="Messages" active={areMessagesActive} hasNotification={hasUnreadMessages} />
             <NavItem href="/settings" icon={Settings} label="Paramètres" active={areSettingsActive} />
-
-            {/* B-8 TEMPORARY TEST LINK */}
-            <NavItem href="/ad-test" icon={User} label="Ad Test" active={currentPathname === '/ad-test'} />
 
           </div>
         </nav>
