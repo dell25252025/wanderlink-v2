@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react'; // Importez Fragment
 import ProfileCard from '@/components/profile-card';
 import { Loader2, UserX } from 'lucide-react';
 import { DocumentData, collection, doc, onSnapshot, query, where } from 'firebase/firestore';
@@ -9,6 +9,7 @@ import { addFriend, getUsersOnlineStatus } from '@/lib/firebase-actions';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import GptAdSlot from '@/components/gpt-ad-slot'; // Importez le nouveau composant publicitaire
 
 interface DiscoverClientPageProps {
   initialProfiles: DocumentData[]; // Default profiles from the server
@@ -26,6 +27,8 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
   const [liveCurrentUserProfile, setLiveCurrentUserProfile] = useState<DocumentData | null>(initialUserProfile);
   const [usersWhoBlockedMe, setUsersWhoBlockedMe] = useState<Set<string>>(new Set());
   const { toast } = useToast();
+
+  // ... (tous les useEffect restent inchangés) ...
 
   // Effect to get the current authenticated user
   useEffect(() => {
@@ -160,15 +163,18 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4">
-      {mappedProfiles.map((profile) => (
-        <ProfileCard
-          key={profile.id}
-          profile={profile}
-          isFriend={friends.includes(profile.id)}
-          onAddFriend={handleAddFriend}
-          currentUserId={currentUser?.uid || null}
-          isAddingFriend={isAddingFriend === profile.id}
-        />
+      {mappedProfiles.map((profile, index) => (
+        <Fragment key={profile.id}>  {/* Utilisez Fragment pour éviter les divs inutiles */}
+          <ProfileCard
+            profile={profile}
+            isFriend={friends.includes(profile.id)}
+            onAddFriend={handleAddFriend}
+            currentUserId={currentUser?.uid || null}
+            isAddingFriend={isAddingFriend === profile.id}
+          />
+          {/* POC : Insérer un slot publicitaire après le 4ème profil (index 3) */}
+          {index === 3 && <GptAdSlot />}
+        </Fragment>
       ))}
     </div>
   );
