@@ -12,9 +12,12 @@ import { getUserProfile } from '@/lib/firebase-actions';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
-import AdMob from '@/lib/capacitor-plugins/admob'; // <<< IMPORT ADMOB AJOUTÉ
+import AdMob from '@/lib/capacitor-plugins/admob';
 
-// --- COMPOSANT D'UN ÉLÉMENT DE NAVIGATION --- //
+// --- CONSTANTE POUR LES LOGS ---
+const LOG_TAG = '[AdMob]';
+
+// --- COMPOSANT D'UN ÉLÉÉMENT DE NAVIGATION --- //
 interface NavItemProps {
   href: string;
   icon: React.ElementType;
@@ -53,19 +56,23 @@ const BottomNav = () => {
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const pathname = usePathname();
 
-  // <<< LOGIQUE DE LA BANNIÈRE ADMOB AJOUTÉE ICI >>>
+  // --- LOGIQUE DE LA BANNIÈRE ADMOB AVEC LOGS ---
   useEffect(() => {
+    console.log(LOG_TAG, `Banner effect is running for pathname: ${pathname}`);
     const isDiscoverPage = pathname.startsWith('/discover');
-    
+    console.log(LOG_TAG, `isDiscoverPage condition is: ${isDiscoverPage}`);
+
     if (isDiscoverPage) {
+      console.log(LOG_TAG, 'Calling AdMob.showBanner()');
       AdMob.showBanner();
     } else {
+      console.log(LOG_TAG, 'Calling AdMob.hideBanner()');
       AdMob.hideBanner();
     }
 
-    // La fonction de nettoyage garantit que la bannière est cachée si on quitte la page
     return () => {
-        AdMob.hideBanner();
+      console.log(LOG_TAG, `Cleanup effect for pathname: ${pathname}. Hiding banner.`);
+      AdMob.hideBanner();
     };
   }, [pathname]);
 
