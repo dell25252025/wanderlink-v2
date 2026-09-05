@@ -16,7 +16,6 @@ import OnboardingOverlay from '@/components/OnboardingOverlay';
 import NotificationHandler from '@/components/notification-handler';
 import { NavigationProvider } from '@/context/navigation-context';
 import NavigationExecutor from '@/components/navigation-executor';
-import GptLoader from '@/components/gpt-loader'; // Importer le nouveau composant
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -57,8 +56,6 @@ export default function RootLayout({
   return (
     <html lang="fr" suppressHydrationWarning>
       <head>
-        {/* B-10: Load Google Publisher Tag library via a Client Component */}
-        <GptLoader />
       </head>
       <body className={cn("font-sans antialiased", poppins.variable, playfair.variable, ptsans.variable)}>
         <script

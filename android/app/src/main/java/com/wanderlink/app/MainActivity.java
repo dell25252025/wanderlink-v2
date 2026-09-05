@@ -176,7 +176,6 @@ public class MainActivity extends BridgeActivity {
     public void onStart() {
         super.onStart();
         // L'enregistrement du plugin existant est préservé (commenté).
-        // registerPlugin(CallKitPlugin.class);
     }
 
     @Override

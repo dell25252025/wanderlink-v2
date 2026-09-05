@@ -9,7 +9,6 @@ import { addFriend, getUsersOnlineStatus } from '@/lib/firebase-actions';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import GptAdSlot from '@/components/gpt-ad-slot'; // Importez le nouveau composant publicitaire
 
 interface DiscoverClientPageProps {
   initialProfiles: DocumentData[]; // Default profiles from the server
@@ -172,8 +171,6 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
             currentUserId={currentUser?.uid || null}
             isAddingFriend={isAddingFriend === profile.id}
           />
-          {/* POC : Insérer un slot publicitaire après le 4ème profil (index 3) */}
-          {index === 3 && <GptAdSlot />}
         </Fragment>
       ))}
     </div>
