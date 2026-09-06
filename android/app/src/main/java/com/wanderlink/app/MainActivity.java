@@ -89,10 +89,9 @@ public class MainActivity extends BridgeActivity {
             adView.setVisibility(View.VISIBLE);
 
             if (isAdLoaded) {
-                Log.d(ADMOB_TAG, "Ad is already loaded. Adjusting margin and notifying WebView.");
+                Log.d(ADMOB_TAG, "Ad is already loaded. Adjusting margin.");
                 int heightInPixels = adView.getAdSize().getHeightInPixels(MainActivity.this);
                 adjustWebViewMargin(heightInPixels);
-                notifyWebViewOfBannerHeight(heightInPixels);
             } else {
                 Log.d(ADMOB_TAG, "Ad is not loaded yet. Margin will be adjusted in onAdLoaded if successful.");
             }
@@ -106,7 +105,6 @@ public class MainActivity extends BridgeActivity {
             isBannerRequestedVisible = false;
             adView.setVisibility(View.GONE);
             adjustWebViewMargin(0);
-            notifyWebViewOfBannerHeight(0);
             Log.d(ADMOB_TAG, "<- hideBanner() finished.");
         });
     }
@@ -125,10 +123,9 @@ public class MainActivity extends BridgeActivity {
                 isAdLoaded = true;
                 Log.d(ADMOB_TAG, "SUCCESS: onAdLoaded() fired. Ad is now ready to be shown.");
                 if (isBannerRequestedVisible) {
-                    Log.d(ADMOB_TAG, "Banner was requested to be visible, adjusting margin and notifying WebView.");
+                    Log.d(ADMOB_TAG, "Banner was requested to be visible, adjusting margin.");
                     int heightInPixels = adView.getAdSize().getHeightInPixels(MainActivity.this);
                     adjustWebViewMargin(heightInPixels);
-                    notifyWebViewOfBannerHeight(heightInPixels);
                 }
             }
 
@@ -139,7 +136,6 @@ public class MainActivity extends BridgeActivity {
                 // Log détaillé de l'erreur
                 Log.e(ADMOB_TAG, "ERROR: onAdFailedToLoad. Code: " + loadAdError.getCode() + ", Message: " + loadAdError.getMessage() + ", Domain: " + loadAdError.getDomain());
                 adjustWebViewMargin(0);
-                notifyWebViewOfBannerHeight(0);
             }
         });
 
@@ -157,32 +153,9 @@ public class MainActivity extends BridgeActivity {
             if (params.bottomMargin != margin) {
                 params.bottomMargin = margin;
                 webView.setLayoutParams(params);
+                webView.requestLayout();
                 Log.d(ADMOB_TAG, "Margin updated.");
             }
-        }
-    }
-
-    /**
-     * Notifie la WebView de la hauteur actuelle de la bannière via un événement JavaScript.
-     * @param heightInPixels La hauteur de la bannière en pixels physiques.
-     */
-    private void notifyWebViewOfBannerHeight(int heightInPixels) {
-        // Convertir les pixels physiques en pixels indépendants de la densité (CSS pixels)
-        DisplayMetrics metrics = getResources().getDisplayMetrics();
-        float density = metrics.density;
-        int heightInCssPx = (int) (heightInPixels / density);
-
-        Log.d(ADMOB_TAG, "Notifying WebView of banner height. Physical px: " + heightInPixels + ", CSS px: " + heightInCssPx);
-
-        final WebView webView = getBridge().getWebView();
-        if (webView != null) {
-            String script = String.format(
-                java.util.Locale.US,
-                "window.dispatchEvent(new CustomEvent('bannerHeightChange', { detail: { bannerHeight: %d } }));",
-                heightInCssPx
-            );
-            // L'évaluation doit se faire sur le thread UI, ce qui est déjà le cas pour les méthodes appelantes.
-            webView.evaluateJavascript(script, null);
         }
     }
 
