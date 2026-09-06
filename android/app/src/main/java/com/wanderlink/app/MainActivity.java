@@ -182,7 +182,7 @@ public class MainActivity extends BridgeActivity {
                 heightInCssPx
             );
             // L'évaluation doit se faire sur le thread UI, ce qui est déjà le cas pour les méthodes appelantes.
-            webView.evaluateJavascript(script, null);
+            // webView.evaluateJavascript(script, null); // Neutralisé pour le test d'isolation.
         }
     }
 
