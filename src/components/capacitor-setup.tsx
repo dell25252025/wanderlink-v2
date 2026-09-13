@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { SplashScreen } from '@capacitor/splash-screen';
+import { AdMob } from '@capacitor-community/admob';
 
 const CapacitorSetup = () => {
   const router = useRouter();
@@ -21,6 +22,16 @@ const CapacitorSetup = () => {
 
       // Masquer le splash screen une fois l'app chargée
       SplashScreen.hide();
+
+      // Initialisation d'AdMob
+      const initializeAdMob = async () => {
+        try {
+          await AdMob.initialize({});
+        } catch (error) {
+          console.error("AdMob initialization error:", error);
+        }
+      };
+      initializeAdMob();
     }
 
     // --- Gestion de la redirection au clic sur une notification ---
