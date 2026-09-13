@@ -1,7 +1,6 @@
-
 'use client';
 
-import { CSSProperties, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Compass, Users, MessageSquare, User, UserPlus, Settings } from 'lucide-react';
 import Link from 'next/link';
@@ -123,8 +122,8 @@ const BottomNav = () => {
   return (
     <TooltipProvider>
       <div 
-        style={{ '--banner-height': `${bannerHeight}px` } as CSSProperties}
-        className="fixed bottom-[calc(0.5rem+var(--banner-height))] left-1/2 z-20 w-[calc(100%-1rem)] max-w-sm -translate-x-1/2 transition-all duration-300 ease-in-out md:bottom-[calc(1rem+var(--banner-height))]"
+        style={{ transform: `translate(-50%, -${bannerHeight}px)` }}
+        className="fixed bottom-2 left-1/2 z-20 w-[calc(100%-1rem)] max-w-sm transition-transform duration-300 ease-in-out md:bottom-4"
       >
         <nav className="h-14 w-full rounded-full border bg-background/90 p-1 shadow-lg backdrop-blur-md">
           <div className="grid h-full grid-cols-5 items-center justify-around">

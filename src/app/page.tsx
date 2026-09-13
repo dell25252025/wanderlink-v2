@@ -12,8 +12,10 @@ import { useToast } from '@/hooks/use-toast';
 import type { DocumentData } from 'firebase/firestore';
 import DiscoverClientPage from '@/app/discover/discover-client-page';
 import AdBanner from '@/components/ad-banner';
+import { useAdMob } from '@/context/admob-context';
 
 function AuthenticatedHomePage({ user }: { user: User }) {
+  const { bannerHeight } = useAdMob();
   const { toast } = useToast();
   const [currentUserProfile, setCurrentUserProfile] = useState<DocumentData | null>(null);
   const [initialProfiles, setInitialProfiles] = useState<DocumentData[]>([]);
@@ -41,7 +43,10 @@ function AuthenticatedHomePage({ user }: { user: User }) {
     <div className="flex min-h-screen w-full flex-col">
       <WanderlinkHeader />
       <AdBanner />
-      <main className="flex-1 pb-24 pt-10 md:pt-12">
+      <main 
+        className="flex-1 pt-10 md:pt-12"
+        style={{ paddingBottom: `calc(6rem + ${bannerHeight}px)` }}
+      >
         <div className="container mx-auto max-w-7xl px-2">
           <DiscoverClientPage 
             initialProfiles={initialProfiles} 
