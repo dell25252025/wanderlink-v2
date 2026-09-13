@@ -12,7 +12,6 @@ import { getUserProfile } from '@/lib/firebase-actions';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
-import AdMob from '@/lib/capacitor-plugins/admob'; // <<< IMPORT ADMOB AJOUTÉ
 
 // --- COMPOSANT D'UN ÉLÉMENT DE NAVIGATION --- //
 interface NavItemProps {
@@ -52,22 +51,6 @@ const BottomNav = () => {
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const pathname = usePathname();
-
-  // <<< LOGIQUE DE LA BANNIÈRE ADMOB AJOUTÉE ICI >>>
-  useEffect(() => {
-    const isDiscoverPage = pathname.startsWith('/discover');
-    
-    if (isDiscoverPage) {
-      AdMob.showBanner();
-    } else {
-      AdMob.hideBanner();
-    }
-
-    // La fonction de nettoyage garantit que la bannière est cachée si on quitte la page
-    return () => {
-        AdMob.hideBanner();
-    };
-  }, [pathname]);
 
   // Gère l'état de l'utilisateur et sa photo de profil
   useEffect(() => {
