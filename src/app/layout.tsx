@@ -16,6 +16,7 @@ import OnboardingOverlay from '@/components/OnboardingOverlay';
 import NotificationHandler from '@/components/notification-handler';
 import { NavigationProvider } from '@/context/navigation-context';
 import NavigationExecutor from '@/components/navigation-executor';
+import { AdMobProvider } from '@/context/admob-context';
 
 
 const poppins = Poppins({
@@ -65,30 +66,32 @@ export default function RootLayout({
             `,
           }}
         />
-        <AuthProvider>
-          <OnboardingProvider>
-            <NotificationProvider>
-              <NavigationProvider>
-                <ThemeProvider
-                  attribute="class"
-                  defaultTheme="system"
-                  enableSystem
-                  disableTransitionOnChange
-                >
-                  <CapacitorSetup />
-                  <AuthHandler />
-                  <BackButtonHandler />
-                  <CallManager />
-                  <OnboardingOverlay />
-                  <NotificationHandler />
-                  <NavigationExecutor />
-                  <main>{children}</main>
-                  <Toaster />
-                </ThemeProvider>
-              </NavigationProvider>
-            </NotificationProvider>
-          </OnboardingProvider>
-        </AuthProvider>
+        <AdMobProvider>
+          <AuthProvider>
+            <OnboardingProvider>
+              <NotificationProvider>
+                <NavigationProvider>
+                  <ThemeProvider
+                    attribute="class"
+                    defaultTheme="system"
+                    enableSystem
+                    disableTransitionOnChange
+                  >
+                    <CapacitorSetup />
+                    <AuthHandler />
+                    <BackButtonHandler />
+                    <CallManager />
+                    <OnboardingOverlay />
+                    <NotificationHandler />
+                    <NavigationExecutor />
+                    <main>{children}</main>
+                    <Toaster />
+                  </ThemeProvider>
+                </NavigationProvider>
+              </NotificationProvider>
+            </OnboardingProvider>
+          </AuthProvider>
+        </AdMobProvider>
       </body>
     </html>
   )

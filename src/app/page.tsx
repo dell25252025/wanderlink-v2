@@ -11,6 +11,7 @@ import WanderlinkHeader from '@/components/wanderlink-header';
 import { useToast } from '@/hooks/use-toast';
 import type { DocumentData } from 'firebase/firestore';
 import DiscoverClientPage from '@/app/discover/discover-client-page';
+import AdBanner from '@/components/ad-banner';
 
 function AuthenticatedHomePage({ user }: { user: User }) {
   const { toast } = useToast();
@@ -39,6 +40,7 @@ function AuthenticatedHomePage({ user }: { user: User }) {
   return (
     <div className="flex min-h-screen w-full flex-col">
       <WanderlinkHeader />
+      <AdBanner />
       <main className="flex-1 pb-24 pt-10 md:pt-12">
         <div className="container mx-auto max-w-7xl px-2">
           <DiscoverClientPage 

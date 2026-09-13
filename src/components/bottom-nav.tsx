@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { CSSProperties, useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Compass, Users, MessageSquare, User, UserPlus, Settings } from 'lucide-react';
 import Link from 'next/link';
@@ -12,6 +12,7 @@ import { getUserProfile } from '@/lib/firebase-actions';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { useAdMob } from '@/context/admob-context';
 
 // --- COMPOSANT D'UN ÉLÉMENT DE NAVIGATION --- //
 interface NavItemProps {
@@ -47,6 +48,7 @@ const NavItem = ({ href, icon: Icon, label, active, hasNotification }: NavItemPr
 
 // --- COMPOSANT PRINCIPAL DE LA BARRE DE NAVIGATION --- //
 const BottomNav = () => {
+  const { bannerHeight } = useAdMob();
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
@@ -120,7 +122,10 @@ const BottomNav = () => {
 
   return (
     <TooltipProvider>
-      <div className="fixed bottom-2 left-1/2 z-20 w-[calc(100%-1rem)] max-w-sm -translate-x-1/2 md:bottom-4">
+      <div 
+        style={{ '--banner-height': `${bannerHeight}px` } as CSSProperties}
+        className="fixed bottom-[calc(0.5rem+var(--banner-height))] left-1/2 z-20 w-[calc(100%-1rem)] max-w-sm -translate-x-1/2 transition-all duration-300 ease-in-out md:bottom-[calc(1rem+var(--banner-height))]"
+      >
         <nav className="h-14 w-full rounded-full border bg-background/90 p-1 shadow-lg backdrop-blur-md">
           <div className="grid h-full grid-cols-5 items-center justify-around">
             
