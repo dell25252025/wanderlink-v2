@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   appName: 'WanderLink',
   webDir: 'out',
   server: {
-    url: 'https://wanderlink-v2--wanderlink-c1a35.us-east4.hosted.app/',
+    url: 'http://192.168.100.26:3000',
     cleartext: true
   },
   plugins: {
