@@ -1081,7 +1081,11 @@ export default function ProfileClientPage() {
                                     <Languages className="h-4 w-4 md:h-4 md:w-4 text-primary mt-0.5" />
                                     <div>
                                         <p className="font-semibold text-xs md:text-xs">Langues parlées</p>
-                                        <p className="text-muted-foreground text-sm md:text-sm">{profile.languages.join(', ')}</p>
+                                        <p className="text-muted-foreground text-sm md:text-sm">
+                                          {profile.languages && Array.isArray(profile.languages) && profile.languages.length > 0 
+                                            ? profile.languages.join(', ') 
+                                            : 'Non spécifié'}
+                                        </p>
                                     </div>
                                 </div>
                                 {profile.height && (
