@@ -11,7 +11,6 @@ import WanderlinkHeader from '@/components/wanderlink-header';
 import { useToast } from '@/hooks/use-toast';
 import type { DocumentData } from 'firebase/firestore';
 import DiscoverClientPage from '@/app/discover/discover-client-page';
-import AdBanner from '@/components/ad-banner';
 import { useAdMob } from '@/context/admob-context';
 
 function AuthenticatedHomePage({ user }: { user: User }) {
@@ -21,8 +20,6 @@ function AuthenticatedHomePage({ user }: { user: User }) {
   const [initialProfiles, setInitialProfiles] = useState<DocumentData[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
 
-  // SOLUTION: Ce hook ne doit s'exécuter qu'UNE SEULE FOIS au montage.
-  // Les dépendances ont été retirées pour empêcher les ré-exécutions.
   useEffect(() => {
     getUserProfile(user.uid).then(setCurrentUserProfile);
     
@@ -42,7 +39,6 @@ function AuthenticatedHomePage({ user }: { user: User }) {
   return (
     <div className="flex min-h-screen w-full flex-col">
       <WanderlinkHeader />
-      <AdBanner />
       <main 
         className="flex-1 pt-10 md:pt-12"
         style={{ paddingBottom: `calc(6rem + ${bannerHeight}px)` }}

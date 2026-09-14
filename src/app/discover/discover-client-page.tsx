@@ -9,6 +9,7 @@ import { addFriend, getUsersOnlineStatus } from '@/lib/firebase-actions';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import AdBanner from '@/components/ad-banner';
 
 interface DiscoverClientPageProps {
   initialProfiles: DocumentData[]; // Default profiles from the server
@@ -141,6 +142,8 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
       };
   });
 
+  const shouldShowAd = mappedProfiles.length >= 4;
+
   if (isLoading) {
       return (
         <div className="flex justify-center items-center h-screen">
@@ -159,17 +162,20 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
   }
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4">
-      {mappedProfiles.map((profile) => (
-        <ProfileCard
-          key={profile.id}
-          profile={profile}
-          isFriend={friends.includes(profile.id)}
-          onAddFriend={handleAddFriend}
-          currentUserId={currentUser?.uid || null}
-          isAddingFriend={isAddingFriend === profile.id}
-        />
-      ))}
-    </div>
+    <>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4">
+        {mappedProfiles.map((profile) => (
+          <ProfileCard
+            key={profile.id}
+            profile={profile}
+            isFriend={friends.includes(profile.id)}
+            onAddFriend={handleAddFriend}
+            currentUserId={currentUser?.uid || null}
+            isAddingFriend={isAddingFriend === profile.id}
+          />
+        ))}
+      </div>
+      {shouldShowAd && <AdBanner />}
+    </>
   );
 }
