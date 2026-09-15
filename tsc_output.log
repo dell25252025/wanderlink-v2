@@ -1,0 +1,25 @@
+Users/compustore/i-f-p-d-q/PROJECT_ID_EC39C0CB/functions/src/index.ts(198,81): error TS1005: ',' expected.
+Users/compustore/i-f-p-d-q/PROJECT_ID_EC39C0CB/functions/src/index.ts(198,83): error TS1005: ',' expected.
+Users/compustore/i-f-p-d-q/PROJECT_ID_EC39C0CB/functions/src/index.ts(198,85): error TS1002: Unterminated string literal.
+Users/compustore/i-f-p-d-q/PROJECT_ID_EC39C0CB/functions/src/index.ts(239,69): error TS1005: ',' expected.
+Users/compustore/i-f-p-d-q/PROJECT_ID_EC39C0CB/functions/src/index.ts(239,71): error TS1005: ',' expected.
+Users/compustore/i-f-p-d-q/PROJECT_ID_EC39C0CB/functions/src/index.ts(239,73): error TS1002: Unterminated string literal.
+Users/compustore/i-f-p-d-q/PROJECT_ID_EC39C0CB/functions/src/index.ts(276,74): error TS1005: ',' expected.
+Users/compustore/i-f-p-d-q/PROJECT_ID_EC39C0CB/functions/src/index.ts(276,76): error TS1005: ',' expected.
+Users/compustore/i-f-p-d-q/PROJECT_ID_EC39C0CB/functions/src/index.ts(276,78): error TS1002: Unterminated string literal.
+Users/compustore/i-f-p_d_q/PROJECT_ID_EC39C0CB/functions/src/index.ts(198,81): error TS1005: ',' expected.
+Users/compustore/i-f-p_d_q/PROJECT_ID_EC39C0CB/functions/src/index.ts(198,83): error TS1005: ',' expected.
+Users/compustore/i-f-p_d_q/PROJECT_ID_EC39C0CB/functions/src/index.ts(198,85): error TS1002: Unterminated string literal.
+Users/compustore/i-f-p_d_q/PROJECT_ID_EC39C0CB/functions/src/index.ts(239,69): error TS1005: ',' expected.
+Users/compustore/i-f-p_d_q/PROJECT_ID_EC39C0CB/functions/src/index.ts(239,71): error TS1005: ',' expected.
+Users/compustore/i-f-p_d_q/PROJECT_ID_EC39C0CB/functions/src/index.ts(239,73): error TS1002: Unterminated string literal.
+Users/compustore/i-f-p_d_q/PROJECT_ID_EC39C0CB/functions/src/index.ts(276,74): error TS1005: ',' expected.
+Users/compustore/i-f-p_d_q/PROJECT_ID_EC39C0CB/functions/src/index.ts(276,76): error TS1005: ',' expected.
+Users/compustore/i-f-p_d_q/PROJECT_ID_EC39C0CB/functions/src/index.ts(276,78): error TS1002: Unterminated string literal.
+src/ai/genkit.ts(85,35): error TS1005: ',' expected.
+src/ai/genkit.ts(85,41): error TS1005: ',' expected.
+src/ai/genkit.ts(85,44): error TS1005: ',' expected.
+src/ai/genkit.ts(85,56): error TS1005: ',' expected.
+src/ai/genkit.ts(85,70): error TS1002: Unterminated string literal.
+src/ai/genkit.ts(88,9): error TS1005: ',' expected.
+src/ai/genkit.ts(97,11): error TS1005: ')' expected.

@@ -117,30 +117,31 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
     // ... (logique inchangée)
   };
 
-  const iHaveBlockedIds = new Set(liveCurrentUserProfile?.blockedUsers || []);
-  const allBlockedIds = new Set([...iHaveBlockedIds, ...usersWhoBlockedMe]);
+  const mappedProfiles: UserProfile[] = useMemo(() => {
+    const iHaveBlockedIds = new Set(liveCurrentUserProfile?.blockedUsers || []);
+    const allBlockedIds = new Set([...iHaveBlockedIds, ...usersWhoBlockedMe]);
 
-  const mappedProfiles: UserProfile[] = profiles
-    .filter(p => !allBlockedIds.has(p.uid || p.objectID))
-    .map(p => {
-      const uid = p.uid || p.objectID;
-      return {
-        id: uid,
-        name: p.firstName,
-        age: p.age,
-        gender: p.gender,
-        bio: p.bio,
-        location: p.location || 'N/A',
-        travelStyle: p.travelStyle || 'Tous',
-        dreamDestinations: [p.destination] || ['Toutes'],
-        languagesSpoken: p.languages || [],
-        travelIntention: p.intention || '50/50',
-        verified: p.isVerified ?? false,
-        isVerified: p.isVerified ?? false,
-        isOnline: onlineStatuses[uid] ?? false, // Fusion ici
-        image: p.profilePictures?.[0] || `https://picsum.photos/seed/${uid}/800/1200`
-      };
-  });
+    return profiles
+      .filter(p => !allBlockedIds.has(p.uid || p.objectID))
+      .map(p => {
+        const uid = p.uid || p.objectID;
+        return {
+          id: uid,
+          name: p.firstName,
+          age: p.age,
+          gender: p.gender,
+          bio: p.bio,
+          location: p.location || 'N/A',
+          travelStyle: p.travelStyle || 'Tous',
+          dreamDestinations: [p.destination] || ['Toutes'],
+          languagesSpoken: p.languages || [],
+          travelIntention: p.intention || '50/50',
+          verified: p.isVerified ?? false,
+          isVerified: p.isVerified ?? false,
+          image: p.profilePictures?.[0] || `https://picsum.photos/seed/${uid}/800/1200`
+        };
+      });
+  }, [profiles, liveCurrentUserProfile, usersWhoBlockedMe]);
 
   const shouldShowAd = mappedProfiles.length >= 4;
 
@@ -168,6 +169,7 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
           <ProfileCard
             key={profile.id}
             profile={profile}
+            isOnline={onlineStatuses[profile.id] ?? false}
             isFriend={friends.includes(profile.id)}
             onAddFriend={handleAddFriend}
             currentUserId={currentUser?.uid || null}
