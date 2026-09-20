@@ -15,6 +15,11 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
 
+        
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-9129126817397448~1569480928"/>
+
         <!-- META-DATA POUR GOOGLE AUTH -->
         <meta-data
             android:name="com.codetrixstudio.capacitor.GoogleAuth.Theme"
