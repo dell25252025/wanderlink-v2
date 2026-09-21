@@ -2,32 +2,41 @@
 
 import React, { createContext, useState, useContext, ReactNode, useCallback, useRef, useEffect } from 'react';
 
-const COOLDOWN_MINUTES = 10;
+// --- Ad Timing Configuration ---
+// IMPORTANT: Production values
+const COOLDOWN_MINUTES_PROD = 10;
+const USAGE_TIMER_MINUTES_PROD = 10;
+
+// IMPORTANT: Temporary values for testing in development mode
+const COOLDOWN_SECONDS_TEST = 60; // 1 minute
+const USAGE_TIMER_SECONDS_TEST = 30; // 30 seconds
+
 const SEARCH_THRESHOLD = 3;
-const USAGE_TIMER_MINUTES = 10;
+
+// Determine if we are in development mode
+const IS_DEV_MODE = process.env.NODE_ENV === 'development';
+
+// Select the correct timing values based on the environment
+const USAGE_TIMER_MS = IS_DEV_MODE ? USAGE_TIMER_SECONDS_TEST * 1000 : USAGE_TIMER_MINUTES_PROD * 60 * 1000;
+const COOLDOWN_MS = IS_DEV_MODE ? COOLDOWN_SECONDS_TEST * 1000 : COOLDOWN_MINUTES_PROD * 60 * 1000;
+
 
 // --- Type Definitions ---
-
 interface AdMobFunctions {
   showInterstitial: () => Promise<void>;
   prepareInterstitial: () => Promise<void>;
 }
 
 interface AdContextType {
-  // State & Getters
   searchCount: number;
   isInterstitialReady: boolean;
   isAdShowing: boolean;
   isCooldownActive: () => boolean;
-
-  // State Modifiers
   incrementSearchCount: () => void;
   resetSearchCount: () => void;
   setInterstitialReady: (isReady: boolean) => void;
   setIsAdShowing: (isShowing: boolean) => void;
   updateLastAdShownAt: () => void;
-  
-  // Core Logic
   registerAdMobFunctions: (functions: AdMobFunctions) => void;
   triggerAdShowOnSearch: (currentSearchCount: number) => void;
 }
@@ -35,7 +44,6 @@ interface AdContextType {
 const AdContext = createContext<AdContextType | undefined>(undefined);
 
 // --- Provider Component ---
-
 export const AdProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [searchCount, setSearchCount] = useState(0);
     const [isInterstitialReady, setInterstitialReady] = useState(false);
@@ -61,56 +69,64 @@ export const AdProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
 
     const isCooldownActive = useCallback(() => {
         if (!lastAdShownAt) return false;
-        const minutesSinceLastAd = (Date.now() - lastAdShownAt) / (1000 * 60);
-        return minutesSinceLastAd < COOLDOWN_MINUTES;
+        const timeSinceLastAd = Date.now() - lastAdShownAt;
+        return timeSinceLastAd < COOLDOWN_MS;
     }, [lastAdShownAt]);
 
     const registerAdMobFunctions = useCallback((functions: AdMobFunctions) => {
         adMobFunctions.current = functions;
     }, []);
 
-    // --- UNCHANGED: Search-based Ad Trigger ---
     const triggerAdShowOnSearch = useCallback((currentSearchCount: number) => {
         const isThresholdMet = currentSearchCount > 0 && currentSearchCount % SEARCH_THRESHOLD === 0;
-
         if (isThresholdMet) {
             const canShowAd = isInterstitialReady && !isAdShowing && !isCooldownActive();
             if (canShowAd) {
-                console.log(`[AdContext] Conditions met for search #${currentSearchCount}. Attempting to show interstitial ad.`);
+                console.log(`[AdContext] Ad trigger by SEARCH #${currentSearchCount}. Conditions met. Attempting to show ad.`);
                 adMobFunctions.current?.showInterstitial();
             } else {
-                console.log(`[AdContext] Ad trigger by search #${currentSearchCount} BLOCKED. Ready: ${isInterstitialReady}, Showing: ${isAdShowing}, Cooldown: ${isCooldownActive()}`);
+                console.log(`[AdContext] Ad trigger by SEARCH #${currentSearchCount} BLOCKED. Ready: ${isInterstitialReady}, Showing: ${isAdShowing}, Cooldown: ${isCooldownActive()}`);
             }
         }
     }, [isInterstitialReady, isAdShowing, isCooldownActive]);
 
-    // --- NEW: Independent Usage Timer Logic ---
+    const timerCallback = useRef<() => void>();
+
     const attemptShowAdFromTimer = useCallback(() => {
-        console.log(`[AdContext] ${USAGE_TIMER_MINUTES}-minute usage timer fired. Checking conditions.`);
+        console.log(`[AdContext] Usage timer fired. Checking conditions.`);
         const canShowAd = isInterstitialReady && !isAdShowing && !isCooldownActive();
 
         if (canShowAd) {
             console.log(`[AdContext] Ad triggered by USAGE TIMER. Conditions met. Attempting to show ad.`);
-            if (adMobFunctions.current?.showInterstitial) {
-                adMobFunctions.current.showInterstitial();
-            } else {
-                console.warn("[AdContext] Usage Timer: Wanted to show ad, but showInterstitial function is not registered.");
-            }
+            adMobFunctions.current?.showInterstitial();
         } else {
-            console.log(`[AdContext] Ad triggered by USAGE TIMER but conditions not met. Will try again on next interval. Ready: ${isInterstitialReady}, Showing: ${isAdShowing}, Cooldown: ${isCooldownActive()}`);
+            console.log(`[AdContext] Ad triggered by USAGE TIMER but conditions not met. Ready: ${isInterstitialReady}, Showing: ${isAdShowing}, Cooldown: ${isCooldownActive()}`);
         }
     }, [isInterstitialReady, isAdShowing, isCooldownActive]);
 
     useEffect(() => {
-        console.log(`[AdContext] Setting up ${USAGE_TIMER_MINUTES}-minute usage ad interval.`);
-        const usageIntervalId = setInterval(attemptShowAdFromTimer, USAGE_TIMER_MINUTES * 60 * 1000);
+        timerCallback.current = attemptShowAdFromTimer;
+    });
+
+    useEffect(() => {
+        if (IS_DEV_MODE) {
+            console.warn(`[AdContext] App running in DEV mode. Using TEST ad timings: Usage Timer=${USAGE_TIMER_SECONDS_TEST}s, Cooldown=${COOLDOWN_SECONDS_TEST}s`);
+        } else {
+            console.log(`[AdContext] App running in PROD mode. Using standard ad timings.`);
+        }
+
+        const tick = () => {
+            if (timerCallback.current) {
+                timerCallback.current();
+            }
+        };
+        const usageIntervalId = setInterval(tick, USAGE_TIMER_MS);
 
         return () => {
-            console.log(`[AdContext] Cleaning up ${USAGE_TIMER_MINUTES}-minute usage ad interval.`);
+            console.log(`[AdContext] Cleaning up persistent usage ad interval.`);
             clearInterval(usageIntervalId);
         };
-    }, [attemptShowAdFromTimer]);
-    // --- END: New Timer Logic ---
+    }, []);
 
     return (
         <AdContext.Provider value={{
@@ -125,8 +141,6 @@ export const AdProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         </AdContext.Provider>
     );
 };
-
-// --- Hook ---
 
 export const useAd = (): AdContextType => {
     const context = useContext(AdContext);
