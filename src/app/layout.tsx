@@ -17,7 +17,7 @@ import NotificationHandler from '@/components/notification-handler';
 import { NavigationProvider } from '@/context/navigation-context';
 import NavigationExecutor from '@/components/navigation-executor';
 import AdMobSetup from '@/components/admob-setup';
-
+import { AdProvider } from '@/context/ad-context';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -70,23 +70,25 @@ export default function RootLayout({
           <OnboardingProvider>
             <NotificationProvider>
               <NavigationProvider>
-                <ThemeProvider
-                  attribute="class"
-                  defaultTheme="system"
-                  enableSystem
-                  disableTransitionOnChange
-                >
-                  <CapacitorSetup />
-                  <AdMobSetup />
-                  <AuthHandler />
-                  <BackButtonHandler />
-                  <CallManager />
-                  <OnboardingOverlay />
-                  <NotificationHandler />
-                  <NavigationExecutor />
-                  <main>{children}</main>
-                  <Toaster />
-                </ThemeProvider>
+                <AdProvider>
+                  <ThemeProvider
+                    attribute="class"
+                    defaultTheme="system"
+                    enableSystem
+                    disableTransitionOnChange
+                  >
+                    <CapacitorSetup />
+                    <AdMobSetup />
+                    <AuthHandler />
+                    <BackButtonHandler />
+                    <CallManager />
+                    <OnboardingOverlay />
+                    <NotificationHandler />
+                    <NavigationExecutor />
+                    <main>{children}</main>
+                    <Toaster />
+                  </ThemeProvider>
+                </AdProvider>
               </NavigationProvider>
             </NotificationProvider>
           </OnboardingProvider>

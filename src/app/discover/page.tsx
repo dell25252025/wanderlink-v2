@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type algoliasearch from 'algoliasearch/lite';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ import { auth } from '@/lib/firebase';
 import { getUserProfile } from '@/lib/firebase-actions';
 import type { DocumentData } from 'firebase/firestore';
 import { Loader2, Search } from 'lucide-react';
+import { useAd } from '@/context/ad-context'; 
 
 declare global {
     interface Window { 
@@ -64,6 +65,7 @@ const FILTERS_STORAGE_KEY = 'discoverFilters';
 
 export default function DiscoverPage() {
     const router = useRouter();
+    const { searchCount, incrementSearchCount, triggerAdShowOnSearch } = useAd();
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [userProfile, setUserProfile] = useState<DocumentData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -89,9 +91,7 @@ export default function DiscoverPage() {
     }, [showMe, ageRange, date, flexibleDates, nearby, country, destination, intention, travelStyle, activities]);
 
     useEffect(() => {
-        // 1. Clear previous search results when entering the filter page.
         localStorage.removeItem('searchResults');
-
         const savedFiltersRaw = localStorage.getItem(FILTERS_STORAGE_KEY);
         if (savedFiltersRaw) {
             try {
@@ -158,7 +158,15 @@ export default function DiscoverPage() {
             console.error('Search aborted. Index or profile not ready yet.');
             return;
         }
-        
+
+        // --- Ad Logic --- 
+        // We calculate the *next* search count to decide if we should show an ad.
+        // This avoids race conditions with React's async state updates.
+        const nextSearchCount = searchCount + 1;
+        incrementSearchCount();
+        triggerAdShowOnSearch(nextSearchCount);
+        // --- End Ad Logic ---
+
         saveFilters();
         setIsSearching(true);
 
@@ -172,7 +180,6 @@ export default function DiscoverPage() {
             if (activities && activities !== 'Toutes') strictFilters.push(`activities:"${activities}"`);
             strictFilters.push(`NOT objectID:${currentUser.uid}`);
 
-            // Add blocked users to the filter
             if (userProfile.blockedUsers && userProfile.blockedUsers.length > 0) {
                 userProfile.blockedUsers.forEach((blockedId: string) => {
                     strictFilters.push(`NOT objectID:${blockedId}`);
@@ -201,7 +208,6 @@ export default function DiscoverPage() {
                 if (showMe) fallbackFiltersList.push(`gender:"${showMe}"`);
                 fallbackFiltersList.push(`NOT objectID:${currentUser.uid}`);
 
-                // Also apply block filter in fallback
                 if (userProfile.blockedUsers && userProfile.blockedUsers.length > 0) {
                     userProfile.blockedUsers.forEach((blockedId: string) => {
                         fallbackFiltersList.push(`NOT objectID:${blockedId}`);
@@ -315,7 +321,7 @@ export default function DiscoverPage() {
                                 <Separator />
                                 <div className="flex items-center justify-between py-1 px-1 text-sm">
                                     <span className='text-muted-foreground'>Activités</span>
-                                    <GenericSelect className={uniformSelectClass} value={activities} onValueChange={setActivities} options={travelActivities} placeholder="Toutes" />
+                                    <GenericSelect className={uniformSelectClass} value={activities} onValue-change={setActivities} options={travelActivities} placeholder="Toutes" />
                                 </div>
                             </div>
                         </div>
