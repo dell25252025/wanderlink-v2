@@ -16,6 +16,7 @@ import OnboardingOverlay from '@/components/OnboardingOverlay';
 import NotificationHandler from '@/components/notification-handler';
 import { NavigationProvider } from '@/context/navigation-context';
 import NavigationExecutor from '@/components/navigation-executor';
+import AdMobSetup from '@/components/admob-setup';
 
 
 const poppins = Poppins({
@@ -76,6 +77,7 @@ export default function RootLayout({
                   disableTransitionOnChange
                 >
                   <CapacitorSetup />
+                  <AdMobSetup />
                   <AuthHandler />
                   <BackButtonHandler />
                   <CallManager />
