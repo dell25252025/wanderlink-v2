@@ -1,9 +1,10 @@
 'use client';
 
-import React, { createContext, useState, useContext, ReactNode, useCallback, useRef } from 'react';
+import React, { createContext, useState, useContext, ReactNode, useCallback, useRef, useEffect } from 'react';
 
 const COOLDOWN_MINUTES = 10;
 const SEARCH_THRESHOLD = 3;
+const USAGE_TIMER_MINUTES = 10;
 
 // --- Type Definitions ---
 
@@ -68,25 +69,48 @@ export const AdProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         adMobFunctions.current = functions;
     }, []);
 
+    // --- UNCHANGED: Search-based Ad Trigger ---
     const triggerAdShowOnSearch = useCallback((currentSearchCount: number) => {
-        // MODIFIED: Trigger on multiples of SEARCH_THRESHOLD (3, 6, 9...)
-        const canShowAd = (currentSearchCount > 0 && currentSearchCount % SEARCH_THRESHOLD === 0) &&
-                          isInterstitialReady &&
-                          !isAdShowing &&
-                          !isCooldownActive();
+        const isThresholdMet = currentSearchCount > 0 && currentSearchCount % SEARCH_THRESHOLD === 0;
 
-        if (canShowAd) {
-            console.log(`[AdContext] Conditions met for search #${currentSearchCount}. Attempting to show interstitial ad.`);
-            if (adMobFunctions.current?.showInterstitial) {
-                // Fire-and-forget, the search flow does not wait for this.
-                adMobFunctions.current.showInterstitial();
+        if (isThresholdMet) {
+            const canShowAd = isInterstitialReady && !isAdShowing && !isCooldownActive();
+            if (canShowAd) {
+                console.log(`[AdContext] Conditions met for search #${currentSearchCount}. Attempting to show interstitial ad.`);
+                adMobFunctions.current?.showInterstitial();
             } else {
-                console.warn("[AdContext] Wanted to show ad, but showInterstitial function is not registered.");
+                console.log(`[AdContext] Ad trigger by search #${currentSearchCount} BLOCKED. Ready: ${isInterstitialReady}, Showing: ${isAdShowing}, Cooldown: ${isCooldownActive()}`);
             }
-        } else {
-            console.log(`[AdContext] Conditions not met for search #${currentSearchCount}. Ready: ${isInterstitialReady}, Showing: ${isAdShowing}, Cooldown: ${isCooldownActive()}`);
         }
     }, [isInterstitialReady, isAdShowing, isCooldownActive]);
+
+    // --- NEW: Independent Usage Timer Logic ---
+    const attemptShowAdFromTimer = useCallback(() => {
+        console.log(`[AdContext] ${USAGE_TIMER_MINUTES}-minute usage timer fired. Checking conditions.`);
+        const canShowAd = isInterstitialReady && !isAdShowing && !isCooldownActive();
+
+        if (canShowAd) {
+            console.log(`[AdContext] Ad triggered by USAGE TIMER. Conditions met. Attempting to show ad.`);
+            if (adMobFunctions.current?.showInterstitial) {
+                adMobFunctions.current.showInterstitial();
+            } else {
+                console.warn("[AdContext] Usage Timer: Wanted to show ad, but showInterstitial function is not registered.");
+            }
+        } else {
+            console.log(`[AdContext] Ad triggered by USAGE TIMER but conditions not met. Will try again on next interval. Ready: ${isInterstitialReady}, Showing: ${isAdShowing}, Cooldown: ${isCooldownActive()}`);
+        }
+    }, [isInterstitialReady, isAdShowing, isCooldownActive]);
+
+    useEffect(() => {
+        console.log(`[AdContext] Setting up ${USAGE_TIMER_MINUTES}-minute usage ad interval.`);
+        const usageIntervalId = setInterval(attemptShowAdFromTimer, USAGE_TIMER_MINUTES * 60 * 1000);
+
+        return () => {
+            console.log(`[AdContext] Cleaning up ${USAGE_TIMER_MINUTES}-minute usage ad interval.`);
+            clearInterval(usageIntervalId);
+        };
+    }, [attemptShowAdFromTimer]);
+    // --- END: New Timer Logic ---
 
     return (
         <AdContext.Provider value={{
