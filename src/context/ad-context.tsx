@@ -69,13 +69,14 @@ export const AdProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     }, []);
 
     const triggerAdShowOnSearch = useCallback((currentSearchCount: number) => {
-        const canShowAd = currentSearchCount >= SEARCH_THRESHOLD &&
+        // MODIFIED: Trigger on multiples of SEARCH_THRESHOLD (3, 6, 9...)
+        const canShowAd = (currentSearchCount > 0 && currentSearchCount % SEARCH_THRESHOLD === 0) &&
                           isInterstitialReady &&
                           !isAdShowing &&
                           !isCooldownActive();
 
         if (canShowAd) {
-            console.log("[AdContext] Conditions met. Attempting to show interstitial ad.");
+            console.log(`[AdContext] Conditions met for search #${currentSearchCount}. Attempting to show interstitial ad.`);
             if (adMobFunctions.current?.showInterstitial) {
                 // Fire-and-forget, the search flow does not wait for this.
                 adMobFunctions.current.showInterstitial();
@@ -83,7 +84,7 @@ export const AdProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
                 console.warn("[AdContext] Wanted to show ad, but showInterstitial function is not registered.");
             }
         } else {
-            console.log(`[AdContext] Conditions not met. Search count: ${currentSearchCount}, Ready: ${isInterstitialReady}, Showing: ${isAdShowing}, Cooldown: ${isCooldownActive()}`);
+            console.log(`[AdContext] Conditions not met for search #${currentSearchCount}. Ready: ${isInterstitialReady}, Showing: ${isAdShowing}, Cooldown: ${isCooldownActive()}`);
         }
     }, [isInterstitialReady, isAdShowing, isCooldownActive]);
 

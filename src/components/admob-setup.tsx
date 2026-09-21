@@ -14,7 +14,7 @@ const AdMobSetup = () => {
     setInterstitialReady, 
     setIsAdShowing, 
     updateLastAdShownAt, 
-    resetSearchCount,
+    // resetSearchCount is no longer called from here
     registerAdMobFunctions
   } = useAd();
 
@@ -82,11 +82,11 @@ const AdMobSetup = () => {
           }));
 
           listeners.push(AdMob.addListener(InterstitialAdPluginEvents.Showed, () => {
-            console.log('AdMob Event: Showed. Cooldown started, search count reset.');
+            console.log('AdMob Event: Showed. Cooldown started. Search count is NOT reset.');
             setIsAdShowing(true);
             setInterstitialReady(false); // Ad is no longer ready, it has been consumed
             updateLastAdShownAt(); // Start cooldown
-            resetSearchCount(); // Reset counter
+            // REMOVED: resetSearchCount();
           }));
 
           listeners.push(AdMob.addListener(InterstitialAdPluginEvents.FailedToShow, (error) => {
