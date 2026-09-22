@@ -3,23 +3,17 @@
 import React, { createContext, useState, useContext, ReactNode, useCallback, useRef, useEffect } from 'react';
 
 // --- Ad Timing Configuration ---
-// IMPORTANT: Production values
-const COOLDOWN_MINUTES_PROD = 10;
-const USAGE_TIMER_MINUTES_PROD = 10;
+const PROD_TIMINGS = {
+    USAGE_TIMER_MS: 10 * 60 * 1000, // 10 minutes
+    COOLDOWN_MS: 10 * 60 * 1000,      // 10 minutes
+};
 
-// IMPORTANT: Temporary values for testing in development mode
-const COOLDOWN_SECONDS_TEST = 60; // 1 minute
-const USAGE_TIMER_SECONDS_TEST = 30; // 30 seconds
+const TEST_TIMINGS = {
+    USAGE_TIMER_MS: 30 * 1000, // 30 seconds
+    COOLDOWN_MS: 60 * 1000,      // 60 seconds
+};
 
 const SEARCH_THRESHOLD = 3;
-
-// Determine if we are in development mode
-const IS_DEV_MODE = process.env.NODE_ENV === 'development';
-
-// Select the correct timing values based on the environment
-const USAGE_TIMER_MS = IS_DEV_MODE ? USAGE_TIMER_SECONDS_TEST * 1000 : USAGE_TIMER_MINUTES_PROD * 60 * 1000;
-const COOLDOWN_MS = IS_DEV_MODE ? COOLDOWN_SECONDS_TEST * 1000 : COOLDOWN_MINUTES_PROD * 60 * 1000;
-
 
 // --- Type Definitions ---
 interface AdMobFunctions {
@@ -49,6 +43,7 @@ export const AdProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [isInterstitialReady, setInterstitialReady] = useState(false);
     const [isAdShowing, setIsAdShowing] = useState(false);
     const [lastAdShownAt, setLastAdShownAt] = useState<number | null>(null);
+    const [adTimings, setAdTimings] = useState(PROD_TIMINGS);
 
     const adMobFunctions = useRef<AdMobFunctions | null>(null);
 
@@ -70,8 +65,8 @@ export const AdProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const isCooldownActive = useCallback(() => {
         if (!lastAdShownAt) return false;
         const timeSinceLastAd = Date.now() - lastAdShownAt;
-        return timeSinceLastAd < COOLDOWN_MS;
-    }, [lastAdShownAt]);
+        return timeSinceLastAd < adTimings.COOLDOWN_MS;
+    }, [lastAdShownAt, adTimings.COOLDOWN_MS]);
 
     const registerAdMobFunctions = useCallback((functions: AdMobFunctions) => {
         adMobFunctions.current = functions;
@@ -109,24 +104,29 @@ export const AdProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     });
 
     useEffect(() => {
-        if (IS_DEV_MODE) {
-            console.warn(`[AdContext] App running in DEV mode. Using TEST ad timings: Usage Timer=${USAGE_TIMER_SECONDS_TEST}s, Cooldown=${COOLDOWN_SECONDS_TEST}s`);
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('ad_test_mode') === 'true') {
+            setAdTimings(TEST_TIMINGS);
+            console.log(`[AdContext] App running in TEST mode. Using test ad timings: timer=30s, cooldown=60s.`);
         } else {
-            console.log(`[AdContext] App running in PROD mode. Using standard ad timings.`);
+            setAdTimings(PROD_TIMINGS);
+            console.log(`[AdContext] App running in PROD mode. Using standard ad timings: timer=10m, cooldown=10m.`);
         }
+    }, []);
 
+    useEffect(() => {
         const tick = () => {
             if (timerCallback.current) {
                 timerCallback.current();
             }
         };
-        const usageIntervalId = setInterval(tick, USAGE_TIMER_MS);
+        const usageIntervalId = setInterval(tick, adTimings.USAGE_TIMER_MS);
 
         return () => {
             console.log(`[AdContext] Cleaning up persistent usage ad interval.`);
             clearInterval(usageIntervalId);
         };
-    }, []);
+    }, [adTimings.USAGE_TIMER_MS]);
 
     return (
         <AdContext.Provider value={{
