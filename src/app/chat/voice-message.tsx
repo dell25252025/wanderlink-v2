@@ -173,10 +173,21 @@ export function VoiceRecorder({ onSend, onCancel, isSending }: VoiceRecorderProp
     return (
       <div className="flex items-center gap-2 p-2 w-full">
         <AudioPlayer audioUrl={previewUrl} isSender={true} />
-        <Button onClick={handleSend} size="icon" className="rounded-full h-10 w-10 flex-shrink-0" disabled={isSending}>
+        <Button 
+          onMouseDown={(e) => { e.preventDefault(); handleSend(); }}
+          size="icon" 
+          className="rounded-full h-10 w-10 flex-shrink-0" 
+          disabled={isSending}
+        >
           {isSending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
         </Button>
-        <Button onClick={onCancel} size="icon" variant="ghost" className="rounded-full h-10 w-10 flex-shrink-0" disabled={isSending}>
+        <Button 
+          onMouseDown={(e) => { e.preventDefault(); onCancel(); }}
+          size="icon" 
+          variant="ghost" 
+          className="rounded-full h-10 w-10 flex-shrink-0" 
+          disabled={isSending}
+        >
           <Trash2 className="h-5 w-5" />
         </Button>
       </div>
