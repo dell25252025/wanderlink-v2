@@ -214,7 +214,12 @@ export function VoiceRecorder({ onSend, onCancel, isSending }: VoiceRecorderProp
           <Mic className="h-5 w-5 animate-pulse" />
           <span className="text-sm">Enregistrement...</span>
       </div>
-       <Button onClick={onCancel} size="icon" variant="ghost" className="rounded-full h-10 w-10">
+       <Button 
+        onMouseDown={(e) => { e.preventDefault(); onCancel(); }}
+        size="icon" 
+        variant="ghost" 
+        className="rounded-full h-10 w-10"
+       >
          <Trash2 className="h-5 w-5" />
        </Button>
     </div>
