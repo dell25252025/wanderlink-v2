@@ -730,12 +730,9 @@ const takePicture = useCallback(async (source: CameraSource) => {
     initiateCall
 ]);
 
-  const handleStartRecording = useCallback(async () => {
-    const hasPermission = await requestMicrophonePermission(); 
-    if (hasPermission) {
-        setIsRecording(true);
-    }
-  }, [requestMicrophonePermission]);
+  const handleStartRecording = useCallback(() => {
+    setIsRecording(true);
+  }, []);
   
   const handleMessageLongPress = useCallback((message: Message) => {
     if (message.type && (message.type === 'video_call' || message.type === 'missed_call')) return;
