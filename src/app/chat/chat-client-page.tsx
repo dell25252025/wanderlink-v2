@@ -860,7 +860,10 @@ const takePicture = useCallback(async (source: CameraSource) => {
                 {!newMessage.trim() ? (
                 <Button type="button" onClick={handleStartRecording} variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-primary"><Mic className="h-4 w-4" /></Button>
                 ) : (
-                <Button type="button" onClick={(e) => handleSendMessage(e as any)} variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-primary" disabled={isUploading} tabIndex={-1}><Send className="h-4 w-4" /></Button>
+                <Button type="button" onClick={(e) => {
+                    handleSendMessage(e as any);
+                    textareaRef.current?.focus();
+                }} variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-primary" disabled={isUploading} tabIndex={-1}><Send className="h-4 w-4" /></Button>
                 )}
                 </div>
             </form>
