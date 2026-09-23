@@ -858,7 +858,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                 </div>
                 <div className="shrink-0">
                 {!newMessage.trim() ? (
-                <Button type="button" onPointerDown={(e) => { e.preventDefault(); handleStartRecording(); }} variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-primary"><Mic className="h-4 w-4" /></Button>
+                <Button type="button" onMouseDown={(e) => { e.preventDefault(); handleStartRecording(); }} variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-primary"><Mic className="h-4 w-4" /></Button>
                 ) : (
                 <Button type="button" onClick={(e) => {
                     handleSendMessage(e as any);
