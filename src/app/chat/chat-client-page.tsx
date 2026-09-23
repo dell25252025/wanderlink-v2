@@ -811,10 +811,8 @@ const takePicture = useCallback(async (source: CameraSource) => {
       </main>
       
       <footer className="fixed bottom-0 z-30 w-full border-t bg-background/95 backdrop-blur-sm px-2 py-1.5">
-        {isRecording ? (
-            <VoiceRecorder onSend={handleSendVoiceMessage} onCancel={() => setIsRecording(false)} isSending={isUploading} />
-        ) : (
-            <form className="flex items-end gap-1.5 w-full">
+        <div className="relative w-full">
+          <form className="flex items-end gap-1.5 w-full">
             <Drawer>
                 <DrawerTrigger asChild>
                     <Button type="button" variant="ghost" size="icon" className="shrink-0 h-8 w-8" disabled={isUploading}><PlusCircle className="h-5 w-5 text-muted-foreground" /></Button>
@@ -867,7 +865,13 @@ const takePicture = useCallback(async (source: CameraSource) => {
                 )}
                 </div>
             </form>
-        )}
+
+          {isRecording && (
+            <div className="absolute inset-0 z-10 bg-background/95 backdrop-blur-sm">
+              <VoiceRecorder onSend={handleSendVoiceMessage} onCancel={() => setIsRecording(false)} isSending={isUploading} />
+            </div>
+          )}
+        </div>
       </footer>
 
       <Dialog open={!!messageToDelete} onOpenChange={(isOpen) => !isOpen && setMessageToDelete(null)}>
