@@ -424,6 +424,9 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
   useEffect(() => {
     if (!currentUser) { setLoadingMessages(false); return; }
+
+    void requestMicrophonePermission();
+
     const chatId = getChatId(currentUser.uid, otherUserId);
     const chatDocRef = doc(db, 'chats', chatId);
     const unsubscribeChat = onSnapshot(chatDocRef, (doc) => {
@@ -448,7 +451,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         setLoadingMessages(false);
     });
     return () => { unsubscribeChat(); unsubscribeMessages(); };
-  }, [currentUser, otherUserId, toast]);
+  }, [currentUser, otherUserId, toast, requestMicrophonePermission]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
