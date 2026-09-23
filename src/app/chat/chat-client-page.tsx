@@ -264,6 +264,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [isOtherUserOnline, setIsOtherUserOnline] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const shouldRestoreTextareaFocusRef = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isDesktop = useMediaQuery('(min-width: 768px)');
@@ -730,10 +731,31 @@ const takePicture = useCallback(async (source: CameraSource) => {
     initiateCall
 ]);
 
-  const handleStartRecording = useCallback(() => {
-    setIsRecording(true);
-  }, []);
+  const handleStartRecording = useCallback(async () => {
+    shouldRestoreTextareaFocusRef.current = document.activeElement === textareaRef.current;
+    const hasPermission = await requestMicrophonePermission();
+    if (hasPermission) {
+      setIsRecording(true);
+    } else {
+      shouldRestoreTextareaFocusRef.current = false;
+    }
+  }, [requestMicrophonePermission]);
   
+  useEffect(() => {
+    let animationFrameId: number;
+    if (!isRecording && shouldRestoreTextareaFocusRef.current) {
+      animationFrameId = requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+      shouldRestoreTextareaFocusRef.current = false;
+    }
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [isRecording]);
+
   const handleMessageLongPress = useCallback((message: Message) => {
     if (message.type && (message.type === 'video_call' || message.type === 'missed_call')) return;
     setShowReactionPopoverFor(message.id);
@@ -849,7 +871,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                     />
                     <Popover open={isEmojiPickerOpen} onOpenChange={setIsEmojiPickerOpen}>
                     <PopoverTrigger asChild>
-                        <Button type="button" variant="ghost" size="icon" className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6"><Smile className="h-4 w-4 text-muted-foreground" /></Button>
+                        <Button type="button" variant="ghost" size="icon" className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6" onMouseDown={(e) => e.preventDefault()}><Smile className="h-4 w-4 text-muted-foreground" /></Button>
                     </PopoverTrigger>
                     <PopoverContent side="top" align="end" className="w-full max-w-[320px] p-0 border-none mb-2"><Picker onEmojiClick={handleEmojiClick} emojiStyle={EmojiStyle.NATIVE} width="100%" /></PopoverContent>
                     </Popover>
