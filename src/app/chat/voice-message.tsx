@@ -186,7 +186,15 @@ export function VoiceRecorder({ onSend, onCancel, isSending }: VoiceRecorderProp
   return (
     <div className="flex items-center justify-between p-2 w-full bg-background h-14">
       <div className="flex items-center gap-2">
-          <Button onClick={stopRecording} size="icon" variant="destructive" className="rounded-full h-10 w-10">
+          <Button 
+            onMouseDown={(e) => {
+              e.preventDefault();
+              stopRecording();
+            }}
+            size="icon" 
+            variant="destructive" 
+            className="rounded-full h-10 w-10"
+          >
                <Square className="h-5 w-5" />
           </Button>
           <div className="text-sm text-muted-foreground font-mono w-12">{formatTime(recordingTime)}</div>
