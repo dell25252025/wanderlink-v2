@@ -230,11 +230,11 @@ const MessageItem = memo<MessageItemProps>(({
                 </PopoverTrigger>
                 <PopoverContent
                   onOpenAutoFocus={(e) => {
-                    console.log('[DIAGNOSTIC] onOpenAutoFocus FIRED', {
+                    console.log('[DIAGNOSTIC] onOpenAutoFocus FIRED', JSON.stringify({
                       defaultPrevented: e.defaultPrevented,
                       activeElement: document.activeElement?.tagName,
                       activeElementClass: document.activeElement?.className,
-                    });
+                    }));
 
                     e.preventDefault();
                   }}
@@ -957,7 +957,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
         className="flex-1 overflow-y-auto pt-14 pb-20"
         onPointerDown={(event) => {
             // --- START: HIT-TESTING LOGS --- (Added for Forensic Analysis)
-            console.log('[HITTEST] POINTER_DOWN', {
+            console.log('[HITTEST] POINTER_DOWN', JSON.stringify({
                 clientX: event.clientX,
                 clientY: event.clientY,
                 target: (event.target as HTMLElement).tagName,
@@ -965,12 +965,12 @@ const takePicture = useCallback(async (source: CameraSource) => {
                 activeElement: document.activeElement?.tagName,
                 cancelable: event.cancelable,
                 defaultPrevented: event.defaultPrevented,
-            });
+            }));
 
             const topElement = document.elementFromPoint(event.clientX, event.clientY);
             if (topElement) {
                 const style = window.getComputedStyle(topElement);
-                console.log('[HITTEST] elementFromPoint', {
+                console.log('[HITTEST] elementFromPoint', JSON.stringify({
                     tagName: topElement.tagName,
                     id: topElement.id,
                     className: topElement.className,
@@ -980,13 +980,13 @@ const takePicture = useCallback(async (source: CameraSource) => {
                     position: style.position,
                     zIndex: style.zIndex,
                     isConnected: topElement.isConnected,
-                });
+                }));
             }
 
             const elementsStack = document.elementsFromPoint(event.clientX, event.clientY);
             elementsStack.forEach((el, index) => {
                 const style = window.getComputedStyle(el);
-                console.log(`[HITTEST] STACK[${index}]`, {
+                console.log(`[HITTEST] STACK[${index}]`, JSON.stringify({
                     tagName: el.tagName,
                     id: el.id,
                     className: el.className,
@@ -996,7 +996,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                     position: style.position,
                     zIndex: style.zIndex,
                     isConnected: el.isConnected,
-                });
+                }));
             });
             // --- END: HIT-TESTING LOGS ---
 
