@@ -294,6 +294,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const shouldRestoreTextareaFocusRef = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
@@ -909,10 +910,21 @@ const takePicture = useCallback(async (source: CameraSource) => {
         </>
       </header>
 
-      <main ref={scrollContainerRef} className="flex-1 overflow-y-auto pt-14 pb-20">
+      <main
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto pt-14 pb-20"
+        onPointerDown={(event) => {
+          if (document.activeElement === textareaRef.current) {
+            const target = event.target as HTMLElement;
+            if (messagesContainerRef.current && messagesContainerRef.current.contains(target)) {
+              event.preventDefault();
+            }
+          }
+        }}
+      >
         {loadingMessages ? <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>
         : messages.length === 0 ? <div className="p-4 text-center text-muted-foreground">Commencez la conversation !</div>
-        : <div className="p-4 space-y-4">
+        : <div ref={messagesContainerRef} className="p-4 space-y-4">
             {messages.map((message) => (
                 <MessageItem
                     key={message.id}
