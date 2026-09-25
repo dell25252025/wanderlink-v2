@@ -211,7 +211,11 @@ const MessageItem = memo<MessageItemProps>(({
     };
 
     return (
-        <div onContextMenu={handleLongPress} className={cn("relative", reactions.length > 0 && "z-10")}>
+        <div 
+            onPointerDown={(e) => e.preventDefault()}
+            onContextMenu={handleLongPress} 
+            className={cn("relative", reactions.length > 0 && "z-10")}
+        >
             <Popover open={showReactionPopoverFor === message.id} onOpenChange={(isOpen) => !isOpen && setShowReactionPopoverFor(null)}>
                 <PopoverTrigger asChild>
                     <div 
@@ -937,7 +941,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                 document.activeElement === textareaRef.current &&
                 messagesContainerRef.current?.contains(target) &&
                 !target.closest(
-                  'button, a, input, textarea, select, [role="button"], [contenteditable="true"]'
+                  'button, a, input, textarea, select, [role="button"], [contenteditable="true"]']
                 )
               ) {
                 event.preventDefault();
