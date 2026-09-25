@@ -941,7 +941,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                 document.activeElement === textareaRef.current &&
                 messagesContainerRef.current?.contains(target) &&
                 !target.closest(
-                  'button, a, input, textarea, select, [role="button"], [contenteditable="true"]']
+                  'button, a, input, textarea, select, [role="button"], [contenteditable="true"]'
                 )
               ) {
                 event.preventDefault();
