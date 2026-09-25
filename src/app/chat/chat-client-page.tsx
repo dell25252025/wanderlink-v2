@@ -313,7 +313,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
-    // --- START: IME-AUDIT INSTRUMENTATION ---
+    // --- START: IME-AUDIT INSTRUMENTATION --- (Do Not Remove)
   useLayoutEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -386,6 +386,33 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       console.log(`[IME-AUDIT][JS_MONOTONIC_TIME=${time}] isEmojiPickerOpen changed=${isEmojiPickerOpen} ${activeElementDesc} textareaFocused=${document.activeElement === textareaRef.current}`);
   }, [isEmojiPickerOpen]);
   // --- END: IME-AUDIT INSTRUMENTATION ---
+
+  // --- START: PASSIVE EVENT OBSERVATION --- (Added for Forensic Analysis)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const passiveEventHandler = (event: Event) => {
+        const time = performance.now().toFixed(3);
+        const target = event.target as HTMLElement;
+        const activeElement = document.activeElement as HTMLElement;
+
+        console.log(
+            `[HITTEST] PASSIVE_EVENT: type=${event.type}, time=${time}, target=${target?.tagName}, activeElement=${activeElement?.tagName}, defaultPrevented=${event.defaultPrevented}, cancelable=${event.cancelable}`
+        );
+    };
+
+    const eventTypes = ['pointerup', 'pointercancel', 'touchstart', 'touchend', 'touchcancel', 'contextmenu', 'blur', 'focusout', 'focus', 'focusin'];
+    eventTypes.forEach(type => {
+        window.addEventListener(type, passiveEventHandler, { capture: true, passive: true });
+    });
+
+    return () => {
+        eventTypes.forEach(type => {
+            window.removeEventListener(type, passiveEventHandler, { capture: true });
+        });
+    };
+  }, []);
+  // --- END: PASSIVE EVENT OBSERVATION ---
 
 
   useEffect(() => {
@@ -929,6 +956,51 @@ const takePicture = useCallback(async (source: CameraSource) => {
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto pt-14 pb-20"
         onPointerDown={(event) => {
+            // --- START: HIT-TESTING LOGS --- (Added for Forensic Analysis)
+            console.log('[HITTEST] POINTER_DOWN', {
+                clientX: event.clientX,
+                clientY: event.clientY,
+                target: (event.target as HTMLElement).tagName,
+                currentTarget: (event.currentTarget as HTMLElement).tagName,
+                activeElement: document.activeElement?.tagName,
+                cancelable: event.cancelable,
+                defaultPrevented: event.defaultPrevented,
+            });
+
+            const topElement = document.elementFromPoint(event.clientX, event.clientY);
+            if (topElement) {
+                const style = window.getComputedStyle(topElement);
+                console.log('[HITTEST] elementFromPoint', {
+                    tagName: topElement.tagName,
+                    id: topElement.id,
+                    className: topElement.className,
+                    role: topElement.getAttribute('role'),
+                    tabIndex: topElement.getAttribute('tabindex'),
+                    pointerEvents: style.pointerEvents,
+                    position: style.position,
+                    zIndex: style.zIndex,
+                    isConnected: topElement.isConnected,
+                });
+            }
+
+            const elementsStack = document.elementsFromPoint(event.clientX, event.clientY);
+            elementsStack.forEach((el, index) => {
+                const style = window.getComputedStyle(el);
+                console.log(`[HITTEST] STACK[${index}]`, {
+                    tagName: el.tagName,
+                    id: el.id,
+                    className: el.className,
+                    role: el.getAttribute('role'),
+                    tabIndex: el.getAttribute('tabindex'),
+                    pointerEvents: style.pointerEvents,
+                    position: style.position,
+                    zIndex: style.zIndex,
+                    isConnected: el.isConnected,
+                });
+            });
+            // --- END: HIT-TESTING LOGS ---
+
+            // --- START: Existing Functional Code --- (Do Not Remove)
             const target = event.target as HTMLElement;
 
             if (document.activeElement === textareaRef.current) {
@@ -963,6 +1035,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                 }
                 console.log(`[FORENSIC] ---- POINTER_DOWN_AUDIT END`);
             }
+            // --- END: Existing Functional Code ---
         }}
       >
         {loadingMessages ? <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>
