@@ -929,17 +929,40 @@ const takePicture = useCallback(async (source: CameraSource) => {
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto pt-14 pb-20"
         onPointerDown={(event) => {
-          const target = event.target as HTMLElement;
+            const target = event.target as HTMLElement;
 
-          if (
-            document.activeElement === textareaRef.current &&
-            scrollContainerRef.current?.contains(target) &&
-            !target.closest(
-              'button, a, input, textarea, select, [role="button"], [contenteditable="true"]'
-            )
-          ) {
-            event.preventDefault();
-          }
+            if (document.activeElement === textareaRef.current) {
+                const closestInteractiveElement = target.closest(
+                    'button, a, input, textarea, select, [role="button"], [contenteditable="true"]'
+                );
+                const exclusionMatch = !!closestInteractiveElement;
+
+                console.log(`[FORENSIC] POINTER_DOWN_AUDIT ----`);
+                console.log(`[FORENSIC] target tagName: ${target.tagName}`);
+                console.log(`[FORENSIC] target className: ${target.className}`);
+                console.log(`[FORENSIC] target role: ${target.getAttribute('role')}`);
+                
+                if (closestInteractiveElement) {
+                    console.log(`[FORENSIC] closest interactive element: FOUND`);
+                    console.log(`[FORENSIC] closest interactive tagName: ${closestInteractiveElement.tagName}`);
+                    console.log(`[FORENSIC] closest interactive className: ${closestInteractiveElement.className}`);
+                    console.log(`[FORENSIC] closest interactive role: ${closestInteractiveElement.getAttribute('role')}`);
+                } else {
+                    console.log(`[FORENSIC] closest interactive element: NOT FOUND`);
+                }
+                
+                console.log(`[FORENSIC] EXCLUSION_MATCH = ${exclusionMatch}`);
+
+                if (
+                    scrollContainerRef.current?.contains(target) &&
+                    !exclusionMatch
+                ) {
+                    event.preventDefault();
+                    console.log(`[FORENSIC] PROTECTION_APPLIED`);
+                    console.log(`[FORENSIC] defaultPrevented = ${event.defaultPrevented}`);
+                }
+                console.log(`[FORENSIC] ---- POINTER_DOWN_AUDIT END`);
+            }
         }}
       >
         {loadingMessages ? <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>
