@@ -224,11 +224,22 @@ const MessageItem = memo<MessageItemProps>(({
                         </div>
                     </div>
                 </PopoverTrigger>
-                <PopoverContent onOpenAutoFocus={(e) => e.preventDefault()} className="w-auto p-1 rounded-full">
+                <PopoverContent
+                  onOpenAutoFocus={(e) => {
+                    console.log('[DIAGNOSTIC] onOpenAutoFocus FIRED', {
+                      defaultPrevented: e.defaultPrevented,
+                      activeElement: document.activeElement?.tagName,
+                      activeElementClass: document.activeElement?.className,
+                    });
+
+                    e.preventDefault();
+                  }}
+                  className="w-auto p-1 rounded-full"
+                >
                     <div className="flex items-center gap-1">
-                        {availableReactions.map(emoji => <Button tabIndex={-1} key={emoji} onClick={() => onReact(message, emoji)} variant="ghost" size="icon" className="rounded-full h-8 w-8 text-lg">{emoji}</Button>)}
-                        {message.text && <Button tabIndex={-1} onClick={() => onCopy(message.text)} variant="ghost" size="icon" className="rounded-full h-8 w-8"><Copy className="h-4 w-4" /></Button>}
-                        {isSender && <Button tabIndex={-1} onClick={() => onSetupDelete(message)} variant="ghost" size="icon" className="rounded-full h-8 w-8"><Trash2 className="h-4 w-4" /></Button>}
+                        {availableReactions.map(emoji => <Button key={emoji} onClick={() => onReact(message, emoji)} variant="ghost" size="icon" className="rounded-full h-8 w-8 text-lg">{emoji}</Button>)}
+                        {message.text && <Button onClick={() => onCopy(message.text)} variant="ghost" size="icon" className="rounded-full h-8 w-8"><Copy className="h-4 w-4" /></Button>}
+                        {isSender && <Button onClick={() => onSetupDelete(message)} variant="ghost" size="icon" className="rounded-full h-8 w-8"><Trash2 className="h-4 w-4" /></Button>}
                     </div>
                 </PopoverContent>
             </Popover>
