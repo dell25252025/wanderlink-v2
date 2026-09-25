@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef, memo, useCallback, useLayoutEffect } from 'react';
@@ -212,12 +211,10 @@ const MessageItem = memo<MessageItemProps>(({
     };
 
     return (
-        <div onContextMenu={(e) => e.preventDefault()} className={cn("relative", reactions.length > 0 && "z-10")}>
+        <div onContextMenu={handleLongPress} className={cn("relative", reactions.length > 0 && "z-10")}>
             <Popover open={showReactionPopoverFor === message.id} onOpenChange={(isOpen) => !isOpen && setShowReactionPopoverFor(null)}>
                 <PopoverTrigger asChild>
                     <div 
-                        onTouchStart={handleLongPress}
-                        onMouseDown={handleLongPress}
                         onClick={() => onClick(message)}
                         className={`flex items-end gap-2 relative ${isSender ? 'justify-end' : 'justify-start'}`}>
                         {!isSender && <Avatar className="h-6 w-6 self-end"><AvatarImage src={otherUserImage} /><AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback></Avatar>}
@@ -243,6 +240,37 @@ MessageItem.displayName = 'MessageItem';
 
 
 // --- Main Chat Page Component ---
+const describeForLogcat = (el: EventTarget | Element | null, prefix: string) => {
+  if (!(el instanceof HTMLElement)) return `${prefix}=null`;
+
+  const parts = [
+    `${prefix}=${el.tagName}${el.id ? '#' + el.id : ''}`,
+    `class="${el.className}"`,
+    `role="${el.getAttribute('role')}"`,
+    `tabIndex=${el.getAttribute('tabindex')}`,
+    `connected=${el.isConnected}`,
+  ];
+  return parts.join(' ');
+};
+
+const getZone = (el: EventTarget | null): string => {
+    if (!(el instanceof HTMLElement)) return 'OTHER';
+    if (el.closest('.epr-emoji')) return 'EMOJI';
+    if (el.closest('form')) {
+        const popoverTrigger = el.closest('[role="button"]');
+        if (popoverTrigger && popoverTrigger.querySelector('svg.lucide-smile')) return 'EMOJI_TRIGGER';
+        if (el.closest('textarea')) return 'COMPOSER';
+        if (el.closest('button[tabindex="-1"]')) return 'SEND';
+        if (el.closest('button')?.querySelector('svg.lucide-mic')) return 'MICRO';
+        return 'COMPOSER_FOOTER';
+    }
+    if (el.closest('[role="dialog"]')) return 'DIALOG';
+    if (el.closest('a[href^="/profile"]')) return 'AVATAR';
+    if (el.closest('main > div > div > div[class*="flex"]')) return 'MESSAGE_BUBBLE';
+    if (el.closest('main')) return 'SCROLL_CONTAINER';
+    return 'OTHER';
+}
+
 export default function ChatClientPage({ otherUserId }: { otherUserId: string }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -268,6 +296,81 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isDesktop = useMediaQuery('(min-width: 768px)');
+
+    // --- START: IME-AUDIT INSTRUMENTATION ---
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let lastActiveElement: Element | null = document.activeElement;
+    const focusChangeHandler = (event: FocusEvent) => {
+        if (event.type === 'focusin') {
+            lastActiveElement = event.target as Element;
+        }
+        const time = performance.now().toFixed(3);
+        const targetDesc = describeForLogcat(event.target, 'target');
+        const relatedTargetDesc = describeForLogcat(event.relatedTarget, 'relatedTarget');
+        const activeElementDesc = describeForLogcat(document.activeElement, 'active');
+        console.log(`[IME-AUDIT][JS_MONOTONIC_TIME=${time}] ${event.type} ${targetDesc} ${relatedTargetDesc} ${activeElementDesc} textareaFocused=${document.activeElement === textareaRef.current}`);
+    }
+
+    const interactionHandler = (event: MouseEvent | TouchEvent | PointerEvent) => {
+        const time = performance.now().toFixed(3);
+        const targetDesc = describeForLogcat(event.target, 'target');
+        const activeElementDesc = describeForLogcat(document.activeElement, 'active');
+        console.log(`[IME-AUDIT][JS_MONOTONIC_TIME=${time}] ${event.type} zone=${getZone(event.target)} ${targetDesc} ${activeElementDesc} defaultPrevented=${event.defaultPrevented} cancelable=${event.cancelable}`);
+    }
+
+    const visualViewportHandler = (event: Event) => {
+        if (!window.visualViewport) return;
+        const time = performance.now().toFixed(3);
+        console.log(`[IME-AUDIT][JS_MONOTONIC_TIME=${time}] visualViewport.${event.type} height=${window.visualViewport.height} width=${window.visualViewport.width} offsetTop=${window.visualViewport.offsetTop} innerHeight=${window.innerHeight}`);
+    }
+    
+    const scrollHandler = (event: Event) => {
+        if (!(event.target instanceof HTMLElement)) return;
+        const time = performance.now().toFixed(3);
+        const targetDesc = describeForLogcat(event.target, 'target');
+        const activeElementDesc = describeForLogcat(document.activeElement, 'active');
+        console.log(`[IME-AUDIT][JS_MONOTONIC_TIME=${time}] scroll ${targetDesc} scrollTop=${event.target.scrollTop} ${activeElementDesc} visualViewportHeight=${window.visualViewport?.height}`);
+    }
+
+    const mutationObserver = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type !== 'childList') return;
+            mutation.removedNodes.forEach((removedNode) => {
+                if (lastActiveElement && removedNode.contains(lastActiveElement)) {
+                    const time = performance.now().toFixed(3);
+                    const removedElementDesc = describeForLogcat(lastActiveElement, 'removed');
+                    const activeElementDesc = describeForLogcat(document.activeElement, 'activeAfter');
+                    console.log(`[IME-AUDIT][JS_MONOTONIC_TIME=${time}] ACTIVE_ELEMENT_REMOVED ${removedElementDesc} ${activeElementDesc}`);
+                }
+            });
+        });
+    });
+    
+    ['focus', 'blur', 'focusin', 'focusout'].forEach(type => window.addEventListener(type, focusChangeHandler, true));
+    ['pointerdown', 'mousedown', 'touchstart', 'click'].forEach(type => window.addEventListener(type, interactionHandler, true));
+    if (window.visualViewport) ['resize', 'scroll'].forEach(type => window.visualViewport!.addEventListener(type, visualViewportHandler));
+    const scrollContainer = scrollContainerRef.current;
+    if (scrollContainer) scrollContainer.addEventListener('scroll', scrollHandler, { passive: true });
+    mutationObserver.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      ['focus', 'blur', 'focusin', 'focusout'].forEach(type => window.removeEventListener(type, focusChangeHandler, true));
+      ['pointerdown', 'mousedown', 'touchstart', 'click'].forEach(type => window.removeEventListener(type, interactionHandler, true));
+      if (window.visualViewport) ['resize', 'scroll'].forEach(type => window.visualViewport!.removeEventListener(type, visualViewportHandler));
+      if (scrollContainer) scrollContainer.removeEventListener('scroll', scrollHandler);
+      mutationObserver.disconnect();
+    }
+  }, []);
+
+  useEffect(() => {
+      const time = performance.now().toFixed(3);
+      const activeElementDesc = describeForLogcat(document.activeElement, 'active');
+      console.log(`[IME-AUDIT][JS_MONOTONIC_TIME=${time}] isEmojiPickerOpen changed=${isEmojiPickerOpen} ${activeElementDesc} textareaFocused=${document.activeElement === textareaRef.current}`);
+  }, [isEmojiPickerOpen]);
+  // --- END: IME-AUDIT INSTRUMENTATION ---
+
 
   useEffect(() => {
     if (otherUserId) {
