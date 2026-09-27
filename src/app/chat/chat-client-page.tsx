@@ -414,6 +414,92 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, []);
   // --- END: PASSIVE EVENT OBSERVATION ---
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const t0 = performance.now();
+    const buffer: any[] = ((window as any).__imeForensicLog ??= []);
+
+    const describeEl = (el: EventTarget | Node | null) => {
+        if (!(el instanceof Element)) return el === document ? 'document' : el === null ? null : String(el);
+        return {
+        tagName: el.tagName,
+        id: el.id || null,
+        className: typeof (el as HTMLElement).className === 'string' ? (el as HTMLElement).className : null,
+        role: el.getAttribute('role'),
+        tabIndex: (el as HTMLElement).tabIndex,
+        };
+    };
+
+    const log = (type: string, event?: Event) => {
+        const entry = {
+        t: Math.round((performance.now() - t0) * 100) / 100,
+        type,
+        target: event ? describeEl(event.target as Element) : null,
+        relatedTarget:
+            event && 'relatedTarget' in event
+            ? describeEl((event as FocusEvent).relatedTarget as Element)
+            : null,
+        activeElement: describeEl(document.activeElement),
+        defaultPrevented: event ? event.defaultPrevented : null,
+        cancelable: event ? event.cancelable : null,
+        };
+        buffer.push(entry);
+        console.log('[IME-FORENSIC]', JSON.stringify(entry));
+    };
+
+    const eventTypes = [
+        'focus', 'focusin', 'blur', 'focusout',
+        'pointerdown', 'pointerup', 'pointercancel',
+        'touchstart', 'touchend', 'touchcancel',
+        'contextmenu',
+    ];
+
+    const handler = (e: Event) => log(e.type, e);
+
+    eventTypes.forEach((type) => {
+        document.addEventListener(type, handler, { capture: true, passive: true });
+    });
+
+    let samplingUntil = 0;
+    let rafId = 0;
+
+    const armSampling = () => {
+        samplingUntil = performance.now() + 1500;
+    };
+
+    document.addEventListener('contextmenu', armSampling, {
+        capture: true,
+        passive: true,
+    });
+
+    const sample = () => {
+        if (performance.now() < samplingUntil) {
+        log('activeElement-sample');
+        }
+        rafId = requestAnimationFrame(sample);
+    };
+
+    rafId = requestAnimationFrame(sample);
+
+    return () => {
+        eventTypes.forEach((type) => {
+        document.removeEventListener(
+            type,
+            handler,
+            { capture: true } as EventListenerOptions
+        );
+        });
+
+        document.removeEventListener(
+        'contextmenu',
+        armSampling,
+        { capture: true } as EventListenerOptions
+        );
+
+        cancelAnimationFrame(rafId);
+    };
+  }, []);
 
   useEffect(() => {
     if (otherUserId) {
