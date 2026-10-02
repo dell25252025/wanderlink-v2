@@ -82,9 +82,12 @@ public class MainActivity extends BridgeActivity {
                         " | WebView hasFocus: " + v.hasFocus() +
                         " | hasWindowFocus: " + v.hasWindowFocus()
                     );
-                    // We return false to allow the event to propagate and trigger onCreateContextMenu.
-                    // This is observation-only.
-                    return false;
+                    // --- EXPERIMENT (STEP 10) ---
+                    // Returning true to consume the long click event natively,
+                    // attempting to prevent the default context menu from appearing
+                    // and thus preventing the keyboard from hiding.
+                    Log.d("NATIVE-WEBVIEW-AUDIT", "onLongClick is consuming the event and returning true.");
+                    return true;
                 }
             });
         }
