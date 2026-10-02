@@ -49,4 +49,12 @@ public class MainActivity extends BridgeActivity {
     public void onDestroy() {
         super.onDestroy();
     }
+
+    // --- START: ANDROID-WINDOW-AUDIT INSTRUMENTATION ---
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        Log.d("ANDROID-WINDOW-AUDIT", "MainActivity onWindowFocusChanged. hasFocus: " + hasFocus);
+    }
+    // --- END: ANDROID-WINDOW-AUDIT INSTRUMENTATION ---
 }
