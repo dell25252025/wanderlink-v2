@@ -500,6 +500,34 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, [showReactionPopoverFor]);
   // --- END: REACT-POPOVER-AUDIT INSTRUMENTATION ---
 
+  // --- START: REACT-POPOVER-DOM-AUDIT INSTRUMENTATION ---
+  useEffect(() => {
+    requestAnimationFrame(() => {
+        const activeElement = document.activeElement;
+        const isTextareaFocused = activeElement === textareaRef.current;
+        const popoverWrapper = document.querySelector('[data-radix-popper-content-wrapper]');
+        
+        const describe = (el: Element | null): string => {
+            if (!el) return 'null';
+            return `${el.tagName}${el.id ? '#' + el.id : ''}`;
+        };
+
+        const logMessage =
+            `[REACT-POPOVER-DOM-AUDIT] ` +
+            `showReactionPopoverFor=${showReactionPopoverFor} ` +
+            `activeElement=${describe(activeElement)} ` +
+            `isTextareaFocused=${isTextareaFocused} ` +
+            `popoverExists=${!!popoverWrapper} ` +
+            `popoverTag=${popoverWrapper?.tagName ?? 'null'} ` +
+            `popoverRole=${popoverWrapper?.getAttribute('role') ?? 'null'} ` +
+            `popoverAttr=${popoverWrapper?.getAttribute('data-radix-popper-content-wrapper') ?? 'null'} ` +
+            `popoverCount=${document.querySelectorAll('[data-radix-popper-content-wrapper]').length}`;
+
+        console.log(logMessage);
+    });
+  }, [showReactionPopoverFor]);
+  // --- END: REACT-POPOVER-DOM-AUDIT INSTRUMENTATION ---
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
