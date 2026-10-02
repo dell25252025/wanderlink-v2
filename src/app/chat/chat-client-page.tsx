@@ -217,34 +217,37 @@ const MessageItem = memo<MessageItemProps>(({
             onContextMenu={handleLongPress} 
             className={cn("relative", reactions.length > 0 && "z-10")}
         >
-            <div 
-                onClick={() => onClick(message)}
-                className={`flex items-end gap-2 relative ${isSender ? 'justify-end' : 'justify-start'}`}>
-                {!isSender && <Avatar className="h-6 w-6 self-end"><AvatarImage src={otherUserImage} /><AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback></Avatar>}
-                <div className={`max-w-[75%] rounded-2xl break-words relative ${isSender ? 'active:scale-95 transition-transform duration-150' : ''} ${message.imageUrl ? 'p-0' : 'px-3 py-2 ' + (isSender ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-secondary')}`}>
-                    {renderContent()}
-                    {reactions.length > 0 && <div className={`absolute -bottom-3 text-xs rounded-full bg-secondary border px-1.5 py-0.5 ${isSender ? 'right-2' : 'left-2'}`}>{reactions.map(([_, emoji]) => emoji)[0]} {reactions.length > 1 ? `+${reactions.length - 1}`: ''}</div>}
-                </div>
-            </div>
+            <Popover open={showReactionPopoverFor === message.id} onOpenChange={(isOpen) => !isOpen && setShowReactionPopoverFor(null)}>
+                <PopoverTrigger asChild>
+                    <div 
+                        onClick={() => onClick(message)}
+                        className={`flex items-end gap-2 relative ${isSender ? 'justify-end' : 'justify-start'}`}>
+                        {!isSender && <Avatar className="h-6 w-6 self-end"><AvatarImage src={otherUserImage} /><AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback></Avatar>}
+                        <div className={`max-w-[75%] rounded-2xl break-words relative ${isSender ? 'active:scale-95 transition-transform duration-150' : ''} ${message.imageUrl ? 'p-0' : 'px-3 py-2 ' + (isSender ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-secondary')}`}>
+                            {renderContent()}
+                            {reactions.length > 0 && <div className={`absolute -bottom-3 text-xs rounded-full bg-secondary border px-1.5 py-0.5 ${isSender ? 'right-2' : 'left-2'}`}>{reactions.map(([_, emoji]) => emoji)[0]} {reactions.length > 1 ? `+${reactions.length - 1}`: ''}</div>}
+                        </div>
+                    </div>
+                </PopoverTrigger>
+                <PopoverContent
+                  onOpenAutoFocus={(e) => {
+                    console.log('[DIAGNOSTIC] onOpenAutoFocus FIRED', JSON.stringify({
+                      defaultPrevented: e.defaultPrevented,
+                      activeElement: document.activeElement?.tagName,
+                      activeElementClass: document.activeElement?.className,
+                    }));
 
-            {/* --- START: Experimental DOM-based Popover --- */}
-            {showReactionPopoverFor === message.id && (
-                <div
-                    className={cn(
-                        "absolute z-50 w-auto p-1 rounded-full bg-popover shadow-lg border",
-                        isSender ? "right-4" : "left-12",
-                        "-top-8"
-                    )}
+                    e.preventDefault();
+                  }}
+                  className="w-auto p-1 rounded-full"
                 >
                     <div className="flex items-center gap-1">
                         {availableReactions.map(emoji => <Button key={emoji} onClick={() => onReact(message, emoji)} variant="ghost" size="icon" className="rounded-full h-8 w-8 text-lg">{emoji}</Button>)}
                         {message.text && <Button onClick={() => onCopy(message.text)} variant="ghost" size="icon" className="rounded-full h-8 w-8"><Copy className="h-4 w-4" /></Button>}
                         {isSender && <Button onClick={() => onSetupDelete(message)} variant="ghost" size="icon" className="rounded-full h-8 w-8"><Trash2 className="h-4 w-4" /></Button>}
                     </div>
-                </div>
-            )}
-            {/* --- END: Experimental DOM-based Popover --- */}
-
+                </PopoverContent>
+            </Popover>
             {isLastRead && <div className="text-right text-xs text-muted-foreground pr-2 pt-1">Vu</div>}
         </div>
     );

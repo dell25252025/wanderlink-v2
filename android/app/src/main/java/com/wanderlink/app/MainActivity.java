@@ -6,6 +6,9 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.os.Build;
 import android.util.Log;
+import android.view.ContextMenu;
+import android.view.View;
+import android.webkit.WebView;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -24,6 +27,68 @@ public class MainActivity extends BridgeActivity {
                 manager.createNotificationChannel(channel);
             }
         }
+
+        // --- START: NATIVE-WEBVIEW-AUDIT INSTRUMENTATION ---
+        // This code is for forensic purposes only and should be removed after the audit.
+        final WebView webView = this.getBridge().getWebView();
+
+        if (webView != null) {
+            webView.setOnCreateContextMenuListener(new View.OnCreateContextMenuListener() {
+                @Override
+                public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
+                    long timestamp = System.currentTimeMillis();
+                    String menuInfoClass = (menuInfo == null) ? "null" : menuInfo.getClass().getName();
+                    Log.d("NATIVE-WEBVIEW-AUDIT",
+                        "onCreateContextMenu triggered at: " + timestamp +
+                        " | WebView Class: " + v.getClass().getName() +
+                        " | WebView hasFocus: " + v.hasFocus() +
+                        " | hasWindowFocus: " + v.hasWindowFocus() +
+                        " | ContextMenuInfo type: " + menuInfoClass
+                    );
+
+                    if (menuInfo instanceof WebView.HitTestResult) {
+                        WebView.HitTestResult result = (WebView.HitTestResult) menuInfo;
+                        int hitTestType = result.getType();
+                        String typeString;
+                        switch (hitTestType) {
+                            case WebView.HitTestResult.UNKNOWN_TYPE: typeString = "UNKNOWN"; break;
+                            case WebView.HitTestResult.PHONE_TYPE: typeString = "PHONE"; break;
+                            case WebView.HitTestResult.GEO_TYPE: typeString = "GEO"; break;
+                            case WebView.HitTestResult.EMAIL_TYPE: typeString = "EMAIL"; break;
+                            case WebView.HitTestResult.IMAGE_TYPE: typeString = "IMAGE"; break;
+                            case WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE: typeString = "SRC_IMAGE_ANCHOR"; break;
+                            case WebView.HitTestResult.SRC_ANCHOR_TYPE: typeString = "SRC_ANCHOR"; break;
+                            case WebView.HitTestResult.EDIT_TEXT_TYPE: typeString = "EDIT_TEXT"; break;
+                            default: typeString = "UNHANDLED_CASE (" + hitTestType + ")"; break;
+                        }
+                        Log.d("NATIVE-WEBVIEW-AUDIT",
+                            "HitTestResult Details | Type: " + typeString +
+                            " | Extra: " + result.getExtra()
+                        );
+                    }
+                    // We call super to allow the default behavior to continue for this audit.
+                    // This is observation-only. We do not modify the menu.
+                    MainActivity.super.onCreateContextMenu(menu, v, menuInfo);
+                }
+            });
+
+            webView.setOnLongClickListener(new View.OnLongClickListener() {
+                @Override
+                public boolean onLongClick(View v) {
+                    long timestamp = System.currentTimeMillis();
+                    Log.d("NATIVE-WEBVIEW-AUDIT",
+                        "OnLongClickListener.onLongClick triggered at: " + timestamp +
+                        " | WebView Class: " + v.getClass().getName() +
+                        " | WebView hasFocus: " + v.hasFocus() +
+                        " | hasWindowFocus: " + v.hasWindowFocus()
+                    );
+                    // We return false to allow the event to propagate and trigger onCreateContextMenu.
+                    // This is observation-only.
+                    return false;
+                }
+            });
+        }
+        // --- END: NATIVE-WEBVIEW-AUDIT INSTRUMENTATION ---
     }
 
     // --- Cycle de vie avec Logs (simplifié) ---
