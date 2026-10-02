@@ -66,8 +66,6 @@ public class MainActivity extends BridgeActivity {
                             " | Extra: " + result.getExtra()
                         );
                     }
-                    // We call super to allow the default behavior to continue for this audit.
-                    // This is observation-only. We do not modify the menu.
                     MainActivity.super.onCreateContextMenu(menu, v, menuInfo);
                 }
             });
@@ -77,16 +75,23 @@ public class MainActivity extends BridgeActivity {
                 public boolean onLongClick(View v) {
                     long timestamp = System.currentTimeMillis();
                     Log.d("NATIVE-WEBVIEW-AUDIT",
-                        "OnLongClickListener.onLongClick triggered at: " + timestamp +
-                        " | WebView Class: " + v.getClass().getName() +
-                        " | WebView hasFocus: " + v.hasFocus() +
-                        " | hasWindowFocus: " + v.hasWindowFocus()
+                        "OnLongClickListener.onLongClick triggered at: " + timestamp
                     );
-                    // --- EXPERIMENT (STEP 10) ---
-                    // Returning true to consume the long click event natively,
-                    // attempting to prevent the default context menu from appearing
-                    // and thus preventing the keyboard from hiding.
+                    
+                    // --- EXPERIMENT (STEP 11) ---
+                    // 1. Consume the native event to prevent the context menu and keep the keyboard open.
                     Log.d("NATIVE-WEBVIEW-AUDIT", "onLongClick is consuming the event and returning true.");
+
+                    // 2. Bridge the event back to JavaScript by dispatching a custom event.
+                    webView.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            String script = "window.dispatchEvent(new CustomEvent('custom:longpress'))";
+                            Log.d("NATIVE-WEBVIEW-AUDIT", "Evaluating JS to bridge long press: " + script);
+                            webView.evaluateJavascript(script, null);
+                        }
+                    });
+
                     return true;
                 }
             });

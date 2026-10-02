@@ -213,7 +213,10 @@ const MessageItem = memo<MessageItemProps>(({
     return (
         <div 
             data-is-message-bubble="true"
-            onPointerDown={(e) => e.preventDefault()}
+            onPointerDown={(e) => {
+                (window as any).lastPressedMessageId = message.id;
+                e.preventDefault();
+            }}
             onContextMenu={handleLongPress} 
             className={cn("relative", reactions.length > 0 && "z-10")}
         >
@@ -527,6 +530,25 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     });
   }, [showReactionPopoverFor]);
   // --- END: REACT-POPOVER-DOM-AUDIT INSTRUMENTATION ---
+
+  // --- START: EXPERIMENT (STEP 11) ---
+  // Listen for the custom long press event bridged from native code.
+  useEffect(() => {
+      const handleCustomLongPress = () => {
+          const messageId = (window as any).lastPressedMessageId;
+          if (messageId) {
+              console.log(`[DIAGNOSTIC] custom:longpress received, opening popover for messageId: ${messageId}`);
+              setShowReactionPopoverFor(messageId);
+          }
+      };
+
+      window.addEventListener('custom:longpress', handleCustomLongPress);
+
+      return () => {
+          window.removeEventListener('custom:longpress', handleCustomLongPress);
+      };
+  }, []);
+  // --- END: EXPERIMENT (STEP 11) ---
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
