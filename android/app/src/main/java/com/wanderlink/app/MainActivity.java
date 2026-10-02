@@ -29,7 +29,6 @@ public class MainActivity extends BridgeActivity {
         }
 
         // --- START: NATIVE-WEBVIEW-AUDIT INSTRUMENTATION ---
-        // This code is for forensic purposes only and should be removed after the audit.
         final WebView webView = this.getBridge().getWebView();
 
         if (webView != null) {
@@ -73,16 +72,24 @@ public class MainActivity extends BridgeActivity {
             webView.setOnLongClickListener(new View.OnLongClickListener() {
                 @Override
                 public boolean onLongClick(View v) {
+                    final WebView webView = (WebView) v;
+                    final WebView.HitTestResult result = webView.getHitTestResult();
                     long timestamp = System.currentTimeMillis();
-                    Log.d("NATIVE-WEBVIEW-AUDIT",
-                        "OnLongClickListener.onLongClick triggered at: " + timestamp
-                    );
-                    
-                    // --- EXPERIMENT (STEP 11) ---
-                    // 1. Consume the native event to prevent the context menu and keep the keyboard open.
-                    Log.d("NATIVE-WEBVIEW-AUDIT", "onLongClick is consuming the event and returning true.");
 
-                    // 2. Bridge the event back to JavaScript by dispatching a custom event.
+                    Log.d("NATIVE-WEBVIEW-AUDIT",
+                        "OnLongClickListener.onLongClick triggered at: " + timestamp +
+                        " | HitTestResult Type: " + result.getType()
+                    );
+
+                    // If the long press is on a text editing field, let the default Android context menu handle it.
+                    if (result.getType() == WebView.HitTestResult.EDIT_TEXT_TYPE) {
+                        Log.d("NATIVE-WEBVIEW-AUDIT", "Long press on EDIT_TEXT_TYPE. Returning false to allow native context menu (Paste, etc.).");
+                        return false;
+                    }
+
+                    // For all other types (like message bubbles), consume the event to prevent the native menu
+                    // and instead bridge it to our custom JavaScript handler.
+                    Log.d("NATIVE-WEBVIEW-AUDIT", "Long press on non-edit element. Consuming event and dispatching 'custom:longpress'.");
                     webView.post(new Runnable() {
                         @Override
                         public void run() {
@@ -91,7 +98,7 @@ public class MainActivity extends BridgeActivity {
                             webView.evaluateJavascript(script, null);
                         }
                     });
-
+                    
                     return true;
                 }
             });
