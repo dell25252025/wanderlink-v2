@@ -212,6 +212,7 @@ const MessageItem = memo<MessageItemProps>(({
 
     return (
         <div 
+            data-is-message-bubble="true"
             onPointerDown={(e) => e.preventDefault()}
             onContextMenu={handleLongPress} 
             className={cn("relative", reactions.length > 0 && "z-10")}
@@ -387,32 +388,117 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, [isEmojiPickerOpen]);
   // --- END: IME-AUDIT INSTRUMENTATION ---
 
-  // --- START: PASSIVE EVENT OBSERVATION --- (Added for Forensic Analysis)
-  useEffect(() => {
+    // --- START: JS-EVENT-AUDIT INSTRUMENTATION ---
+  useLayoutEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const passiveEventHandler = (event: Event) => {
-        const time = performance.now().toFixed(3);
+    const eventAuditHandler = (event: Event) => {
         const target = event.target as HTMLElement;
-        const activeElement = document.activeElement as HTMLElement;
+        const currentTarget = event.currentTarget;
+        const activeElement = document.activeElement;
 
-        console.log(
-            `[HITTEST] PASSIVE_EVENT: type=${event.type}, time=${time}, target=${target?.tagName}, activeElement=${activeElement?.tagName}, defaultPrevented=${event.defaultPrevented}, cancelable=${event.cancelable}`
-        );
+        const isInsideMessageBubble = !!(target && typeof target.closest === 'function' && target.closest('[data-is-message-bubble="true"]'));
+        const isTextareaFocused = activeElement === textareaRef.current;
+        const isBodyFocused = activeElement === document.body;
+
+        const describe = (el: EventTarget | null): string => {
+            if (el === window) return 'window';
+            if (el === document) return 'document';
+            if (el instanceof HTMLElement) {
+                 return `${el.tagName}${el.id ? '#' + el.id : ''}`;
+            }
+            if (el) {
+                return 'Node';
+            }
+            return 'null';
+        };
+
+        const logMessage =
+            `[JS-EVENT-AUDIT] ` +
+            `perf=${performance.now().toFixed(3)} ` +
+            `date=${Date.now()} ` +
+            `type=${event.type} ` +
+            `target=${describe(target)} ` +
+            `currentTarget=${describe(currentTarget)} ` +
+            `activeElement=${describe(activeElement)} ` +
+            `defaultPrevented=${event.defaultPrevented} ` +
+            `targetInMessage=${isInsideMessageBubble} ` +
+            `isTextareaFocused=${isTextareaFocused} ` +
+            `isBodyFocused=${isBodyFocused}`;
+
+        console.log(logMessage);
     };
 
-    const eventTypes = ['pointerup', 'pointercancel', 'touchstart', 'touchend', 'touchcancel', 'contextmenu', 'blur', 'focusout', 'focus', 'focusin'];
+    const eventTypes: readonly string[] = [
+        'pointerdown', 'pointermove', 'pointerup', 'pointercancel',
+        'touchstart', 'touchmove', 'touchend',
+        'contextmenu', 'click',
+        'focusin', 'focusout', 'blur'
+    ];
+
     eventTypes.forEach(type => {
-        window.addEventListener(type, passiveEventHandler, { capture: true, passive: true });
+        window.addEventListener(type, eventAuditHandler, { capture: true, passive: true });
     });
 
     return () => {
         eventTypes.forEach(type => {
-            window.removeEventListener(type, passiveEventHandler, { capture: true });
+            window.removeEventListener(type, eventAuditHandler, { capture: true });
         });
     };
+  }, [textareaRef]);
+  // --- END: JS-EVENT-AUDIT INSTRUMENTATION ---
+
+  // --- START: JS-VV-AUDIT INSTRUMENTATION ---
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+
+    const visualViewportResizeHandler = () => {
+        const vv = window.visualViewport;
+        if (!vv) return;
+
+        const logMessage =
+            `[JS-VV-AUDIT] ` +
+            `perf=${performance.now().toFixed(3)} ` +
+            `date=${Date.now()} ` +
+            `vvHeight=${vv.height} ` +
+            `vvOffsetTop=${vv.offsetTop} ` +
+            `innerHeight=${window.innerHeight}`;
+
+        console.log(logMessage);
+    };
+
+    window.visualViewport.addEventListener('resize', visualViewportResizeHandler);
+
+    return () => {
+        window.visualViewport?.removeEventListener('resize', visualViewportResizeHandler);
+    };
   }, []);
-  // --- END: PASSIVE EVENT OBSERVATION ---
+  // --- END: JS-VV-AUDIT INSTRUMENTATION ---
+
+  // --- START: REACT-POPOVER-AUDIT INSTRUMENTATION ---
+  useEffect(() => {
+    const isPopoverOpen = !!showReactionPopoverFor;
+    const activeElement = document.activeElement;
+    const isTextareaFocused = activeElement === textareaRef.current;
+
+    const describe = (el: Element | null): string => {
+        if (!el) return 'null';
+        if (el instanceof HTMLElement) {
+             return `${el.tagName}${el.id ? '#' + el.id : ''}`;
+        }
+        return el.constructor.name;
+    };
+
+    const logMessage =
+        `[REACT-POPOVER-AUDIT] ` +
+        `showReactionPopoverFor=${showReactionPopoverFor} ` +
+        `isPopoverOpen=${isPopoverOpen} ` +
+        `activeElement=${describe(activeElement)} ` +
+        `isTextareaFocused=${isTextareaFocused}`;
+
+    console.log(logMessage);
+  }, [showReactionPopoverFor]);
+  // --- END: REACT-POPOVER-AUDIT INSTRUMENTATION ---
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
