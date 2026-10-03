@@ -214,7 +214,12 @@ const MessageItem = memo<MessageItemProps>(({
         <div 
             data-is-message-bubble="true"
             onPointerDown={(e) => {
-                (window as any).lastPressedMessageId = message.id;
+                const target = e.target as HTMLElement;
+                if (target.closest('[data-message-content="true"]')) {
+                    (window as any).lastPressedMessageId = message.id;
+                } else {
+                    (window as any).lastPressedMessageId = null;
+                }
                 e.preventDefault();
             }}
             onContextMenu={handleLongPress} 
@@ -226,7 +231,9 @@ const MessageItem = memo<MessageItemProps>(({
                         onClick={() => onClick(message)}
                         className={`flex items-end gap-2 relative ${isSender ? 'justify-end' : 'justify-start'}`}>
                         {!isSender && <Avatar className="h-6 w-6 self-end"><AvatarImage src={otherUserImage} /><AvatarFallback>{otherUserName.charAt(0)}</AvatarFallback></Avatar>}
-                        <div className={`max-w-[75%] rounded-2xl break-words relative ${isSender ? 'active:scale-95 transition-transform duration-150' : ''} ${message.imageUrl ? 'p-0' : 'px-3 py-2 ' + (isSender ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-secondary')}`}>
+                        <div 
+                            data-message-content="true"
+                            className={`max-w-[75%] rounded-2xl break-words relative ${isSender ? 'active:scale-95 transition-transform duration-150' : ''} ${message.imageUrl ? 'p-0' : 'px-3 py-2 ' + (isSender ? 'rounded-br-none bg-primary text-primary-foreground' : 'rounded-bl-none bg-secondary')}`}>
                             {renderContent()}
                             {reactions.length > 0 && <div className={`absolute -bottom-3 text-xs rounded-full bg-secondary border px-1.5 py-0.5 ${isSender ? 'right-2' : 'left-2'}`}>{reactions.map(([_, emoji]) => emoji)[0]} {reactions.length > 1 ? `+${reactions.length - 1}`: ''}</div>}
                         </div>
@@ -1178,6 +1185,12 @@ const takePicture = useCallback(async (source: CameraSource) => {
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto pt-14 pb-20"
         onPointerDown={(event) => {
+            const target = event.target as HTMLElement;
+
+            if (!target.closest('[data-is-message-bubble="true"]')) {
+                (window as any).lastPressedMessageId = null;
+            }
+
             // --- START: HIT-TESTING LOGS --- (Added for Forensic Analysis)
             console.log('[HITTEST] POINTER_DOWN', JSON.stringify({
                 clientX: event.clientX,
@@ -1223,7 +1236,6 @@ const takePicture = useCallback(async (source: CameraSource) => {
             // --- END: HIT-TESTING LOGS ---
 
             // --- START: Existing Functional Code --- (Do Not Remove)
-            const target = event.target as HTMLElement;
 
             if (document.activeElement === textareaRef.current) {
                 const closestInteractiveElement = target.closest(
