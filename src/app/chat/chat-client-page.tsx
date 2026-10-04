@@ -1366,7 +1366,15 @@ const takePicture = useCallback(async (source: CameraSource) => {
                         placeholder="Message..."
                         className="w-full resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent py-2.5 px-3 pr-8 min-h-[20px] max-h-32 overflow-y-auto text-sm"
                     />
-                    <Popover open={isEmojiPickerOpen} onOpenChange={setIsEmojiPickerOpen}>
+                    <Popover
+                      open={isEmojiPickerOpen}
+                      onOpenChange={(isOpen) => {
+                        setIsEmojiPickerOpen(isOpen);
+                        if (!isOpen) {
+                          textareaRef.current?.focus();
+                        }
+                      }}
+                    >
                     <PopoverTrigger asChild>
                         <Button type="button" variant="ghost" size="icon" className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6" onMouseDown={(e) => e.preventDefault()}><Smile className="h-4 w-4 text-muted-foreground" /></Button>
                     </PopoverTrigger>
