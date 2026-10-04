@@ -1372,7 +1372,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
       <Dialog open={!!messageToDelete} onOpenChange={(isOpen) => !isOpen && setMessageToDelete(null)}>
         <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
             <DialogHeader><DialogTitle>Supprimer le message</DialogTitle><DialogDescription>Êtes-vous sûr de vouloir supprimer ce message ? Cette action est irréversible.</DialogDescription></DialogHeader>
-            <DialogFooter><Button variant="secondary" onClick={() => setMessageToDelete(null)}>Annuler</Button><Button variant="destructive" onClick={handleDeleteMessage}>Supprimer</Button></DialogFooter>
+            <DialogFooter><Button variant="secondary" onMouseDown={(e) => e.preventDefault()} onClick={() => setMessageToDelete(null)}>Annuler</Button><Button variant="destructive" onMouseDown={(e) => e.preventDefault()} onClick={handleDeleteMessage}>Supprimer</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
