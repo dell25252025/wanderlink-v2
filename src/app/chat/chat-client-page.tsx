@@ -1158,7 +1158,21 @@ const takePicture = useCallback(async (source: CameraSource) => {
 
   return (
     <div className="flex h-screen flex-col bg-background w-full overflow-x-hidden">
-      <header className="fixed top-0 z-30 flex w-full items-center gap-2 border-b bg-background/95 px-2 py-1 backdrop-blur-sm h-12">
+      <header 
+        className="fixed top-0 z-30 flex w-full items-center gap-2 border-b bg-background/95 px-2 py-1 backdrop-blur-sm h-12"
+        onPointerDown={(event) => {
+            const target = event.target as HTMLElement;
+            if (document.activeElement === textareaRef.current) {
+                const closestInteractiveElement = target.closest(
+                    'button, a, input, textarea, select, [role="button"], [contenteditable="true"]'
+                );
+
+                if (!closestInteractiveElement) {
+                    event.preventDefault();
+                }
+            }
+        }}
+      >
         <Button onClick={handleBack} variant="ghost" size="icon" className="h-8 w-8"><ArrowLeft className="h-4 w-4" /></Button>
         <Link href={`/profile?id=${otherUserId}`} className="flex min-w-0 items-center gap-2 truncate">
           <div className="relative">
