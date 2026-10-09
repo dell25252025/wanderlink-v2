@@ -894,7 +894,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
       await setDoc(chatDocRef, { participants: [currentUser.uid, otherUserId], lastMessage: { id: newDocRef.id, text: lastMessageText, senderId: currentUser.uid, timestamp: serverTimestamp(), read: false } }, { merge: true });
     } catch (error) {
-      console.error("Erreur lors de l\'envoi du message:", error);
+      console.error("Erreur lors de l'envoi du message:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
       if (messageData.type !== 'video_call' && messageData.type !== 'missed_call') {
           setNewMessage(text);
@@ -1380,7 +1380,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                     </PopoverTrigger>
                     <PopoverContent side="top" align="end" className="w-full max-w-[320px] p-0 border-none mb-2">
                         <div onMouseDown={(e) => e.preventDefault()}>
-                           <Picker onEmojiClick={handleEmojiClick} emojiStyle={EmojiStyle.NATIVE} width="100%" />
+                           <Picker onEmojiClick={handleEmojiClick} emojiStyle={EmojiStyle.NATIVE} width="100%" autoFocusSearch={false} />
                         </div>
                     </PopoverContent>
                     </Popover>
