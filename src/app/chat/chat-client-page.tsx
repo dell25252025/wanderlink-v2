@@ -1454,7 +1454,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                         <Button type="button" variant="ghost" size="icon" className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6" onMouseDown={(e) => e.preventDefault()}><Smile className="h-4 w-4 text-muted-foreground" /></Button>
                     </PopoverTrigger>
                     <PopoverContent side="top" align="end" className="w-full max-w-[320px] p-0 border-none mb-2">
-                        <div onPointerDown={(e) => e.preventDefault()}>
+                        <div onPointerDownCapture={(e) => e.preventDefault()}>
                            <Picker onEmojiClick={handleEmojiClick} emojiStyle={EmojiStyle.NATIVE} width="100%" autoFocusSearch={false} />
                         </div>
                     </PopoverContent>
