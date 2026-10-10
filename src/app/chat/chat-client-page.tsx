@@ -538,6 +538,67 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, [showReactionPopoverFor]);
   // --- END: REACT-POPOVER-DOM-AUDIT INSTRUMENTATION ---
 
+  // ----- START: EMOJI-FOCUS-DIAG INSTRUMENTATION (Gemini-added) -----
+  useEffect(() => {
+    const PREFIX = '[EMOJI-FOCUS-DIAG]';
+    
+    const describeElement = (el: Element | null) => {
+      if (!el) return 'null';
+      const className = (el.className && typeof el.className === 'string') ? el.className.split(' ')[0] : '';
+      return `${el.tagName}${el.id ? '#' + el.id : ''}${className ? '.' + className : ''}`;
+    };
+
+    const log = (message: string) => {
+      try {
+        console.log(`${PREFIX} ${performance.now().toFixed(1)}ms | ${message}`);
+      } catch (e) {
+        // console may not be available on cleanup
+      }
+    };
+
+    const handleGlobalEvent = (e: Event) => {
+      const target = e.target as HTMLElement;
+      let eventLocation = 'document';
+      if (target?.closest) {
+        if (target.closest('.epr-main')) eventLocation = 'EmojiPicker';
+        else if (target.closest('[data-radix-popper-content-wrapper]')) eventLocation = 'PopoverContent';
+        else if (target.closest('form')) eventLocation = 'ChatForm';
+        else if (target.closest('main')) eventLocation = 'MessageList';
+      }
+      
+      log(
+        `${e.type.padEnd(12)} | ` +
+        `target: ${describeElement(target)} | ` +
+        `location: ${eventLocation} | ` +
+        `activeElement: ${describeElement(document.activeElement)}`
+      );
+    };
+
+    const eventTypes: (keyof WindowEventMap)[] = ['focusin', 'focusout', 'pointerdown', 'pointerup', 'click'];
+    eventTypes.forEach(type => window.addEventListener(type, handleGlobalEvent, { capture: true }));
+
+    log('Instrumentation mounted.');
+
+    return () => {
+      log('Instrumentation unmounted.');
+      eventTypes.forEach(type => window.removeEventListener(type, handleGlobalEvent, { capture: true }));
+    };
+  }, []);
+
+  useEffect(() => {
+    const PREFIX = '[EMOJI-FOCUS-DIAG]';
+    const describeElement = (el: Element | null) => {
+      if (!el) return 'null';
+      const className = (el.className && typeof el.className === 'string') ? el.className.split(' ')[0] : '';
+      return `${el.tagName}${el.id ? '#' + el.id : ''}${className ? '.' + className : ''}`;
+    };
+    const log = (message: string) => {
+      console.log(`${PREFIX} ${performance.now().toFixed(1)}ms | ${message}`);
+    };
+    log(`isEmojiPickerOpen changed to ${isEmojiPickerOpen}. activeElement: ${describeElement(document.activeElement)}`);
+  }, [isEmojiPickerOpen]);
+  // ----- END: EMOJI-FOCUS-DIAG INSTRUMENTATION -----
+
   // --- START: EXPERIMENT (STEP 11) ---
   // Listen for the custom long press event bridged from native code.
   useEffect(() => {
@@ -894,7 +955,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
       await setDoc(chatDocRef, { participants: [currentUser.uid, otherUserId], lastMessage: { id: newDocRef.id, text: lastMessageText, senderId: currentUser.uid, timestamp: serverTimestamp(), read: false } }, { merge: true });
     } catch (error) {
-      console.error("Erreur lors de l'envoi du message:", error);
+      console.error("Erreur lors de l\'envoi du message:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
       if (messageData.type !== 'video_call' && messageData.type !== 'missed_call') {
           setNewMessage(text);
@@ -1149,7 +1210,21 @@ const takePicture = useCallback(async (source: CameraSource) => {
   const handleZoomImage = useCallback((imageUrl: string) => setZoomedImageUrl(imageUrl), []);
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && !e.shiftKey && !isDesktop) { e.preventDefault(); handleSendMessage(e); } };
   useEffect(() => { if(textareaRef.current){ textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`; } }, [newMessage]);
-  const handleEmojiClick = (emoji: EmojiClickData) => { setNewMessage(p => p + emoji.emoji); };
+  
+  const handleEmojiClick = (emoji: EmojiClickData) => {
+    const PREFIX = '[EMOJI-FOCUS-DIAG]';
+    const describeElement = (el: Element | null) => {
+      if (!el) return 'null';
+      const className = (el.className && typeof el.className === 'string') ? el.className.split(' ')[0] : '';
+      return `${el.tagName}${el.id ? '#' + el.id : ''}${className ? '.' + className : ''}`;
+    };
+    const log = (message: string) => {
+      console.log(`${PREFIX} ${performance.now().toFixed(1)}ms | ${message}`);
+    };
+    log(`handleEmojiClick START. activeElement: ${describeElement(document.activeElement)}`);
+    setNewMessage(p => p + emoji.emoji);
+    log(`handleEmojiClick END. activeElement: ${describeElement(document.activeElement)}`);
+  };
 
   const otherUserName = otherUser?.firstName || 'Utilisateur';
   const otherUserImage = otherUser?.profilePictures?.[0] || `https://picsum.photos/seed/${otherUserId}/200`;
