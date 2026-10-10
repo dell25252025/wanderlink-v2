@@ -1211,8 +1211,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && !e.shiftKey && !isDesktop) { e.preventDefault(); handleSendMessage(e); } };
   useEffect(() => { if(textareaRef.current){ textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`; } }, [newMessage]);
 
-  const handleEmojiClick = (emoji: EmojiClickData, event: MouseEvent) => {
-    event.preventDefault();
+  const handleEmojiClick = (emoji: EmojiClickData) => {
     setNewMessage(p => p + emoji.emoji);
     textareaRef.current?.focus();
   };
@@ -1435,7 +1434,6 @@ const takePicture = useCallback(async (source: CameraSource) => {
                     <Popover
                       open={isEmojiPickerOpen}
                       onOpenChange={(isOpen) => {
-                        console.log(`[DIAGNOSTIC] Emoji Popover onOpenChange. isOpen: ${isOpen}. Active Element: ${document.activeElement?.tagName}, Class: ${(document.activeElement as HTMLElement)?.className}`);
                         setIsEmojiPickerOpen(isOpen);
                         if (!isOpen) {
                           textareaRef.current?.focus();
