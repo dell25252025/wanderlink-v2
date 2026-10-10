@@ -1210,7 +1210,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
   const handleZoomImage = useCallback((imageUrl: string) => setZoomedImageUrl(imageUrl), []);
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && !e.shiftKey && !isDesktop) { e.preventDefault(); handleSendMessage(e); } };
   useEffect(() => { if(textareaRef.current){ textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`; } }, [newMessage]);
-  
+
   const handleEmojiClick = (emoji: EmojiClickData, event: MouseEvent) => {
     event.preventDefault();
     setNewMessage(p => p + emoji.emoji);
