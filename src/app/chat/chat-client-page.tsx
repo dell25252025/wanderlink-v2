@@ -1212,19 +1212,9 @@ const takePicture = useCallback(async (source: CameraSource) => {
   useEffect(() => { if(textareaRef.current){ textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`; } }, [newMessage]);
   
   const handleEmojiClick = (emoji: EmojiClickData, event: MouseEvent) => {
-    const PREFIX = '[EMOJI-FOCUS-DIAG]';
-    const describeElement = (el: Element | null) => {
-      if (!el) return 'null';
-      const className = (el.className && typeof el.className === 'string') ? el.className.split(' ')[0] : '';
-      return `${el.tagName}${el.id ? '#' + el.id : ''}${className ? '.' + className : ''}`;
-    };
-    const log = (message: string) => {
-      console.log(`${PREFIX} ${performance.now().toFixed(1)}ms | ${message}`);
-    };
     event.preventDefault();
-    log(`handleEmojiClick START. activeElement: ${describeElement(document.activeElement)}`);
     setNewMessage(p => p + emoji.emoji);
-    log(`handleEmojiClick END. activeElement: ${describeElement(document.activeElement)}`);
+    textareaRef.current?.focus();
   };
 
   const otherUserName = otherUser?.firstName || 'Utilisateur';
@@ -1445,6 +1435,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                     <Popover
                       open={isEmojiPickerOpen}
                       onOpenChange={(isOpen) => {
+                        console.log(`[DIAGNOSTIC] Emoji Popover onOpenChange. isOpen: ${isOpen}. Active Element: ${document.activeElement?.tagName}, Class: ${(document.activeElement as HTMLElement)?.className}`);
                         setIsEmojiPickerOpen(isOpen);
                         if (!isOpen) {
                           textareaRef.current?.focus();
@@ -1454,7 +1445,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                     <PopoverTrigger asChild>
                         <Button type="button" variant="ghost" size="icon" className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6" onMouseDown={(e) => e.preventDefault()}><Smile className="h-4 w-4 text-muted-foreground" /></Button>
                     </PopoverTrigger>
-                    <PopoverContent side="top" align="end" className="w-full max-w-[320px] p-0 border-none mb-2">
+                    <PopoverContent side="top" align="end" className="w-full max-w-[320px] p-0 border-none mb-2" onInteractOutside={(e) => e.preventDefault()}>
                        <Picker onEmojiClick={handleEmojiClick} emojiStyle={EmojiStyle.NATIVE} width="100%" autoFocusSearch={false} />
                     </PopoverContent>
                     </Popover>
