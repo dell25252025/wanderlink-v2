@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, memo, useCallback, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Video, Loader2, CheckCircle, PlusCircle, Trash2, CameraIcon, Mic, Image as ImageIcon, Copy, PhoneMissed } from 'lucide-react';
+import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Video, Loader2, CheckCircle, PlusCircle, Trash2, CameraIcon, Mic, Image as ImageIcon, Copy, PhoneMissed, Keyboard } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getUserProfile, initiateCall, blockUser } from '@/lib/firebase-actions';
@@ -13,7 +13,6 @@ import { Dialog, DialogContent, DialogClose, DialogHeader, DialogTitle, DialogDe
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import Picker, { type EmojiClickData, EmojiStyle } from 'emoji-picker-react';
 import { Textarea } from '@/components/ui/textarea';
 import { ReportAbuseDialog } from '@/components/report-abuse-dialog';
@@ -24,6 +23,7 @@ import { ref, uploadBytesResumable, getDownloadURL, deleteObject, uploadString }
 import { Camera, CameraResultType, CameraSource, PermissionState } from '@capacitor/camera';
 import { AndroidPermissions } from '@awesome-cordova-plugins/android-permissions';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { Keyboard as CapKeyboard } from '@capacitor/keyboard';
 import { AudioPlayer, VoiceRecorder } from './voice-message';
 import { cn } from '@/lib/utils';
 
@@ -281,10 +281,9 @@ const describeForLogcat = (el: EventTarget | Element | null, prefix: string) => 
 
 const getZone = (el: EventTarget | null): string => {
     if (!(el instanceof HTMLElement)) return 'OTHER';
-    if (el.closest('.epr-emoji')) return 'EMOJI';
+    if (el.closest('[data-zone="emoji-picker"]')) return 'EMOJI_PICKER';
     if (el.closest('form')) {
-        const popoverTrigger = el.closest('[role="button"]');
-        if (popoverTrigger && popoverTrigger.querySelector('svg.lucide-smile')) return 'EMOJI_TRIGGER';
+        if (el.closest('[data-zone="emoji-trigger"]')) return 'EMOJI_TRIGGER';
         if (el.closest('textarea')) return 'COMPOSER';
         if (el.closest('button[tabindex="-1"]')) return 'SEND';
         if (el.closest('button')?.querySelector('svg.lucide-mic')) return 'MICRO';
@@ -308,7 +307,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [chat, setChat] = useState<DocumentData | null>(null);
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [newMessage, setNewMessage] = useState('');
-  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const [inputMode, setInputMode] = useState<'KEYBOARD' | 'PICKER'>('KEYBOARD');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [zoomedImageUrl, setZoomedImageUrl] = useState<string | null>(null);
@@ -316,9 +315,12 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [showReactionPopoverFor, setShowReactionPopoverFor] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isOtherUserOnline, setIsOtherUserOnline] = useState(false);
+  const pendingUpdateRef = useRef<{ text: string; cursor: number } | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const shouldRestoreTextareaFocusRef = useRef(false);
+  const latestTextRef = useRef(newMessage);
+  const latestSelectionRef = useRef<{ start: number, end: number }>({ start: 0, end: 0 });
+  const shouldRestoreTextareaFocusRef = useRef(false);  
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -392,10 +394,10 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, []);
 
   useEffect(() => {
-      const time = performance.now().toFixed(3);
-      const activeElementDesc = describeForLogcat(document.activeElement, 'active');
-      console.log(`[IME-AUDIT][JS_MONOTONIC_TIME=${time}] isEmojiPickerOpen changed=${isEmojiPickerOpen} ${activeElementDesc} textareaFocused=${document.activeElement === textareaRef.current}`);
-  }, [isEmojiPickerOpen]);
+    const time = performance.now().toFixed(3);
+    const activeElementDesc = describeForLogcat(document.activeElement, 'active');
+    console.log(`[IME-AUDIT][JS_MONOTONIC_TIME=${time}] inputMode changed=${inputMode} ${activeElementDesc} textareaFocused=${document.activeElement === textareaRef.current}`);
+  }, [inputMode]);
   // --- END: IME-AUDIT INSTRUMENTATION ---
 
     // --- START: JS-EVENT-AUDIT INSTRUMENTATION ---
@@ -864,13 +866,17 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
     const text = newMessage.trim();
     if ((!text && !messageData.imageUrl && !messageData.audioUrl && messageData.type !== 'video_call' && messageData.type !== 'missed_call')) return;
-
+    
     const chatId = getChatId(currentUser.uid, otherUserId);
     const chatDocRef = doc(db, 'chats', chatId);
     const messagesColRef = collection(chatDocRef, 'messages');
     
     if (messageData.type !== 'video_call' && messageData.type !== 'missed_call') {
         setNewMessage('');
+        // Explicitly sync refs and clear pending cursor updates after clearing the message state
+        latestTextRef.current = '';
+        latestSelectionRef.current = { start: 0, end: 0 };
+        pendingUpdateRef.current = null;
     }
 
     try {
@@ -894,10 +900,14 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
       await setDoc(chatDocRef, { participants: [currentUser.uid, otherUserId], lastMessage: { id: newDocRef.id, text: lastMessageText, senderId: currentUser.uid, timestamp: serverTimestamp(), read: false } }, { merge: true });
     } catch (error) {
-      console.error("Erreur lors de l\'envoi du message:", error);
+      console.error("Erreur lors de l'envoi du message:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
       if (messageData.type !== 'video_call' && messageData.type !== 'missed_call') {
           setNewMessage(text);
+          latestTextRef.current = text;
+          const newCursorPosition = text.length;
+          latestSelectionRef.current = { start: newCursorPosition, end: newCursorPosition };
+          pendingUpdateRef.current = { text: text, cursor: newCursorPosition };
       }
     }
   }, [newMessage, currentUser, otherUser, toast, currentUserProfile, otherUserId]);
@@ -1149,7 +1159,38 @@ const takePicture = useCallback(async (source: CameraSource) => {
   const handleZoomImage = useCallback((imageUrl: string) => setZoomedImageUrl(imageUrl), []);
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && !e.shiftKey && !isDesktop) { e.preventDefault(); handleSendMessage(e); } };
   useEffect(() => { if(textareaRef.current){ textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`; } }, [newMessage]);
-  const handleEmojiClick = (emoji: EmojiClickData) => { setNewMessage(p => p + emoji.emoji); };
+
+  useLayoutEffect(() => {
+    if (pendingUpdateRef.current && newMessage === pendingUpdateRef.current.text && textareaRef.current) {
+      textareaRef.current.selectionStart = textareaRef.current.selectionEnd = pendingUpdateRef.current.cursor;
+    }
+    pendingUpdateRef.current = null;
+  }, [newMessage]);
+
+  const handleEmojiClick = (emoji: EmojiClickData) => {
+    const { start, end } = latestSelectionRef.current;
+    const currentText = latestTextRef.current;
+
+    const newText = currentText.slice(0, start) + emoji.emoji + currentText.slice(end);
+    const newCursorPosition = start + emoji.emoji.length;
+
+    latestTextRef.current = newText;
+    latestSelectionRef.current = { start: newCursorPosition, end: newCursorPosition };
+    pendingUpdateRef.current = { text: newText, cursor: newCursorPosition };
+
+    setNewMessage(newText);
+  };
+
+  const toggleInputMode = () => {
+    if (inputMode === 'KEYBOARD') {
+      if(textareaRef.current) { latestSelectionRef.current = { start: textareaRef.current.selectionStart, end: textareaRef.current.selectionEnd }; }
+      CapKeyboard.hide().catch(err => console.error("CapKeyboard.hide() failed", err));
+      setInputMode('PICKER');
+    } else {
+      setInputMode('KEYBOARD');
+      textareaRef.current?.focus();
+    }
+  };
 
   const otherUserName = otherUser?.firstName || 'Utilisateur';
   const otherUserImage = otherUser?.profilePictures?.[0] || `https://picsum.photos/seed/${otherUserId}/200`;
@@ -1197,7 +1238,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
 
       <main
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto pt-14 pb-20"
+        className={cn("flex-1 overflow-y-auto pt-14 pb-20 transition-[padding]", inputMode === 'PICKER' && "pb-[300px]")}
         onPointerDown={(event) => {
             const target = event.target as HTMLElement;
 
@@ -1361,29 +1402,21 @@ const takePicture = useCallback(async (source: CameraSource) => {
                         ref={textareaRef}
                         rows={1}
                         value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
+                        onChange={(e) => {
+                            setNewMessage(e.target.value);
+                            latestTextRef.current = e.target.value;
+                        }}
+                        onSelect={() => { if(textareaRef.current) { latestSelectionRef.current = { start: textareaRef.current.selectionStart, end: textareaRef.current.selectionEnd }; } }}
+                        onKeyUp={() => { if(textareaRef.current) { latestSelectionRef.current = { start: textareaRef.current.selectionStart, end: textareaRef.current.selectionEnd }; } }}
+                        onBlur={() => { if(textareaRef.current) { latestSelectionRef.current = { start: textareaRef.current.selectionStart, end: textareaRef.current.selectionEnd }; } }}
                         onKeyDown={handleKeyDown}
                         placeholder="Message..."
+                        onFocus={() => { if (inputMode !== 'KEYBOARD') setInputMode('KEYBOARD'); }}
                         className="w-full resize-none border-0 focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent py-2.5 px-3 pr-8 min-h-[20px] max-h-32 overflow-y-auto text-sm"
                     />
-                    <Popover
-                      open={isEmojiPickerOpen}
-                      onOpenChange={(isOpen) => {
-                        setIsEmojiPickerOpen(isOpen);
-                        if (!isOpen) {
-                          textareaRef.current?.focus();
-                        }
-                      }}
-                    >
-                    <PopoverTrigger asChild>
-                        <Button type="button" variant="ghost" size="icon" className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6" onMouseDown={(e) => e.preventDefault()}><Smile className="h-4 w-4 text-muted-foreground" /></Button>
-                    </PopoverTrigger>
-                    <PopoverContent side="top" align="end" className="w-full max-w-[320px] p-0 border-none mb-2">
-                        <div onMouseDown={(e) => e.preventDefault()}>
-                           <Picker onEmojiClick={handleEmojiClick} emojiStyle={EmojiStyle.NATIVE} width="100%" />
-                        </div>
-                    </PopoverContent>
-                    </Popover>
+                    <Button data-zone="emoji-trigger" type="button" variant="ghost" size="icon" className="absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-6" onClick={toggleInputMode}>
+                        {inputMode === 'KEYBOARD' ? <Smile className="h-4 w-4 text-muted-foreground" /> : <Keyboard className="h-4 w-4 text-muted-foreground" />}
+                    </Button>
                 </div>
                 <div className="shrink-0">
                 {!newMessage.trim() ? (
@@ -1391,7 +1424,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                 ) : (
                 <Button type="button" onClick={(e) => {
                     handleSendMessage(e as any);
-                    textareaRef.current?.focus();
+                    if (inputMode === 'KEYBOARD') { textareaRef.current?.focus(); }
                 }} variant="ghost" size="icon" className="shrink-0 h-8 w-8 text-primary" disabled={isUploading} tabIndex={-1}><Send className="h-4 w-4" /></Button>
                 )}
                 </div>
@@ -1403,6 +1436,18 @@ const takePicture = useCallback(async (source: CameraSource) => {
             </div>
           )}
         </div>
+        {inputMode === 'PICKER' && (
+            <div data-zone="emoji-picker" className="h-[300px] w-full bg-background border-t">
+                <Picker 
+                    onEmojiClick={handleEmojiClick} 
+                    emojiStyle={EmojiStyle.NATIVE} 
+                    width="100%" 
+                    height="100%" 
+                    searchDisabled
+                    onMouseDown={(e) => e.preventDefault()}
+                />
+            </div>
+        )}
       </footer>
 
       <Dialog open={!!messageToDelete} onOpenChange={(isOpen) => !isOpen && setMessageToDelete(null)}>
