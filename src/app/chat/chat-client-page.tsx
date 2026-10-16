@@ -203,10 +203,14 @@ const MessageItem = memo<MessageItemProps>(({
 
     const renderContent = () => {
         if (message.imageUrl) {
+            // Use a simple img tag for SVGs to avoid Next.js optimization issues
+            if (message.imageUrl.split('?')[0].endsWith('.svg')) {
+                return <img src={message.imageUrl} alt="Sticker" style={{ width: '128px', height: '128px' }} />;
+            }
             return (
-              <button onClick={() => onZoomImage(message.imageUrl!)} className="rounded-2xl overflow-hidden">
-                <Image src={message.imageUrl} alt="" width={250} height={300} className="object-cover" />
-              </button>
+                <button onClick={() => onZoomImage(message.imageUrl!)} className="rounded-2xl overflow-hidden">
+                    <Image src={message.imageUrl} alt="" width={250} height={300} className="object-cover" />
+                </button>
             );
         }
         if (message.audioUrl) {
@@ -1523,7 +1527,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                                     disabled={isSendingSticker}
                                     className="p-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center"
                                 >
-                                    <Image src={sticker} alt="Sticker" width={80} height={80} />
+                                    <img src={sticker} alt="Sticker" width="80" height="80" />
                                 </button>
                             ))}
                         </div>
