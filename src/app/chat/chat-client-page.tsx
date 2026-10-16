@@ -11,6 +11,7 @@ import { auth, db, storage } from '@/lib/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { Drawer, DrawerContent, DrawerTrigger, DrawerClose, DrawerHeader, DrawerTitle, DrawerDescription } from '@/components/ui/drawer';
 import { Dialog, DialogContent, DialogClose, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -61,6 +62,14 @@ interface MessageItemProps {
 // --- Constants ---
 const availableReactions = ['❤️', '😂', '👍', '😢', '😮', '😡'];
 const getChatId = (uid1: string, uid2: string) => [uid1, uid2].sort().join('_');
+const stickers = [
+    '/stickers/1F44D.svg',
+    '/stickers/2764.svg',
+    '/stickers/1F602.svg',
+    '/stickers/1F62D.svg',
+    '/stickers/1F62E.svg',
+    '/stickers/1F44B.svg'
+];
 
 // --- Photo Viewer Component for Zooming ---
 const PhotoViewer = ({ imageUrl, onClose }: { imageUrl: string; onClose: () => void; }) => {
@@ -309,6 +318,8 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [newMessage, setNewMessage] = useState('');
   const [inputMode, setInputMode] = useState<'KEYBOARD' | 'PICKER'>('KEYBOARD');
+  const [activePickerTab, setActivePickerTab] = useState<'emoji' | 'sticker'>('emoji');
+  const [isSendingSticker, setIsSendingSticker] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [zoomedImageUrl, setZoomedImageUrl] = useState<string | null>(null);
@@ -913,6 +924,50 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
     }
   }, [newMessage, currentUser, otherUser, toast, currentUserProfile, otherUserId]);
 
+    const handleSendSticker = useCallback(async (stickerUrl: string) => {
+        if (!currentUser || !otherUser || isSendingSticker) return;
+
+        setIsSendingSticker(true);
+        try {
+            const response = await fetch(stickerUrl);
+            const blob = await response.blob();
+
+            const chatId = getChatId(currentUser.uid, otherUserId);
+            const fileName = `${new Date().getTime()}.svg`;
+            const storageRef = ref(storage, `chat_images/${chatId}/${fileName}`);
+            const uploadTask = uploadBytesResumable(storageRef, blob, { contentType: 'image/svg+xml' });
+
+            await new Promise((resolve, reject) => {
+                uploadTask.on('state_changed',
+                    () => {},
+                    (error) => {
+                        console.error("Sticker upload failed:", error);
+                        toast({ variant: 'destructive', title: 'Erreur d\'envoi', description: 'Impossible d\'envoyer le sticker.' });
+                        setIsSendingSticker(false);
+                        reject(error);
+                    },
+                    async () => {
+                        try {
+                            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+                            await handleSendMessage(undefined, { imageUrl: downloadUrl, text: '', type: 'image' });
+                            setIsSendingSticker(false);
+                            resolve(downloadUrl);
+                        } catch (error) {
+                            console.error("Sticker post-upload failed:", error);
+                            toast({ variant: 'destructive', title: 'Erreur d\'envoi', description: 'Impossible de finaliser l\'envoi du sticker.' });
+                            setIsSendingSticker(false);
+                            reject(error);
+                        }
+                    }
+                );
+            });
+        } catch (error) {
+            console.error("Sticker sending preparation failed:", error);
+            toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible d\'envoyer le sticker.' });
+            setIsSendingSticker(false);
+        }
+    }, [currentUser, otherUser, handleSendMessage, toast, isSendingSticker]);
+
   const handleDeleteMessage = useCallback(async () => {
     if (!messageToDelete || !currentUser || !otherUser) return;
     const chatId = getChatId(currentUser.uid, otherUserId);
@@ -1438,15 +1493,42 @@ const takePicture = useCallback(async (source: CameraSource) => {
           )}
         </div>
         {inputMode === 'PICKER' && (
-            <div data-zone="emoji-picker" className="h-[300px] w-full bg-background border-t">
-                <Picker 
-                    onEmojiClick={handleEmojiClick} 
-                    emojiStyle={EmojiStyle.NATIVE} 
-                    width="100%" 
-                    height="100%" 
-                    searchDisabled
-                    onMouseDown={(e) => e.preventDefault()}
-                />
+            <div className="h-[300px] w-full bg-background border-t">
+                <Tabs value={activePickerTab} onValueChange={(value) => setActivePickerTab(value as 'emoji' | 'sticker')} className="flex flex-col h-full">
+                    <TabsList className="shrink-0 w-full rounded-none justify-start px-2">
+                        <TabsTrigger value="emoji">Emojis</TabsTrigger>
+                        <TabsTrigger value="sticker">Stickers</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="emoji" className="flex-grow overflow-y-auto">
+                        <Picker
+                            onEmojiClick={handleEmojiClick}
+                            emojiStyle={EmojiStyle.NATIVE}
+                            width="100%"
+                            height="100%"
+                            searchDisabled
+                            onMouseDown={(e) => e.preventDefault()}
+                        />
+                    </TabsContent>
+                    <TabsContent value="sticker" className="flex-grow overflow-y-auto p-4 relative">
+                        {isSendingSticker && (
+                            <div className="absolute inset-0 bg-background/50 flex items-center justify-center z-10">
+                                <Loader2 className="h-8 w-8 animate-spin" />
+                            </div>
+                        )}
+                        <div className="grid grid-cols-4 gap-4">
+                            {stickers.map((sticker) => (
+                                <button
+                                    key={sticker}
+                                    onClick={() => handleSendSticker(sticker)}
+                                    disabled={isSendingSticker}
+                                    className="p-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center"
+                                >
+                                    <Image src={sticker} alt="Sticker" width={80} height={80} />
+                                </button>
+                            ))}
+                        </div>
+                    </TabsContent>
+                </Tabs>
             </div>
         )}
       </footer>
