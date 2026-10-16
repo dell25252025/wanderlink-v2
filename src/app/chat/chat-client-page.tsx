@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Send, MoreVertical, Ban, ShieldAlert, Smile, X, Video, Loader2, CheckCircle, PlusCircle, Trash2, CameraIcon, Mic, Image as ImageIcon, Copy, PhoneMissed, Keyboard } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { getUserProfile, initiateCall, blockUser } from '@/lib/firebase-actions';
 import { auth, db, storage } from '@/lib/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
