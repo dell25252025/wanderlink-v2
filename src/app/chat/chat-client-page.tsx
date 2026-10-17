@@ -62,6 +62,19 @@ interface MessageItemProps {
 // --- Constants ---
 const availableReactions = ['❤️', '😂', '👍', '😢', '😮', '😡'];
 const getChatId = (uid1: string, uid2: string) => [uid1, uid2].sort().join('_');
+
+// NEW: The 6 required ImageKit stickers.
+const wanderlinkStickers = {
+    "Capybara": [
+        { name: "Hi", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-greetings-capybara-hi.apng?updatedAt=1792260126041" },
+        { name: "Bay", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-daily-capybara-pay.apng?updatedAt=1792260125231" },
+        { name: "Uhu…", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-greetings-capybara-uhu-sarcastic.apng?updatedAt=1792260125108" },
+        { name: "Sing it", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-variant-capybara-singing-poster.webp?updatedAt=1792260120551" },
+        { name: "Ride Together", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-variant-capybara-motorbike-together-poster.webp?updatedAt=1792260118280" },
+        { name: "Ouch…", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-variant-capybara-hurt.apng?updatedAt=1792260134185" },
+    ]
+};
+
 const stickers = [
     '/stickers/1F44D.svg',
     '/stickers/2764.svg',
@@ -70,6 +83,7 @@ const stickers = [
     '/stickers/1F62E.svg',
     '/stickers/1F44B.svg'
 ];
+
 
 // --- Photo Viewer Component for Zooming ---
 const PhotoViewer = ({ imageUrl, onClose }: { imageUrl: string; onClose: () => void; }) => {
@@ -149,6 +163,7 @@ const PhotoViewer = ({ imageUrl, onClose }: { imageUrl: string; onClose: () => v
                     ref={imageRef}
                     src={imageUrl}
                     alt="Image zoomée"
+                    unoptimized
                     fill
                     className="object-contain transition-transform duration-200 touch-none"
                     style={{
@@ -183,7 +198,7 @@ const MessageItem = memo<MessageItemProps>(({
 }) => {
     const reactions = message.reactions ? Object.entries(message.reactions) : [];
 
-    // --- System Message for Calls ---
+    // --- System Message for Calls (UNCHANGED) ---
     if (message.type === 'video_call' || message.type === 'missed_call') {
         const isMissed = message.type === 'missed_call';
         const Icon = isMissed ? PhoneMissed : Video;
@@ -203,13 +218,24 @@ const MessageItem = memo<MessageItemProps>(({
 
     const renderContent = () => {
         if (message.imageUrl) {
-            // Use a simple img tag for SVGs to avoid Next.js optimization issues
-            if (message.imageUrl.split('?')[0].endsWith('.svg')) {
+            // MODIFICATION: Differentiate between a sticker and a regular photo.
+            const isImageKitSticker = message.imageUrl.startsWith("https://ik.imagekit.io");
+            
+            // OLD LOGIC PRESERVED: Special handling for old SVG stickers.
+            if (!isImageKitSticker && message.imageUrl.split('?')[0].endsWith('.svg')) {
                 return <img src={message.imageUrl} alt="Sticker" style={{ width: '128px', height: '128px' }} />;
             }
+            
             return (
                 <button onClick={() => onZoomImage(message.imageUrl!)} className="rounded-2xl overflow-hidden">
-                    <Image src={message.imageUrl} alt="" width={250} height={300} className="object-cover" />
+                    <Image 
+                        src={message.imageUrl} 
+                        alt="Image"
+                        width={isImageKitSticker ? 128 : 250}
+                        height={isImageKitSticker ? 128 : 300}
+                        unoptimized={isImageKitSticker}
+                        className={isImageKitSticker ? "object-contain" : "object-cover"} 
+                    />
                 </button>
             );
         }
@@ -224,6 +250,7 @@ const MessageItem = memo<MessageItemProps>(({
         onLongPress(message);
     };
 
+    // PRESERVED: All event handlers on the message bubble are kept UNCHANGED.
     return (
         <div 
             data-is-message-bubble="true"
@@ -342,7 +369,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
-    // --- START: IME-AUDIT INSTRUMENTATION --- (Do Not Remove)
+    // --- START: IME-AUDIT INSTRUMENTATION --- (UNCHANGED)
   useLayoutEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -416,7 +443,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, [inputMode]);
   // --- END: IME-AUDIT INSTRUMENTATION ---
 
-    // --- START: JS-EVENT-AUDIT INSTRUMENTATION ---
+    // --- START: JS-EVENT-AUDIT INSTRUMENTATION --- (UNCHANGED)
   useLayoutEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -476,7 +503,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, [textareaRef]);
   // --- END: JS-EVENT-AUDIT INSTRUMENTATION ---
 
-  // --- START: JS-VV-AUDIT INSTRUMENTATION ---
+  // --- START: JS-VV-AUDIT INSTRUMENTATION --- (UNCHANGED)
   useLayoutEffect(() => {
     if (typeof window === 'undefined' || !window.visualViewport) return;
 
@@ -503,7 +530,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, []);
   // --- END: JS-VV-AUDIT INSTRUMENTATION ---
 
-  // --- START: REACT-POPOVER-AUDIT INSTRUMENTATION ---
+  // --- START: REACT-POPOVER-AUDIT INSTRUMENTATION --- (UNCHANGED)
   useEffect(() => {
     const isPopoverOpen = !!showReactionPopoverFor;
     const activeElement = document.activeElement;
@@ -528,7 +555,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, [showReactionPopoverFor]);
   // --- END: REACT-POPOVER-AUDIT INSTRUMENTATION ---
 
-  // --- START: REACT-POPOVER-DOM-AUDIT INSTRUMENTATION ---
+  // --- START: REACT-POPOVER-DOM-AUDIT INSTRUMENTATION --- (UNCHANGED)
   useEffect(() => {
     requestAnimationFrame(() => {
         const activeElement = document.activeElement;
@@ -556,7 +583,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   }, [showReactionPopoverFor]);
   // --- END: REACT-POPOVER-DOM-AUDIT INSTRUMENTATION ---
 
-  // --- START: EXPERIMENT (STEP 11) ---
+  // --- START: EXPERIMENT (STEP 11) --- (UNCHANGED)
   // Listen for the custom long press event bridged from native code.
   useEffect(() => {
       const handleCustomLongPress = () => {
@@ -909,14 +936,17 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       const newDocRef = await addDoc(messagesColRef, finalMessageData);
       
       let lastMessageText = finalMessageData.text;
-      if(finalMessageData.type === 'video_call') lastMessageText = 'Appel vidéo';
+      // MODIFIED: Correctly label last message as Sticker or Photo.
+      if(finalMessageData.imageUrl) {
+        lastMessageText = finalMessageData.imageUrl.startsWith("https://ik.imagekit.io") ? '📷 Sticker' : '📷 Photo';
+      }
+      else if(finalMessageData.type === 'video_call') lastMessageText = 'Appel vidéo';
       else if(finalMessageData.type === 'missed_call') lastMessageText = 'Appel manqué';
-      else if(finalMessageData.imageUrl) lastMessageText = '📷 Photo';
       else if(finalMessageData.audioUrl) lastMessageText = '🎤 Message vocal';
 
       await setDoc(chatDocRef, { participants: [currentUser.uid, otherUserId], lastMessage: { id: newDocRef.id, text: lastMessageText, senderId: currentUser.uid, timestamp: serverTimestamp(), read: false } }, { merge: true });
     } catch (error) {
-      console.error("Erreur lors de l'envoi du message:", error);
+      console.error("Erreur lors de l\'envoi du message:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
       if (messageData.type !== 'video_call' && messageData.type !== 'missed_call') {
           setNewMessage(text);
@@ -972,13 +1002,30 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
         }
     }, [currentUser, otherUser, handleSendMessage, toast, isSendingSticker]);
 
+    // NEW: Safe and efficient sending logic for ImageKit stickers.
+    const handleSendImageKitSticker = useCallback(async (stickerUrl: string) => {
+        if (!currentUser || !otherUser || isSendingSticker) return;
+        setIsSendingSticker(true);
+        try {
+            await handleSendMessage(undefined, { imageUrl: stickerUrl, text: '', type: 'image' });
+        } catch (error) {
+            console.error("ImageKit Sticker sending failed:", error);
+            toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible d\'envoyer le sticker.' });
+        } finally {
+            setIsSendingSticker(false);
+        }
+    }, [currentUser, otherUser, handleSendMessage, toast, isSendingSticker]);
+
   const handleDeleteMessage = useCallback(async () => {
     if (!messageToDelete || !currentUser || !otherUser) return;
     const chatId = getChatId(currentUser.uid, otherUserId);
     const messageRef = doc(db, 'chats', chatId, 'messages', messageToDelete.id);
     const chatRef = doc(db, 'chats', chatId);
     try {
-        if (messageToDelete.imageUrl) { await deleteObject(ref(storage, messageToDelete.imageUrl)); }
+        // MODIFIED: Added a security check to NOT delete images from ImageKit.
+        if (messageToDelete.imageUrl && !messageToDelete.imageUrl.startsWith("https://ik.imagekit.io")) {
+             await deleteObject(ref(storage, messageToDelete.imageUrl));
+        }
         if (messageToDelete.audioUrl) { await deleteObject(ref(storage, messageToDelete.audioUrl)); }
         await deleteDoc(messageRef);
         if (chat?.lastMessage?.id === messageToDelete.id) {
@@ -1306,7 +1353,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
                 (window as any).lastPressedMessageId = null;
             }
 
-            // --- START: HIT-TESTING LOGS --- (Added for Forensic Analysis)
+            // --- START: HIT-TESTING LOGS --- (UNCHANGED)
             console.log('[HITTEST] POINTER_DOWN', JSON.stringify({
                 clientX: event.clientX,
                 clientY: event.clientY,
@@ -1350,7 +1397,7 @@ const takePicture = useCallback(async (source: CameraSource) => {
             });
             // --- END: HIT-TESTING LOGS ---
 
-            // --- START: Existing Functional Code --- (Do Not Remove)
+            // --- START: Existing Functional Code --- (UNCHANGED)
 
             if (document.activeElement === textareaRef.current) {
                 const closestInteractiveElement = target.closest(
@@ -1519,16 +1566,23 @@ const takePicture = useCallback(async (source: CameraSource) => {
                                 <Loader2 className="h-8 w-8 animate-spin" />
                             </div>
                         )}
-                        <div className="grid grid-cols-4 gap-4">
-                            {stickers.map((sticker) => (
-                                <button
-                                    key={sticker}
-                                    onClick={() => handleSendSticker(sticker)}
-                                    disabled={isSendingSticker}
-                                    className="p-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center"
-                                >
-                                    <img src={sticker} alt="Sticker" width="80" height="80" />
-                                </button>
+                        <div className="space-y-4">
+                            {Object.entries(wanderlinkStickers).map(([category, stickers]) => (
+                                <div key={category}>
+                                    <h3 className="text-sm font-semibold text-muted-foreground mb-2">{category}</h3>
+                                    <div className="grid grid-cols-4 gap-4">
+                                        {stickers.map((sticker) => (
+                                            <button
+                                                key={sticker.url}
+                                                onClick={() => handleSendImageKitSticker(sticker.url)}
+                                                disabled={isSendingSticker}
+                                                className="p-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center"
+                                            >
+                                                <Image src={sticker.url} alt={sticker.name} width={80} height={80} unoptimized />
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
                             ))}
                         </div>
                     </TabsContent>
