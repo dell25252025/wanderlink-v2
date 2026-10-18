@@ -63,7 +63,7 @@ interface MessageItemProps {
 const availableReactions = ['❤️', '😂', '👍', '😢', '😮', '😡'];
 const getChatId = (uid1: string, uid2: string) => [uid1, uid2].sort().join('_');
 
-// MODIFIED: Extended the Capybara sticker pack to 26 stickers.
+// MODIFIED: Extended the Capybara sticker pack to 56 stickers.
 const wanderlinkStickers = {
     "Capybara": [
         { name: "Hi", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-greetings-capybara-hi.apng?updatedAt=1792260126041" },
@@ -92,6 +92,36 @@ const wanderlinkStickers = {
         { name: "Bruh", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-slang-capybara-bruh.apng?updatedAt=1792260133013" },
         { name: "Drunk", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-slang-capybara-drunk.apng?updatedAt=1792260132409" },
         { name: "Emergency Snack", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-capybara-snack.apng?updatedAt=1792260132112" },
+        { name: "Small", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-reaction-capybara-small.apng?updatedAt=1792260131938" },
+        { name: "Loser", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-teasing-capybara-loser.apng?updatedAt=1792260131966" },
+        { name: "No Way", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-slang-capybara-no-way.apng?updatedAt=1792260131680" },
+        { name: "Genius", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-smart-capybara-genius-sign.apng?updatedAt=1792260132441" },
+        { name: "Weekend Mode", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-capybara-weekend.apng?updatedAt=1792260131683" },
+        { name: "Pray", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-reaction-capybara-pray.apng?updatedAt=1792260131250" },
+        { name: "Knife", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-reaction-capybara-knife.apng?updatedAt=1792260132312" },
+        { name: "Everything's Fine", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-capybara-fine.apng?updatedAt=1792260131431" },
+        { name: "GG", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-slang-capybara-gg.apng?updatedAt=1792260131249" },
+        { name: "Sigh...", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-sigh-capybara.apng?updatedAt=1792260131801" },
+        { name: "Time for Vacation!", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-greetings-capybara-vacation.apng?updatedAt=1792260131435" },
+        { name: "Still Waiting", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-capybara-queue.apng?updatedAt=1792260132265" },
+        { name: "Power Saving Mode", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-capybara-power-nap.apng?updatedAt=1792260131104" },
+        { name: "Do Not Disturb", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-capybara-spa.apng?updatedAt=1792260131271" },
+        { name: "So Toasty", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-cold-warm-capybara-cozy-fire.apng?updatedAt=1792260131563" },
+        { name: "Welcome Back Home!", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-greetings-capybara-welcome-home.apng?updatedAt=1792260130822" },
+        { name: "Warming Up", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-cold-warm-capybara-home-heater.apng?updatedAt=1792260130672" },
+        { name: "Big Soft Hug", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-capybara-hug.apng?updatedAt=1792260130443" },
+        { name: "Welcome Here!", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-greetings-capybara-welcome-here.apng?updatedAt=1792260130363" },
+        { name: "Seriously?", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-eye-reaction-capybara-eye-roll.apng?updatedAt=1792260130239" },
+        { name: "Frozen Hands", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-cold-warm-capybara-freezing-hands.apng?updatedAt=1792260130076" },
+        { name: "Brrr, So Cold", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-cold-warm-capybara-brr-cold.apng?updatedAt=1792260129935" },
+        { name: "Goodbye!", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-farewell-capybara-goodbye.apng?updatedAt=1792260129563" },
+        { name: "Rage Quit", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-reaction-capybara-board-flip.apng?updatedAt=1792260129442" },
+        { name: "On My Way...", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-capybara-slow.apng?updatedAt=1792260129486" },
+        { name: "Also Me...", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-chat-capybara-me-sad-sign.apng?updatedAt=1792260129215" },
+        { name: "Cooking", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-daily-capybara-sport.apng?updatedAt=1792260127665" },
+        { name: "Right?", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-greetings-capybara-right.apng?updatedAt=1792260127355" },
+        { name: "Geek", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-greetings-capybara-geek.apng?updatedAt=1792260126916" },
+        { name: "Big", url: "https://ik.imagekit.io/fip3ktm2p/Autocollants%20Capybara%20Patience/funny-everyday-reaction-capybara-big.apng?updatedAt=1792260126259" }
     ]
 };
 
