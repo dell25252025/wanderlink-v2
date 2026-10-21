@@ -6,6 +6,7 @@ import { AdMob, AdOptions, InterstitialAdPluginEvents, PluginListenerHandle } fr
 import { useAd } from '@/context/ad-context';
 
 const AD_ID_INTERSTITIAL_PROD = 'ca-app-pub-9129126817397448/2514345599';
+const AD_ID_INTERSTITIAL_TEST = 'ca-app-pub-3940256099942544/1033173712';
 
 const AdMobSetup = () => {
   const admobInitialized = useRef(false);
@@ -24,7 +25,17 @@ const AdMobSetup = () => {
     isPreparing.current = true;
     console.log('AdMob: Preparing new interstitial ad...');
     try {
-      const options: AdOptions = { adId: AD_ID_INTERSTITIAL_PROD, isTesting: false };
+      // Securité : Le mode test n'est activable qu'en environnement de développement.
+      const isDevelopmentEnv = process.env.NODE_ENV !== 'production';
+      const isTestViaUrl = new URLSearchParams(window.location.search).get('ad_test_mode') === 'true';
+      const isTestMode = isDevelopmentEnv && isTestViaUrl;
+
+      const adId = isTestMode ? AD_ID_INTERSTITIAL_TEST : AD_ID_INTERSTITIAL_PROD;
+      const isTesting = isTestMode;
+
+      console.log(`AdMob: Preparing with options - adId: ${adId}, isTesting: ${isTesting}`);
+      
+      const options: AdOptions = { adId, isTesting };
       await AdMob.prepareInterstitial(options);
     } catch (error) {
       console.error('AdMob: Failed to prepare interstitial.', error);
