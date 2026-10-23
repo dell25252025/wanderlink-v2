@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-// The Zod schema remains unchanged as the data structure we receive from the proxy is the same
 const GifSchema = z.object({
   url: z.string().url(),
   anime: z.string(),
@@ -10,32 +9,36 @@ const GifsResponseSchema = z.array(GifSchema);
 
 export type Gif = z.infer<typeof GifSchema>;
 
-// MODIFICATION: The base URL now points to our own API proxy
-const API_BASE_URL = '/api/gifs'; // Relative path to our API route
+const API_BASE_URL = '/api/gifs';
 
 async function fetchAndValidate<T>(url: string, schema: z.ZodType<T>, signal?: AbortSignal): Promise<T> {
   try {
-    // The fetch logic remains the same, only the URL changes
     const response = await fetch(url, { signal }); 
     if (!response.ok) {
-      throw new Error(`Network error: ${response.statusText}`);
+      // Log pour l'erreur réseau
+      console.error(`[GIF_PROVIDER_ERROR] Erreur réseau: ${response.status} ${response.statusText}`);
+      throw new Error(`Erreur réseau: ${response.statusText}`);
     }
     const data = await response.json();
+
+    // --- AJOUT POUR LE DÉBOGAGE ---
+    // Affiche la donnée brute reçue avant la validation.
+    console.log('[GIF_PROVIDER_DEBUG] Donnée brute reçue du proxy:', JSON.stringify(data, null, 2));
+    // --- FIN DE L'AJOUT POUR LE DÉBOGAGE ---
+
     return schema.parse(data);
+
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error('Zod validation error:', error.issues);
-      throw new Error("The GIF API response is invalid.");
+      // Log plus détaillé pour l'erreur de validation
+      console.error('[GIF_PROVIDER_ERROR] Erreur de validation Zod. Détails:', JSON.stringify(error.issues, null, 2));
+      throw new Error("La réponse de l'API GIF est invalide.");
     }
+    console.error('[GIF_PROVIDER_ERROR] Erreur inattendue dans fetchAndValidate:', error);
     throw error;
   }
 }
 
-/**
- * Fetches GIFs via our internal proxy to bypass the CORS issue.
- * @param reaction - The category of GIFs to fetch (e.g., 'wave', 'cry').
- */
 export function getGifsByReaction(reaction: string, signal?: AbortSignal): Promise<Gif[]> {
-  // MODIFICATION: Build the URL with a query parameter
   return fetchAndValidate(`${API_BASE_URL}?reaction=${encodeURIComponent(reaction)}`, GifsResponseSchema, signal);
 }
