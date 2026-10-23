@@ -1,22 +1,22 @@
 import { z } from 'zod';
 
-// 1. Schémas de validation avec Zod pour la robustesse
-const ReactionSchema = z.string();
+// 1. Schéma de validation Zod pour un seul GIF
+// La réponse pour une réaction est un tableau de ces objets
 const GifSchema = z.object({
-  gif: z.string().url(),
+  url: z.string().url(), // L'API renvoie bien un champ 'url'
+  anime: z.string(), // Gardons cette information, même si nous ne l'utilisons pas
 });
 
-const ReactionsResponseSchema = z.array(ReactionSchema);
+// Le schéma pour la réponse complète de l'API (un tableau de GIFs)
 const GifsResponseSchema = z.array(GifSchema);
 
-// 2. Types dérivés des schémas
-export type Reaction = z.infer<typeof ReactionSchema>;
+// 2. Type dérivé du schéma
 export type Gif = z.infer<typeof GifSchema>;
 
 // 3. URL de base de l'API
-const API_BASE_URL = 'https://gifukai.fly.dev';
+const API_BASE_URL = 'https://api.gifukai.com/v1';
 
-// 4. Fonction générique pour les appels fetch
+// 4. Fonction générique pour les appels fetch, inchangée
 async function fetchAndValidate<T>(url: string, schema: z.ZodType<T>, signal?: AbortSignal): Promise<T> {
   try {
     const response = await fetch(url, { signal });
@@ -28,33 +28,17 @@ async function fetchAndValidate<T>(url: string, schema: z.ZodType<T>, signal?: A
   } catch (error) {
     if (error instanceof z.ZodError) {
       console.error('Erreur de validation Zod:', error.issues);
-      throw new Error('La réponse de l\'API GIF est invalide.');
+      throw new Error("La réponse de l'API GIF est invalide.");
     }
     throw error;
   }
 }
 
-// 5. Fonctions exportées pour être utilisées par les composants
-
-/**
- * Récupère la liste des réactions (catégories) de GIFs disponibles.
- */
-export function getReactions(signal?: AbortSignal): Promise<Reaction[]> {
-  return fetchAndValidate(`${API_BASE_URL}/reactions`, ReactionsResponseSchema, signal);
-}
-
+// 5. Fonction simplifiée pour récupérer les GIFs par réaction
 /**
  * Récupère les GIFs correspondant à une réaction spécifique.
- * @param reaction - La catégorie de GIFs à récupérer.
+ * @param reaction - La catégorie de GIFs à récupérer (ex: 'wave', 'cry').
  */
 export function getGifsByReaction(reaction: string, signal?: AbortSignal): Promise<Gif[]> {
-  return fetchAndValidate(`${API_BASE_URL}/gifs/reaction/${encodeURIComponent(reaction)}`, GifsResponseSchema, signal);
-}
-
-/**
- * Recherche des GIFs à partir d'une requête textuelle.
- * @param query - Le terme de recherche.
- */
-export function searchGifs(query: string, signal?: AbortSignal): Promise<Gif[]> {
-  return fetchAndValidate(`${API_BASE_URL}/gifs/search?q=${encodeURIComponent(query)}`, GifsResponseSchema, signal);
+  return fetchAndValidate(`${API_BASE_URL}/${encodeURIComponent(reaction)}`, GifsResponseSchema, signal);
 }

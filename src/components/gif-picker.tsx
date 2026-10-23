@@ -1,41 +1,24 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Loader2, ServerCrash } from 'lucide-react';
-import { getReactions, getGifsByReaction, searchGifs, type Reaction, type Gif } from '@/lib/gif-provider';
-import { useDebounce } from '@/hooks/use-debounce';
+import { getGifsByReaction, type Gif } from '@/lib/gif-provider';
 
 interface GifPickerProps {
   onGifSelect: (gifUrl: string) => void;
 }
 
+// Catégories fixes, comme demandé
+const GIF_CATEGORIES = ['wave', 'cry', 'thumbsup', 'shrug', 'surprised'];
+
 export function GifPicker({ onGifSelect }: GifPickerProps) {
-  const [reactions, setReactions] = useState<Reaction[]>([]);
   const [gifs, setGifs] = useState<Gif[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  const [selectedCategory, setSelectedCategory] = useState(GIF_CATEGORIES[0]);
+
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Récupérer les catégories au montage
-  useEffect(() => {
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    setLoading(true);
-    getReactions(controller.signal)
-      .then(setReactions)
-      .catch(() => setError('Impossible de charger les catégories.'))
-      .finally(() => setLoading(false));
-
-    return () => controller.abort();
-  }, []);
-
-  // Gérer la recherche ou la sélection de catégorie
-  const fetchGifs = useCallback(async (query: string, reaction?: string) => {
-    // Annuler la requête précédente si elle existe
+  const fetchGifs = useCallback(async (category: string) => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -44,12 +27,10 @@ export function GifPicker({ onGifSelect }: GifPickerProps) {
 
     setLoading(true);
     setError(null);
-    setGifs([]); // Vider les GIFs précédents
+    setGifs([]);
 
     try {
-      const results = query
-        ? await searchGifs(query, controller.signal)
-        : await getGifsByReaction(reaction || reactions[0], controller.signal);
+      const results = await getGifsByReaction(category, controller.signal);
       setGifs(results);
     } catch (e: any) {
       if (e.name !== 'AbortError') {
@@ -58,51 +39,39 @@ export function GifPicker({ onGifSelect }: GifPickerProps) {
     } finally {
       setLoading(false);
     }
-  }, [reactions]); // Dépend de `reactions` pour la première charge
+  }, []);
 
-  // Charger les GIFs populaires (la première catégorie) au début
+  // Charger les GIFs de la catégorie sélectionnée
   useEffect(() => {
-    if (reactions.length > 0) {
-      fetchGifs('', reactions[0]);
-    }
-  }, [reactions, fetchGifs]);
+    fetchGifs(selectedCategory);
 
-  // Lancer une recherche lorsque la requête (débauncée) change
-  useEffect(() => {
-    if (debouncedSearchQuery) {
-      fetchGifs(debouncedSearchQuery);
-    } else if (reactions.length > 0) {
-      // Revenir aux GIFs populaires si la recherche est vide
-      fetchGifs('', reactions[0]);
-    }
-  }, [debouncedSearchQuery, reactions, fetchGifs]);
-
-  const handleReactionClick = (reaction: string) => {
-    setSearchQuery(''); // Réinitialiser la recherche
-    fetchGifs('', reaction);
-  };
+    // Cleanup pour annuler le fetch si le composant est démonté
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [selectedCategory, fetchGifs]);
 
   return (
     <div className="h-full flex flex-col p-2 bg-background">
-      <Input
-        type="text"
-        placeholder="Rechercher des GIFs..."
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-        className="mb-2"
-      />
-      <div className="mb-2 flex flex-wrap gap-1">
-        {reactions.map((reaction) => (
+      {/* Le champ de recherche est retiré pour respecter les contraintes */}
+      
+      {/* Onglets pour les catégories fixes */}
+      <div className="mb-2 flex flex-wrap gap-1 border-b pb-2">
+        {GIF_CATEGORIES.map((category) => (
           <Button
-            key={reaction}
-            variant="outline"
+            key={category}
+            variant={selectedCategory === category ? 'default' : 'outline'}
             size="sm"
-            onClick={() => handleReactionClick(reaction)}
+            onClick={() => setSelectedCategory(category)}
           >
-            {reaction}
+            {category}
           </Button>
         ))}
       </div>
+
+      {/* Grille d'affichage des GIFs */}
       <div className="flex-grow overflow-y-auto relative">
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center">
@@ -121,13 +90,13 @@ export function GifPicker({ onGifSelect }: GifPickerProps) {
             </div>
         )}
         <div className="grid grid-cols-3 gap-2">
-          {gifs.map((gif, index) => (
+          {gifs.map((gif) => (
             <button
-              key={`${gif.gif}-${index}`}
-              onClick={() => onGifSelect(gif.gif)}
+              key={gif.url} // Utiliser l'URL comme clé unique
+              onClick={() => onGifSelect(gif.url)} // Passer l'URL
               className="aspect-square bg-secondary rounded-md overflow-hidden hover:ring-2 hover:ring-primary focus:outline-none focus:ring-2 focus:ring-primary"
             >
-              <img src={gif.gif} alt="GIF" className="w-full h-full object-cover" loading="lazy" />
+              <img src={gif.url} alt={`GIF for ${selectedCategory}`} className="w-full h-full object-cover" loading="lazy" />
             </button>
           ))}
         </div>
