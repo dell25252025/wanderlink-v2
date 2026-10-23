@@ -1,44 +1,41 @@
 import { z } from 'zod';
 
-// 1. Schéma de validation Zod pour un seul GIF
-// La réponse pour une réaction est un tableau de ces objets
+// The Zod schema remains unchanged as the data structure we receive from the proxy is the same
 const GifSchema = z.object({
-  url: z.string().url(), // L'API renvoie bien un champ 'url'
-  anime: z.string(), // Gardons cette information, même si nous ne l'utilisons pas
+  url: z.string().url(),
+  anime: z.string(),
 });
 
-// Le schéma pour la réponse complète de l'API (un tableau de GIFs)
 const GifsResponseSchema = z.array(GifSchema);
 
-// 2. Type dérivé du schéma
 export type Gif = z.infer<typeof GifSchema>;
 
-// 3. URL de base de l'API
-const API_BASE_URL = 'https://api.gifukai.com/v1';
+// MODIFICATION: The base URL now points to our own API proxy
+const API_BASE_URL = '/api/gifs'; // Relative path to our API route
 
-// 4. Fonction générique pour les appels fetch, inchangée
 async function fetchAndValidate<T>(url: string, schema: z.ZodType<T>, signal?: AbortSignal): Promise<T> {
   try {
-    const response = await fetch(url, { signal });
+    // The fetch logic remains the same, only the URL changes
+    const response = await fetch(url, { signal }); 
     if (!response.ok) {
-      throw new Error(`Erreur réseau: ${response.statusText}`);
+      throw new Error(`Network error: ${response.statusText}`);
     }
     const data = await response.json();
     return schema.parse(data);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error('Erreur de validation Zod:', error.issues);
-      throw new Error("La réponse de l'API GIF est invalide.");
+      console.error('Zod validation error:', error.issues);
+      throw new Error("The GIF API response is invalid.");
     }
     throw error;
   }
 }
 
-// 5. Fonction simplifiée pour récupérer les GIFs par réaction
 /**
- * Récupère les GIFs correspondant à une réaction spécifique.
- * @param reaction - La catégorie de GIFs à récupérer (ex: 'wave', 'cry').
+ * Fetches GIFs via our internal proxy to bypass the CORS issue.
+ * @param reaction - The category of GIFs to fetch (e.g., 'wave', 'cry').
  */
 export function getGifsByReaction(reaction: string, signal?: AbortSignal): Promise<Gif[]> {
-  return fetchAndValidate(`${API_BASE_URL}/${encodeURIComponent(reaction)}`, GifsResponseSchema, signal);
+  // MODIFICATION: Build the URL with a query parameter
+  return fetchAndValidate(`${API_BASE_URL}?reaction=${encodeURIComponent(reaction)}`, GifsResponseSchema, signal);
 }
