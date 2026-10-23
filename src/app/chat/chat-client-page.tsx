@@ -399,7 +399,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [newMessage, setNewMessage] = useState('');
   const [inputMode, setInputMode] = useState<'KEYBOARD' | 'PICKER'>('KEYBOARD');
-  const [activePickerTab, setActivePickerTab] = useState<'emoji' | 'sticker'>('emoji');
+  const [activePickerTab, setActivePickerTab] = useState<'emoji' | 'sticker' | 'gifs'>('emoji');
   const [isSendingSticker, setIsSendingSticker] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -996,7 +996,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
       await setDoc(chatDocRef, { participants: [currentUser.uid, otherUserId], lastMessage: { id: newDocRef.id, text: lastMessageText, senderId: currentUser.uid, timestamp: serverTimestamp(), read: false } }, { merge: true });
     } catch (error) {
-      console.error("Erreur lors de l\'envoi du message:", error);
+      console.error("Erreur lors de l'envoi du message:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
       if (messageData.type !== 'video_call' && messageData.type !== 'missed_call') {
           setNewMessage(text);
@@ -1595,10 +1595,11 @@ const takePicture = useCallback(async (source: CameraSource) => {
         </div>
         {inputMode === 'PICKER' && (
             <div className="h-[300px] w-full bg-background border-t">
-                <Tabs value={activePickerTab} onValueChange={(value) => setActivePickerTab(value as 'emoji' | 'sticker')} className="flex flex-col h-full">
+                <Tabs value={activePickerTab} onValueChange={(value) => setActivePickerTab(value as 'emoji' | 'sticker' | 'gifs')} className="flex flex-col h-full">
                     <TabsList className="shrink-0 w-full rounded-none justify-start px-2">
                         <TabsTrigger value="emoji">Emojis</TabsTrigger>
                         <TabsTrigger value="sticker">Stickers</TabsTrigger>
+                        <TabsTrigger value="gifs">GIFs</TabsTrigger>
                     </TabsList>
                     <TabsContent value="emoji" className="flex-grow overflow-y-auto">
                         <Picker
@@ -1634,6 +1635,11 @@ const takePicture = useCallback(async (source: CameraSource) => {
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                    </TabsContent>
+                    <TabsContent value="gifs" className="flex-grow overflow-y-auto p-4">
+                        <div className="flex items-center justify-center h-full">
+                            <p className="text-muted-foreground">Les GIFs seront bientôt disponibles</p>
                         </div>
                     </TabsContent>
                 </Tabs>
