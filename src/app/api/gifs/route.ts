@@ -2,45 +2,47 @@ import { NextResponse } from 'next/server';
 
 // This function handles GET requests to /api/gifs
 export async function GET(request: Request) {
-  // 1. Extract the 'reaction' parameter from the request URL
   const { searchParams } = new URL(request.url);
-  const reaction = searchParams.get('reaction');
+  const query = searchParams.get('q');
+  const apiKey = process.env.TENOR_API_KEY;
 
-  // 2. If the parameter is missing, return an error
-  if (!reaction) {
-    return NextResponse.json({ error: 'The reaction parameter is missing' }, { status: 400 });
+  if (!apiKey) {
+    console.error("La clé d'API Tenor est manquante.");
+    return NextResponse.json({ error: 'Configuration serveur incorrecte.' }, { status: 500 });
   }
 
-  // 3. Build the external API URL
-  const API_BASE_URL = 'https://api.gifukai.com/v1';
-  const fetchUrl = `${API_BASE_URL}/${encodeURIComponent(reaction)}`;
+  const API_BASE_URL = 'https://tenor.googleapis.com/v2';
+  const clientKey = 'wanderlink-v2'; // Recommended to identify our app to Tenor
+  const limit = 24; // Number of GIFs to fetch
+
+  let fetchUrl: string;
+
+  if (query) {
+    // --- Search request ---
+    fetchUrl = `${API_BASE_URL}/search?q=${encodeURIComponent(query)}&key=${apiKey}&client_key=${clientKey}&limit=${limit}`;
+  } else {
+    // --- Trending request ---
+    fetchUrl = `${API_BASE_URL}/featured?key=${apiKey}&client_key=${clientKey}&limit=${limit}`;
+  }
 
   try {
-    // 4. Call the external API (server-to-server, so no CORS issue)
-    const apiResponse = await fetch(fetchUrl, {
-      headers: {
-        'Accept': 'application/json',
-      }
+    const tenorResponse = await fetch(fetchUrl, {
+      headers: { 'Accept': 'application/json' },
     });
 
-    // 5. If the external API returns an error, forward it to the client
-    if (!apiResponse.ok) {
-      console.error(`External Gifukai API error: ${apiResponse.status} ${apiResponse.statusText}`);
+    if (!tenorResponse.ok) {
+      console.error(`Erreur de l'API Tenor: ${tenorResponse.status} ${tenorResponse.statusText}`);
       return NextResponse.json(
-        { error: `External API error: ${apiResponse.statusText}` },
-        { status: apiResponse.status }
+        { error: `Erreur externe de l'API: ${tenorResponse.statusText}` },
+        { status: tenorResponse.status }
       );
     }
 
-    // 6. Read the JSON response from the external API
-    const data = await apiResponse.json();
-    
-    // 7. Return the response to the client (the GifPicker)
-    // Next.js will automatically add the correct CORS headers for our own frontend.
+    const data = await tenorResponse.json();
     return NextResponse.json(data);
 
   } catch (error) {
-    console.error('Error in the GIF proxy route:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    console.error('Erreur dans la route proxy des GIFs:', error);
+    return NextResponse.json({ error: 'Erreur interne du serveur' }, { status: 500 });
   }
 }

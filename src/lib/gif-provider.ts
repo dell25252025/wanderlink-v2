@@ -1,44 +1,71 @@
 import { z } from 'zod';
 
-// Le schéma de base pour UN seul GIF. Il correspond maintenant à ce que l'API renvoie.
-const GifSchema = z.object({
-  url: z.string().url(),
-  anime: z.string(),
+// Schéma Zod pour valider un seul GIF de la réponse Tenor
+// Nous ne prenons que ce dont nous avons besoin : l'URL du GIF et sa description.
+const TenorGifSchema = z.object({
+  id: z.string(),
+  content_description: z.string(),
+  media_formats: z.object({
+    // Tenor propose plusieurs formats, `gif` est un bon compromis taille/qualité
+    gif: z.object({ 
+      url: z.string().url(),
+      dims: z.array(z.number()),
+    }),
+  }),
 });
 
-// Le schéma pour la réponse complète de l'API. C'est un objet, pas un tableau.
-const ApiResponseSchema = GifSchema;
+// Schéma pour la réponse complète de l'API Tenor
+const TenorResponseSchema = z.object({
+  results: z.array(TenorGifSchema),
+});
 
-export type Gif = z.infer<typeof GifSchema>;
+// Notre type de GIF interne, simplifié.
+export interface Gif {
+  id: string;
+  url: string;
+  alt: string;
+}
 
-const API_BASE_URL = '/api/gifs';
+const API_BASE_URL = '/api/gifs'; // Notre proxy interne
 
-async function fetchAndValidate<T>(url: string, schema: z.ZodType<T>, signal?: AbortSignal): Promise<T> {
+async function fetchAndValidateGifs(url: string, signal?: AbortSignal): Promise<Gif[]> {
   try {
-    const response = await fetch(url, { signal, cache: 'no-store' }); // Ajout de no-cache pour obtenir de nouveaux GIFs
+    const response = await fetch(url, { signal, cache: 'no-store' });
     if (!response.ok) {
       throw new Error(`Erreur réseau: ${response.statusText}`);
     }
     const data = await response.json();
-    return schema.parse(data);
+
+    const parsed = TenorResponseSchema.parse(data);
+
+    // Transformation de la réponse de Tenor en notre format de données interne
+    return parsed.results.map((tenorGif) => ({
+      id: tenorGif.id,
+      url: tenorGif.media_formats.gif.url,
+      alt: tenorGif.content_description,
+    }));
+
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error('Erreur de validation Zod:', error.issues);
-      throw new Error("La réponse de l'API GIF est invalide.");
+      console.error('Erreur de validation Zod pour Tenor:', error.issues);
+      throw new Error("La réponse de l'API Tenor est invalide.");
     }
+    console.error('Erreur inattendue dans fetchAndValidateGifs:', error);
     throw error;
   }
 }
 
 /**
- * Récupère UN GIF aléatoire pour une réaction donnée et le renvoie dans un tableau.
- * @param reaction - La catégorie de GIFs à récupérer (ex: 'wave', 'cry').
+ * Recherche des GIFs en utilisant notre proxy.
+ * @param query - Le terme de recherche.
  */
-export async function getGifsByReaction(reaction: string, signal?: AbortSignal): Promise<Gif[]> {
-  // On récupère l'objet GIF unique
-  const singleGif = await fetchAndValidate(`${API_BASE_URL}?reaction=${encodeURIComponent(reaction)}`, ApiResponseSchema, signal);
-  
-  // On le retourne sous forme d'un tableau contenant un seul élément
-  // pour que le composant qui fait le .map() puisse fonctionner.
-  return [singleGif];
+export function searchGifs(query: string, signal?: AbortSignal): Promise<Gif[]> {
+  return fetchAndValidateGifs(`${API_BASE_URL}?q=${encodeURIComponent(query)}`, signal);
+}
+
+/**
+ * Récupère les GIFs tendances via notre proxy.
+ */
+export function getTrendingGifs(signal?: AbortSignal): Promise<Gif[]> {
+  return fetchAndValidateGifs(API_BASE_URL, signal);
 }

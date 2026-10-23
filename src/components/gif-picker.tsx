@@ -1,84 +1,80 @@
-import { useEffect, useState, useCallback, useTransition } from 'react';
-import { Loader2, RefreshCw } from 'lucide-react';
-import { getGifsByReaction, type Gif } from '@/lib/gif-provider';
+import { useEffect, useState, useTransition, useCallback } from 'react';
+import { Loader2, Search } from 'lucide-react';
+import { getTrendingGifs, searchGifs, type Gif } from '@/lib/gif-provider';
 import Image from 'next/image';
-import { Button } from '@/components/ui/button';
-
-const gifCategories: { label: string; key: string }[] = [
-  { label: 'Wave', key: 'wave' },
-  { label: 'Cry', key: 'cry' },
-  { label: 'Thumbs Up', key: 'thumbsup' },
-  { label: 'Shrug', key: 'shrug' },
-  { label: 'Surprised', key: 'surprised' },
-];
+import { Input } from '@/components/ui/input';
+import { useDebounce } from '@/hooks/use-debounce';
 
 interface GifPickerProps {
   onGifSelect: (url: string) => void;
 }
 
 export function GifPicker({ onGifSelect }: GifPickerProps) {
-  const [activeCategory, setActiveCategory] = useState(gifCategories[0].key);
+  const [searchTerm, setSearchTerm] = useState('');
   const [gifs, setGifs] = useState<Gif[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const loadGif = useCallback((category: string) => {
+  const debouncedSearchTerm = useDebounce(searchTerm, 500); // 500ms debounce delay
+
+  const loadGifs = useCallback((term: string) => {
     startTransition(async () => {
       try {
         setError(null);
-        const newGifs = await getGifsByReaction(category);
+        const newGifs = term
+          ? await searchGifs(term)
+          : await getTrendingGifs();
         setGifs(newGifs);
+        if (newGifs.length === 0) {
+          setError('Aucun GIF trouvé pour cette recherche.');
+        }
       } catch (err) {
-        console.error(`Impossible de charger le GIF pour la catégorie ${category}:`, err);
-        setError('Erreur lors du chargement du GIF.');
+        console.error(`Impossible de charger les GIFs pour la recherche "${term}":`, err);
+        setError('Une erreur est survenue lors du chargement des GIFs.');
         setGifs([]);
       }
     });
   }, []);
 
   useEffect(() => {
-    loadGif(activeCategory);
-  }, [activeCategory, loadGif]);
+    loadGifs(debouncedSearchTerm);
+  }, [debouncedSearchTerm, loadGifs]);
 
   return (
-    <div className="h-full w-full flex flex-col p-2">
-      <div className="flex items-center space-x-2 border-b pb-2 mb-2 overflow-x-auto">
-        {gifCategories.map((cat) => (
-          <Button
-            key={cat.key}
-            variant={activeCategory === cat.key ? 'secondary' : 'ghost'}
-            size="sm"
-            onClick={() => setActiveCategory(cat.key)}
-            className="shrink-0"
-          >
-            {cat.label}
-          </Button>
-        ))}
+    <div className="h-full w-full flex flex-col p-2 gap-2">
+      <div className="relative">
+        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Rechercher un GIF..."
+          className="pl-8"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
       </div>
-      <div className="flex-1 flex items-center justify-center relative">
+      <div className="flex-1 flex items-center justify-center">
         {isPending ? (
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        ) : error ? (
-          <div className="text-center text-red-500">
-            <p>{error}</p>
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => loadGif(activeCategory)}>Réessayer</Button>
-          </div>
         ) : gifs.length > 0 ? (
-          <div className="flex flex-col items-center gap-4">
-            <button 
-              key={gifs[0].url} 
-              className="rounded-lg overflow-hidden border bg-secondary/50" 
-              onClick={() => onGifSelect(gifs[0].url)}
-            >
-              <Image src={gifs[0].url} alt={gifs[0].anime} width={150} height={150} unoptimized className="object-cover" />
-            </button>
-            <Button variant="outline" size="sm" onClick={() => loadGif(activeCategory)}>
-              <RefreshCw className="mr-2 h-4 w-4"/>
-              Autre GIF
-            </Button>
+          <div className="grid grid-cols-3 gap-2 overflow-y-auto h-full w-full">
+            {gifs.map((gif) => (
+              <button
+                key={gif.id}
+                className="aspect-square rounded-md overflow-hidden bg-muted hover:ring-2 hover:ring-primary ring-offset-2 ring-offset-background"
+                onClick={() => onGifSelect(gif.url)}
+              >
+                <Image
+                  src={gif.url}
+                  alt={gif.alt}
+                  width={150}
+                  height={150}
+                  unoptimized
+                  className="w-full h-full object-cover"
+                />
+              </button>
+            ))}
           </div>
         ) : (
-          <p className="text-muted-foreground">Aucun GIF trouvé.</p>
+          <p className="text-muted-foreground text-center">{error || 'Recherchez un GIF ou découvrez les tendances.'}</p>
         )}
       </div>
     </div>
