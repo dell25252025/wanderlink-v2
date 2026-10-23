@@ -12,6 +12,7 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import { Drawer, DrawerContent, DrawerTrigger, DrawerClose, DrawerHeader, DrawerTitle, DrawerDescription } from '@/components/ui/drawer';
 import { Dialog, DialogContent, DialogClose, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import dynamic from 'next/dynamic';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -28,6 +29,15 @@ import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { Keyboard as CapKeyboard } from '@capacitor/keyboard';
 import { AudioPlayer, VoiceRecorder } from './voice-message';
 import { cn } from '@/lib/utils';
+
+// --- Dynamic Import for GifPicker ---
+const GifPicker = dynamic(
+  () => import('@/components/gif-picker').then(mod => mod.GifPicker),
+  {
+    ssr: false,
+    loading: () => <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>,
+  }
+);
 
 
 // --- Interfaces ---
@@ -986,9 +996,14 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
       const newDocRef = await addDoc(messagesColRef, finalMessageData);
       
       let lastMessageText = finalMessageData.text;
-      // MODIFIED: Correctly label last message as Sticker or Photo.
       if(finalMessageData.imageUrl) {
-        lastMessageText = finalMessageData.imageUrl.startsWith("https://ik.imagekit.io") ? '📷 Sticker' : '📷 Photo';
+        if (finalMessageData.imageUrl.includes('gifukai')) {
+            lastMessageText = '📷 GIF';
+        } else if (finalMessageData.imageUrl.startsWith("https://ik.imagekit.io")) {
+            lastMessageText = '📷 Sticker';
+        } else {
+            lastMessageText = '📷 Photo';
+        }
       }
       else if(finalMessageData.type === 'video_call') lastMessageText = 'Appel vidéo';
       else if(finalMessageData.type === 'missed_call') lastMessageText = 'Appel manqué';
@@ -1637,10 +1652,12 @@ const takePicture = useCallback(async (source: CameraSource) => {
                             ))}
                         </div>
                     </TabsContent>
-                    <TabsContent value="gifs" className="flex-grow overflow-y-auto p-4">
-                        <div className="flex items-center justify-center h-full">
-                            <p className="text-muted-foreground">Les GIFs seront bientôt disponibles</p>
-                        </div>
+                    <TabsContent value="gifs" className="flex-grow overflow-y-auto">
+                        <GifPicker 
+                          onGifSelect={(gifUrl) => {
+                            handleSendMessage(undefined, { imageUrl: gifUrl, type: 'image' });
+                          }}
+                        />
                     </TabsContent>
                 </Tabs>
             </div>
