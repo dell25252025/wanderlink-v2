@@ -287,7 +287,14 @@ const MessageItem = memo<MessageItemProps>(({
             }
             
             return (
-                <button onClick={() => onZoomImage(message.imageUrl!)} className="rounded-2xl overflow-hidden">
+                <button
+                  onClick={() => {
+                    if (!isImageKitSticker) {
+                      onZoomImage(message.imageUrl!);
+                    }
+                  }}
+                  className="rounded-2xl overflow-hidden"
+                >
                     <Image 
                         src={message.imageUrl} 
                         alt="Image"
