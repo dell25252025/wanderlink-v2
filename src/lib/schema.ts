@@ -21,13 +21,13 @@ export const formSchema = z.object({
     (val) => (val === '' || val === null ? undefined : val),
     z.coerce.number({
       invalid_type_error: 'La taille doit être un nombre.',
-    }).positive('La taille doit être un nombre positif.').optional(),
+    }).min(120, { message: 'Valeur invalide.' }).max(230, { message: 'Valeur invalide.' }).optional(),
   ),
   weight: z.preprocess(
     (val) => (val === '' || val === null ? undefined : val),
     z.coerce.number({
       invalid_type_error: 'Le poids doit être un nombre.',
-    }).positive('Le poids doit être un nombre positif.').optional(),
+    }).min(40, { message: 'Valeur invalide.' }).max(180, { message: 'Valeur invalide.' }).optional(),
   ),
 
   // --- Step 3 --- //
