@@ -25,6 +25,8 @@ import { countries } from '@/lib/countries';
 import { travelIntentions, travelStyles, travelActivities } from '@/lib/options';
 import { useProfileVisitNotification } from '@/hooks/useProfileVisitNotification';
 import { formatDistanceToNow, fromUnixTime } from 'date-fns';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 const CannabisIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -497,7 +499,7 @@ export default function ProfileClientPage() {
       if (result.success) {
         toast({
           title: "Déconnexion réussie",
-          description: "À bientôt !",
+          description: "À bientôt !"
         });
         router.push('/');
       } else {
@@ -653,6 +655,28 @@ export default function ProfileClientPage() {
         toast({ variant: 'destructive', title: 'Erreur', description: "Une erreur est survenue."}) 
     } finally {
         setIsFriendActionLoading(false);
+    }
+  };
+
+  const handleToggleOnlineStatus = async (isActive: boolean) => {
+    if (!currentUser?.uid) return;
+    const userRef = doc(db, 'users', currentUser.uid);
+    try {
+      await updateDoc(userRef, {
+        showOnlineStatus: isActive,
+        isOnline: isActive,
+      });
+      toast({
+        title: `Statut mis à jour`,
+        description: `Vous apparaissez maintenant comme ${isActive ? "visible" : "caché"}.`,
+      });
+    } catch (error) {
+      console.error("Error updating online status:", error);
+      toast({
+        variant: "destructive",
+        title: "Erreur de mise à jour",
+        description: "Impossible de mettre à jour votre statut de présence.",
+      });
     }
   };
 
@@ -923,14 +947,26 @@ export default function ProfileClientPage() {
                             </div>
                         </div>
                         
-                        <div className="flex items-center gap-2 pl-2">
+                        <div className="pl-2">
                             {isOwner && (
-                                <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-                                    <Link href={`/profile/edit?id=${profileId}`}>
-                                        <Edit className="h-4 w-4" />
-                                        <span className="sr-only">Modifier le profil</span>
-                                    </Link>
-                                </Button>
+                                <div className="flex flex-col items-end gap-3">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                                        <Link href={`/profile/edit?id=${profileId}`}>
+                                            <Edit className="h-4 w-4" />
+                                            <span className="sr-only">Modifier le profil</span>
+                                        </Link>
+                                    </Button>
+                                    <div className="flex items-center gap-1.5">
+                                        <Label htmlFor="online-status-profile" className="text-xs text-muted-foreground">
+                                            {profile?.showOnlineStatus !== false ? 'En ligne' : 'Hors ligne'}
+                                        </Label>
+                                        <Switch
+                                            id="online-status-profile"
+                                            checked={profile?.showOnlineStatus !== false}
+                                            onCheckedChange={handleToggleOnlineStatus}
+                                            />
+                                    </div>
+                                </div>
                             )}
                             
                             {!isOwner && (
@@ -971,7 +1007,7 @@ export default function ProfileClientPage() {
                             className="hidden"
                             accept="image/*"
                             onChange={handlePhotoAdd}
-                            disabled={isUploading || profilePictures.length >= MAX_PHOTOS}
+                            disabled={isUploading || (profilePictures && profilePictures.length >= MAX_PHOTOS)}
                         />
                     </div>
                     
