@@ -30,6 +30,39 @@ import { Camera, CameraSource, CameraResultType } from '@capacitor/camera';
 
 const MAX_PHOTOS = 6;
 
+const allLanguages = [
+    { id: 'fr', label: 'Français' },
+    { id: 'en', label: 'Anglais' },
+    { id: 'es', label: 'Espagnol' },
+    { id: 'ar', label: 'Arabe' },
+    { id: 'zh', label: 'Mandarin' },
+    { id: 'hi', label: 'Hindi' },
+    { id: 'bn', label: 'Bengali' },
+    { id: 'pt', label: 'Portugais' },
+    { id: 'ru', label: 'Russe' },
+    { id: 'ja', label: 'Japonais' },
+    { id: 'de', label: 'Allemand' },
+    { id: 'jv', label: 'Javanais' },
+    { id: 'ko', label: 'Coréen' },
+    { id: 'te', label: 'Télougou' },
+    { id: 'mr', label: 'Marathi' },
+    { id: 'tr', label: 'Turc' },
+    { id: 'ta', label: 'Tamoul' },
+    { id: 'vi', label: 'Vietnamien' },
+    { id: 'ur', label: 'Ourdou' },
+    { id: 'it', label: 'Italien' },
+    { id: 'th', label: 'Thaï' },
+    { id: 'gu', label: 'Gujarati' },
+    { id: 'fa', label: 'Persan' },
+    { id: 'pl', label: 'Polonais' },
+    { id: 'uk', label: 'Ukrainien' },
+    { id: 'ro', label: 'Roumain' },
+    { id: 'nl', label: 'Néerlandais' },
+    { id: 'el', label: 'Grec' },
+    { id: 'sv', label: 'Suédois' },
+    { id: 'he', label: 'Hébreu' },
+];
+
 export default function EditProfileClientPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -264,6 +297,53 @@ export default function EditProfileClientPage() {
                                     <FormField control={control} name="height" render={({ field }) => (<FormItem><FormLabel>Taille (cm)</FormLabel><FormControl><Input type="number" {...field} placeholder="Ex: 175" value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value))} /></FormControl><FormMessage /></FormItem>)} />
                                     <FormField control={control} name="weight" render={({ field }) => (<FormItem><FormLabel>Poids (kg)</FormLabel><FormControl><Input type="number" {...field} placeholder="Ex: 70" value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? undefined : parseInt(e.target.value))} /></FormControl><FormMessage /></FormItem>)} />
                                     <FormField control={control} name="bio" render={({ field }) => (<FormItem><FormLabel>Description</FormLabel><FormControl><Textarea {...field} /></FormControl><FormMessage /></FormItem>)} />
+                                     <FormField
+                                        control={control}
+                                        name="languages"
+                                        render={() => (
+                                            <FormItem>
+                                                <div className="mb-4">
+                                                <FormLabel className="text-base">Langues que je parle</FormLabel>
+                                                </div>
+                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-60 overflow-y-auto p-2 border rounded-md">
+                                                    {allLanguages.map((item) => (
+                                                    <FormField
+                                                        key={item.id}
+                                                        control={control}
+                                                        name="languages"
+                                                        render={({ field }) => {
+                                                        return (
+                                                            <FormItem
+                                                            key={item.id}
+                                                            className="flex flex-row items-start space-x-3 space-y-0"
+                                                            >
+                                                            <FormControl>
+                                                                <Checkbox
+                                                                checked={field.value?.includes(item.label)}
+                                                                onCheckedChange={(checked) => {
+                                                                    return checked
+                                                                    ? field.onChange([...(field.value || []), item.label])
+                                                                    : field.onChange(
+                                                                        field.value?.filter(
+                                                                            (value: string) => value !== item.label
+                                                                        )
+                                                                        )
+                                                                }}
+                                                                />
+                                                            </FormControl>
+                                                            <FormLabel className="font-normal">
+                                                                {item.label}
+                                                            </FormLabel>
+                                                            </FormItem>
+                                                        )
+                                                        }}
+                                                    />
+                                                    ))}
+                                                </div>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
                                 </div>
                                 
                                 {/* Section Photos */}
@@ -429,5 +509,3 @@ export default function EditProfileClientPage() {
         </FormProvider>
     );
 }
-
-    
