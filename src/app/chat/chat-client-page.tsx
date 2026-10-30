@@ -1018,7 +1018,7 @@ export default function ChatClientPage({ otherUserId }: { otherUserId: string })
 
       await setDoc(chatDocRef, { participants: [currentUser.uid, otherUserId], lastMessage: { id: newDocRef.id, text: lastMessageText, senderId: currentUser.uid, timestamp: serverTimestamp(), read: false } }, { merge: true });
     } catch (error) {
-      console.error("Erreur lors de l'envoi du message:", error);
+      console.error("Erreur lors de l\'envoi du message:", error);
       toast({ variant: 'destructive', title: 'Erreur', description: 'Le message n\'a pas pu être envoyé.' });
       if (messageData.type !== 'video_call' && messageData.type !== 'missed_call') {
           setNewMessage(text);
@@ -1182,7 +1182,14 @@ const takePicture = useCallback(async (source: CameraSource) => {
       // Send message with the final URL
       await handleSendMessage(undefined, { imageUrl: downloadUrl, text: '' });
 
-    } catch (error) {
+    } catch (error: any) {
+      // Silently ignore the user cancellation error from the Capacitor Camera plugin.
+      const cancellationMessage = "User cancelled photos app";
+      if (error === cancellationMessage || (error && error.message === cancellationMessage)) {
+        return; // Silently exit on cancellation
+      }
+      
+      // Handle all other real errors.
       console.error("Photo capture or processing failed:", error);
       toast({ variant: 'destructive', title: 'Erreur d\'upload', description: 'Impossible d\'envoyer l\'image.' });
     } finally {
