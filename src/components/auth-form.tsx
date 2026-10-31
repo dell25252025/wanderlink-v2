@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -12,7 +11,7 @@ import { Loader2, Mail, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification, signInWithEmailAndPassword } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
 import { useRouter } from 'next/navigation';
 import { signInWithGoogle } from '@/lib/firebase-actions';
@@ -67,9 +66,19 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
         if (onSuccess) onSuccess(); else router.push('/');
       } else {
         const signupValues = values as z.infer<typeof signupSchema>;
-        await createUserWithEmailAndPassword(auth, signupValues.email, signupValues.password);
-        toast({ title: 'Compte créé !', description: "Vous pouvez maintenant vous connecter." });
-        router.push('/create-profile');
+        const userCredential = await createUserWithEmailAndPassword(auth, signupValues.email, signupValues.password);
+        
+        // Envoyer l'e-mail de vérification
+        if (userCredential.user) {
+            const actionCodeSettings = {
+                url: `${window.location.origin}/auth/action`,
+                handleCodeInApp: true,
+            };
+            await sendEmailVerification(userCredential.user, actionCodeSettings);
+        }
+
+        toast({ title: 'Compte créé !', description: "Un e-mail de confirmation a été envoyé." });
+        router.push('/auth/verify-email'); // Rediriger vers la page d'attente
       }
     } catch (error) {
       let description = "Une erreur inattendue s'est produite.";
