@@ -70,7 +70,7 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
         const userCredential = await createUserWithEmailAndPassword(auth, signupValues.email, signupValues.password);
         
         const actionCodeSettings = {
-          url: `https://wanderlink-v2--wanderlink-c1a35.us-east4.hosted.app/`,
+          url: `https://wanderlink-v2--wanderlink-c1a35.us-east4.hosted.app/auth/verified`,
           handleCodeInApp: false,
         };
 
