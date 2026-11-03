@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 
 const actionCodeSettings = {
-  url: `https://wanderlink-v2--wanderlink-c1a35.us-east4.hosted.app/create-profile`,
+  url: `https://wanderlink-v2--wanderlink-c1a35.us-east4.hosted.app/`,
   handleCodeInApp: false,
 };
 

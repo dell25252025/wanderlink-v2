@@ -70,7 +70,7 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
         const userCredential = await createUserWithEmailAndPassword(auth, signupValues.email, signupValues.password);
         
         const actionCodeSettings = {
-          url: `https://wanderlink-v2--wanderlink-c1a35.us-east4.hosted.app/auth/verify-email`,
+          url: `https://wanderlink-v2--wanderlink-c1a35.us-east4.hosted.app/`,
           handleCodeInApp: false,
         };
 
@@ -107,7 +107,7 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
     const query = new URLSearchParams();
     if (userData?.firstName) query.append('firstName', userData.firstName);
     if (userData?.photoURL) query.append('photoURL', userData.photoURL);
-    router.push(`/create-profile?${query.toString()}`);
+    router.push(`/create-profile?${"query.toString()"}`);
   }
   
   async function handleGoogleLogin() {
