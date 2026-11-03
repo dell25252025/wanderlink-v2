@@ -12,7 +12,7 @@ import { Loader2, Mail, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { auth, db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
 import { useRouter } from 'next/navigation';
 import { signInWithGoogle } from '@/lib/firebase-actions';
@@ -67,9 +67,23 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
         if (onSuccess) onSuccess(); else router.push('/');
       } else {
         const signupValues = values as z.infer<typeof signupSchema>;
-        await createUserWithEmailAndPassword(auth, signupValues.email, signupValues.password);
-        toast({ title: 'Compte créé !', description: "Vous pouvez maintenant vous connecter." });
-        router.push('/create-profile');
+        const userCredential = await createUserWithEmailAndPassword(auth, signupValues.email, signupValues.password);
+        
+        const actionCodeSettings = {
+          url: `https://wanderlink-v2--wanderlink-c1a35.us-east4.hosted.app/auth/verify-email`,
+          handleCodeInApp: false,
+        };
+
+        try {
+            await sendEmailVerification(userCredential.user, actionCodeSettings);
+            toast({ title: 'Compte créé !', description: "Un e-mail de vérification a été envoyé." });
+        } catch (error) {
+            console.error("Erreur lors de l'envoi de l'e-mail de vérification", error);
+            toast({ variant: 'destructive', title: 'Compte créé, mais...', description: "L'envoi de l'e-mail de vérification a échoué. Vous pourrez en demander un nouveau." });
+        }
+
+        sessionStorage.setItem('Wanderlink-new-signup', 'true');
+        router.push('/auth/verify-email');
       }
     } catch (error) {
       let description = "Une erreur inattendue s'est produite.";
