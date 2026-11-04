@@ -321,7 +321,7 @@ export default function DiscoverPage() {
                                 <Separator />
                                 <div className="flex items-center justify-between py-1 px-1 text-sm">
                                     <span className='text-muted-foreground'>Activités</span>
-                                    <GenericSelect className={uniformSelectClass} value={activities} onValue-change={setActivities} options={travelActivities} placeholder="Toutes" />
+                                    <GenericSelect className={uniformSelectClass} value={activities} onValueChange={setActivities} options={travelActivities} placeholder="Toutes" />
                                 </div>
                             </div>
                         </div>
