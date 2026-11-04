@@ -1,59 +1,82 @@
-
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { sendEmailVerification, signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-
-const actionCodeSettings = {
-  url: `https://wanderlink-v2--wanderlink-c1a35.us-east4.hosted.app/auth/verified`,
-  handleCodeInApp: false,
-};
+import { auth } from '@/lib/firebase';
+import { sendEmailVerification, signOut } from 'firebase/auth';
 
 export default function VerifyEmailPage() {
   const { currentUser, loading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  const [isSending, setIsSending] = useState(false);
+  
+  const isProcessingRef = useRef(false);
   const [resendCooldown, setResendCooldown] = useState(60);
-  const [isReloading, setIsReloading] = useState(false);
 
-  // Redirection si l'utilisateur n'est pas connecté ou déjà vérifié
+  // This `useEffect` is the core of the logic. It handles the initial state,
+  // periodic checks, and checks on page visibility change.
   useEffect(() => {
-    if (!loading && !currentUser) {
+    if (loading) {
+      return;
+    }
+    if (!currentUser) {
       router.replace('/signup');
+      return;
     }
-    if (currentUser?.emailVerified) {
-      router.replace('/create-profile');
-    }
+
+    // isMounted is used to ensure async operations
+    // do not attempt to update an unmounted component.
+    let isMounted = true;
+
+    const checkVerificationAndRedirect = async () => {
+      // The lock and current user check prevent multiple executions.
+      if (isProcessingRef.current || !auth.currentUser) return;
+
+      isProcessingRef.current = true;
+      const initialUID = auth.currentUser.uid;
+
+      try {
+        await auth.currentUser.reload();
+        
+        // After await, check that the component is still mounted
+        // AND that the user is still the same before taking any action.
+        if (isMounted && auth.currentUser && auth.currentUser.uid === initialUID && auth.currentUser.emailVerified) {
+          router.replace('/create-profile');
+        }
+      } catch (error) {
+        console.error("Error checking email verification status:", error);
+      } finally {
+        if (isMounted) {
+          isProcessingRef.current = false;
+        }
+      }
+    };
+
+    // The initial check doesn't wait, it runs `reload` immediately.
+    checkVerificationAndRedirect();
+
+    // Add listeners for continuous checks.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isMounted) {
+        checkVerificationAndRedirect();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    const intervalId = setInterval(checkVerificationAndRedirect, 5000);
+
+    // Cleanup function to stop all processes.
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [currentUser, loading, router]);
 
-  // Démarrage du sondage pour la vérification de l'e-mail
-  useEffect(() => {
-    if (!currentUser || currentUser.emailVerified) return;
-
-    const intervalId = setInterval(async () => {
-      if (isReloading) return;
-      setIsReloading(true);
-      try {
-        await currentUser.reload();
-        // La mise à jour de currentUser par onAuthStateChanged déclenchera le premier useEffect
-      } catch (error) {
-        console.error("Erreur lors de l'actualisation de l'utilisateur:", error);
-      } finally {
-        setIsReloading(false);
-      }
-    }, 5000); // Toutes les 5 secondes
-
-    return () => clearInterval(intervalId);
-  }, [currentUser, isReloading]);
-  
-  // Gestion du cooldown pour le renvoi d'e-mail
+  // Cooldown timer management.
   useEffect(() => {
     if (resendCooldown > 0) {
       const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
@@ -61,32 +84,28 @@ export default function VerifyEmailPage() {
     }
   }, [resendCooldown]);
 
-  const handleResendEmail = useCallback(async () => {
-    if (!currentUser || resendCooldown > 0) return;
-    setIsSending(true);
+  const handleResendEmail = async () => {
+    if (!currentUser || resendCooldown > 0 || isProcessingRef.current) return;
+    
+    const actionCodeSettings = {
+        // Corrected: The URL is now a raw string.
+        url: 'https://wanderlink-v2--wanderlink-c1a35.us-east4.hosted.app/auth/verified',
+        handleCodeInApp: false,
+    };
+
     try {
-      await sendEmailVerification(currentUser, actionCodeSettings);
-      toast({ title: 'E-mail renvoyé', description: "Veuillez vérifier à nouveau votre boîte de réception." });
-      setResendCooldown(60); // Réinitialiser le cooldown
+        await sendEmailVerification(currentUser, actionCodeSettings);
+        toast({ title: 'E-mail renvoyé', description: "Veuillez vérifier votre boîte de réception." });
+        setResendCooldown(60);
     } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: "Échec de l'envoi",
-        description: "Une erreur s'est produite. Veuillez réessayer plus tard."
-      });
-    } finally {
-      setIsSending(false);
+        toast({ variant: 'destructive', title: "Échec de l'envoi", description: "Une erreur s'est produite." });
     }
-  }, [currentUser, resendCooldown, toast]);
+  };
 
   const handleSignOut = async () => {
-    try {
-        await signOut(auth);
-        router.push('/signup');
-    } catch (error) {
-        toast({ variant: 'destructive', title: 'Erreur', description: 'Impossible de se déconnecter.' });
-    }
-  }
+    await signOut(auth);
+    router.push('/signup');
+  };
 
   if (loading || !currentUser) {
     return (
@@ -103,10 +122,11 @@ export default function VerifyEmailPage() {
         Nous avons envoyé un lien de vérification à <strong>{currentUser.email}</strong>. Veuillez cliquer sur ce lien pour continuer.
       </p>
       <div className="mt-6 flex flex-col items-center gap-4">
-        <Button onClick={handleResendEmail} disabled={isSending || resendCooldown > 0}>
-          {isSending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        <Button onClick={handleResendEmail} disabled={isProcessingRef.current || resendCooldown > 0}>
+          {isProcessingRef.current && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {resendCooldown > 0 ? `Renvoyer dans ${resendCooldown}s` : "Renvoyer l'e-mail"}
         </Button>
+        {/* Corrected: The JSX has a proper closing tag. */}
         <p className="text-xs text-muted-foreground">Vous n'avez rien reçu ? Vérifiez votre dossier de spam.</p>
         <Button variant="link" onClick={handleSignOut}>Se connecter avec un autre compte</Button>
       </div>
