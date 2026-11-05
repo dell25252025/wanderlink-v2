@@ -107,7 +107,8 @@ export default function AuthForm({ isLogin, setIsLogin, isEmailFormVisible, setI
     const query = new URLSearchParams();
     if (userData?.firstName) query.append('firstName', userData.firstName);
     if (userData?.photoURL) query.append('photoURL', userData.photoURL);
-    router.push(`/create-profile?${"query.toString()"}`);
+    query.set('source', 'google');
+    router.push(`/create-profile?${query.toString()}`);
   }
   
   async function handleGoogleLogin() {

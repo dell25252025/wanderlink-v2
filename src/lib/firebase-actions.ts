@@ -19,7 +19,7 @@ export async function signOutFromGoogle(uid: string) {
         isOnline: false,
         lastSeen: serverTimestamp(),
       });
-      console.log(`[Presence] Statut de l\'utilisateur ${uid} mis à hors-ligne avant la déconnexion.`);
+      console.log(`[Presence] Statut de l'utilisateur ${uid} mis à hors-ligne avant la déconnexion.`);
     } catch (e) {
       console.error("Erreur lors de la mise à jour du statut de présence avant déconnexion:", e);
     }
@@ -83,13 +83,20 @@ async function handleUser(user: any) {
         isOnline: true,
         lastSeen: serverTimestamp(),
     });
-    console.log(`[Presence] Statut de l\'utilisateur ${user.uid} mis à jour à \'en-ligne\' lors de la connexion.`);
+    console.log(`[Presence] Statut de l'utilisateur ${user.uid} mis à jour à 'en-ligne' lors de la connexion.`);
 
-    return { 
-        success: true, 
-        id: user.uid, 
+    const firstName = data.firstName || user.displayName?.split(' ')[0] || '';
+    const photoURL = (data.profilePictures && data.profilePictures.length > 0) ? data.profilePictures[0] : user.photoURL;
+
+    return {
+        success: true,
+        id: user.uid,
         isNewUser: !data.onboardingCompleted,
-        onboardingCompleted: data.onboardingCompleted === true 
+        onboardingCompleted: data.onboardingCompleted === true,
+        userData: {
+            firstName: firstName,
+            photoURL: photoURL
+        }
     };
   }
 }
@@ -185,7 +192,7 @@ export async function sendCallSystemMessage(chatId: string, callerId: string, re
 
         return { success: true };
     } catch (error) {
-        console.error("Erreur lors de l\'envoi du message système d\'appel:", error);
+        console.error("Erreur lors de l'envoi du message système d'appel:", error);
         const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
         return { success: false, error: errorMessage };
     }
@@ -193,7 +200,7 @@ export async function sendCallSystemMessage(chatId: string, callerId: string, re
 
 
 export async function generateAgoraToken(channelName: string, uid: number | string) {
-  console.warn("Generation de token simulée (Client Side). Assurez-vous d\'être en mode Test sur Agora.");
+  console.warn("Generation de token simulée (Client Side). Assurez-vous d'être en mode Test sur Agora.");
   return { success: true, token: null };
 }
 
@@ -342,7 +349,7 @@ export async function addProfilePicture(userId: string, photoDataUri: string) {
     } catch (e) {
         console.error("Error adding profile picture:", e);
         const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
-        return { success: false, error: `Failed to add profile picture: \'${errorMessage}\'` };
+        return { success: false, error: `Failed to add profile picture: '${errorMessage}'` };
     }
 }
 
@@ -365,7 +372,7 @@ export async function removeProfilePicture(userId: string, photoUrl: string) {
     } catch (e) {
         console.error("Error removing profile picture:", e);
         const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
-        return { success: false, error: `Failed to remove picture: \'${errorMessage}\'` };
+        return { success: false, error: `Failed to remove picture: '${errorMessage}'` };
     }
 }
 
@@ -457,7 +464,7 @@ export async function submitVerificationRequest(userId: string, selfieDataUrl: s
         return { success: true };
     } catch (error) {
         console.error("Error submitting verification request:", error);
-        const errorMessage = e instanceof Error ? e.message : "An unknown error occurred.";
+        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
         return { success: false, error: errorMessage };
     }
 }

@@ -75,11 +75,18 @@ function ProfileCreationForm() {
 
 
   useEffect(() => {
+    const source = searchParams.get('source');
     const firstName = searchParams.get('firstName');
     const photoURL = searchParams.get('photoURL');
-    if (firstName && photoURL) {
+
+    if (source === 'google') {
       setIsGoogleOnboarding(true);
-      reset({ ...getValues(), firstName: firstName, profilePictures: [photoURL] });
+      const currentValues = getValues();
+      reset({
+        ...currentValues,
+        firstName: currentValues.firstName || firstName,
+        profilePictures: (currentValues.profilePictures && currentValues.profilePictures.length > 0) ? currentValues.profilePictures : (photoURL ? [photoURL] : []),
+      });
     }
 
     const requestAllPermissions = async () => {
