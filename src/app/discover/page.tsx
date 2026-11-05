@@ -71,7 +71,7 @@ export default function DiscoverPage() {
     const [loading, setLoading] = useState(true);
     const [isSearching, setIsSearching] = useState(false);
 
-    const [showMe, setShowMe] = useState('Femme');
+    const [showMe, setShowMe] = useState('Tous');
     const [ageRange, setAgeRange] = useState<[number, number]>([25, 45]);
     const [date, setDate] = useState<DateRange | undefined>();
     const [flexibleDates, setFlexibleDates] = useState(true);
@@ -96,7 +96,7 @@ export default function DiscoverPage() {
         if (savedFiltersRaw) {
             try {
                 const savedFilters = JSON.parse(savedFiltersRaw);
-                setShowMe(savedFilters.showMe ?? 'Femme');
+                setShowMe(savedFilters.showMe ?? 'Tous');
                 setAgeRange(savedFilters.ageRange ?? [25, 45]);
                 if (savedFilters.date?.from) {
                     setDate({ from: new Date(savedFilters.date.from), to: savedFilters.date.to ? new Date(savedFilters.date.to) : undefined });
@@ -127,11 +127,6 @@ export default function DiscoverPage() {
             if (user) {
                 getUserProfile(user.uid).then(profile => {
                     setUserProfile(profile);
-                    if (!localStorage.getItem(FILTERS_STORAGE_KEY) && profile) {
-                        if (profile.gender === 'Femme') setShowMe('Homme');
-                        else if (profile.gender === 'Autre') setShowMe('Autre');
-                        else setShowMe('Femme');
-                    }
                     setLoading(false);
                 });
             } else {
@@ -172,7 +167,7 @@ export default function DiscoverPage() {
 
         try {
             const strictFilters: string[] = [];
-            if (showMe) strictFilters.push(`gender:"${showMe}"`);
+            if (showMe && showMe !== 'Tous') strictFilters.push(`gender:"${showMe}"`);
             if (country && !nearby) strictFilters.push(`location:"${country}"`);
             if (destination && destination !== 'Toutes') strictFilters.push(`destination:"${destination}"`);
             if (intention) strictFilters.push(`intention:"${intention}"`);
@@ -205,7 +200,7 @@ export default function DiscoverPage() {
             if (hits.length === 0) {
                 console.warn("⚠️ No results found with strict filters – applying fallback strategy.");
                 const fallbackFiltersList: string[] = [];
-                if (showMe) fallbackFiltersList.push(`gender:"${showMe}"`);
+                if (showMe && showMe !== 'Tous') fallbackFiltersList.push(`gender:"${showMe}"`);
                 fallbackFiltersList.push(`NOT objectID:${currentUser.uid}`);
 
                 if (userProfile.blockedUsers && userProfile.blockedUsers.length > 0) {
@@ -265,6 +260,7 @@ export default function DiscoverPage() {
                           <ToggleGroupItem value="Homme" aria-label="Montrer les hommes" className="text-sm h-9">Homme</ToggleGroupItem>
                           <ToggleGroupItem value="Femme" aria-label="Montrer les femmes" className="text-sm h-9">Femme</ToggleGroupItem>
                           <ToggleGroupItem value="Autre" aria-label="Montrer les autres" className="text-sm h-9">Autre</ToggleGroupItem>
+                          <ToggleGroupItem value="Tous" aria-label="Montrer tout le monde" className="text-sm h-9">Tous</ToggleGroupItem>
                         </ToggleGroup>
                       </div>
                     </div>
