@@ -91,7 +91,7 @@ export default function DiscoverPage() {
     }, [showMe, ageRange, date, flexibleDates, nearby, country, destination, intention, travelStyle, activities]);
 
     useEffect(() => {
-        localStorage.removeItem('searchResults');
+        // localStorage.removeItem('searchResults');
         const savedFiltersRaw = localStorage.getItem(FILTERS_STORAGE_KEY);
         if (savedFiltersRaw) {
             try {
