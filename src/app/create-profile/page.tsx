@@ -173,7 +173,7 @@ function ProfileCreationForm() {
 
  const onSubmit = useCallback(async (data: FormData) => {
     if (isSubmitting) return;
-    if (!currentUser) { toast({ variant: 'destructive', title: 'Erreur d\'authentification' }); return; }
+    if (!currentUser) { toast({ variant: 'destructive', title: 'Erreur d\'authentication' }); return; }
     setIsSubmitting(true);
     try {
       const result = await createUserProfile(currentUser.uid, data);
@@ -189,7 +189,7 @@ function ProfileCreationForm() {
 
   const handleGoogleOnboardingSubmit = useCallback(async () => {
     if (isSubmitting) return;
-    if (!currentUser) { toast({ variant: 'destructive', title: 'Erreur d\'authentification' }); return; }
+    if (!currentUser) { toast({ variant: 'destructive', title: 'Erreur d\'authentication' }); return; }
     setIsSubmitting(true);
     try {
         const partialData = getValues();
@@ -210,13 +210,6 @@ function ProfileCreationForm() {
       handleGoogleOnboardingSubmit();
     }
   }, [watchedIntention, isGoogleOnboarding, currentStep, isSubmitting, handleGoogleOnboardingSubmit]);
-
-  useEffect(() => {
-    // Auto-submit on the final step for the classic flow once an intention is selected.
-    if ( !isGoogleOnboarding && currentStep === steps.length - 1 && watchedIntention && !isSubmitting ) {
-        handleSubmit(onSubmit)();
-    }
-  }, [watchedIntention, isGoogleOnboarding, currentStep, isSubmitting, handleSubmit, onSubmit]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -244,10 +237,11 @@ function ProfileCreationForm() {
           <form onSubmit={(e) => e.preventDefault()}>
             <CurrentStepComponent />
             
-            {/* Only show navigation buttons BEFORE the final step. */}
-            {currentStep < steps.length - 1 && (
+            {/* Hide navigation ONLY on the final step of the Google flow. */}
+            {!(currentStep === steps.length - 1 && isGoogleOnboarding) && (
               <div className="mt-8 flex justify-between items-center">
                 <div>
+                  {/* Show "Previous" only after step 1 in classic flow. Otherwise, show "Cancel". */}
                   {currentStep > 0 && !isGoogleOnboarding ? (
                     <Button type="button" variant="ghost" onClick={prevStep} disabled={isSubmitting}>Précédent</Button>
                   ) : (
@@ -256,10 +250,17 @@ function ProfileCreationForm() {
                 </div>
 
                 <div className="flex items-center gap-x-2">
-                  {!(isGoogleOnboarding && watchedIntention) && (
+                  {/* Show "Next" button before the final step. */}
+                  {currentStep < steps.length - 1 && !(isGoogleOnboarding && watchedIntention) && (
                     <Button type="button" onClick={nextStep}>
-                        Suivant
-                      </Button>
+                      Suivant
+                    </Button>
+                  )}
+                  {/* Show "Finish" button ONLY on the final step of the classic flow */}
+                  {currentStep === steps.length - 1 && !isGoogleOnboarding && (
+                    <Button type="button" onClick={handleSubmit(onSubmit)} disabled={isSubmitting || !watchedIntention}>
+                      {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Terminer l'inscription"}
+                    </Button>
                   )}
                 </div>
               </div>
