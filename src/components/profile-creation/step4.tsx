@@ -4,7 +4,7 @@
 import { useRef, useState, useLayoutEffect } from "react";
 import { useFormContext } from "react-hook-form";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Users, Handshake, Heart, Sailboat } from "lucide-react";
+import { Users, Scale, Gift, DollarSign } from "lucide-react";
 import { type FormData } from "@/lib/schema";
 import { cn } from "@/lib/utils";
 
@@ -12,25 +12,25 @@ const intentions = [
   {
     id: "50/50",
     title: "50/50",
-    description: "Partage équitable des frais",
-    icon: Handshake,
+    description: "Chacun paie sa part, les dépenses sont partagées.",
+    icon: Scale,
   },
   {
     id: "sponsor",
-    title: "Sponsorisé",
-    description: "Les frais sont couverts",
-    icon: Heart,
+    title: "Je suis sponsorisé(e)",
+    description: "Vous êtes invité(e) et vos frais sont pris en charge.",
+    icon: Gift,
   },
   {
     id: "sponsoring",
-    title: "Sponsoring",
-    description: "Prêt à couvrir les frais",
-    icon: Sailboat,
+    title: "Je sponsorise",
+    description: "Vous invitez et prenez en charge les frais du voyage.",
+    icon: DollarSign,
   },
   {
     id: "group-travel",
     title: "Voyage en groupe",
-    description: "Plus on est de fous, plus on rit",
+    description: "Rejoignez ou créez un voyage avec plusieurs personnes.",
     icon: Users,
   },
 ];
@@ -39,14 +39,13 @@ export default function Step4() {
   const { watch, setValue } = useFormContext<FormData>();
   const watchedIntention = watch("intention");
   const [containerHeight, setContainerHeight] = useState<number | 'auto'>('auto');
-  const gridRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    const gridElement = gridRef.current;
-    if (!gridElement) return;
+    const listElement = listRef.current;
+    if (!listElement) return;
 
-    // Get initial height synchronically before the browser paints.
-    const initialHeight = gridElement.getBoundingClientRect().height;
+    const initialHeight = listElement.getBoundingClientRect().height;
     if (initialHeight > 0) {
       setContainerHeight(initialHeight);
     }
@@ -58,7 +57,7 @@ export default function Step4() {
         setContainerHeight(newHeight);
       }
     });
-    observer.observe(gridElement);
+    observer.observe(listElement);
 
     return () => observer.disconnect();
   }, [watchedIntention]);
@@ -66,8 +65,8 @@ export default function Step4() {
   return (
     <div className="flex flex-col gap-4">
       <h2 className="text-xl font-bold">Votre prochain voyage !</h2>
-      <p className="text-muted-foreground">Quelle est votre intention principale ?</p>
-      
+      <p className="text-muted-foreground">Choisissez le type de voyage qui vous correspond le mieux.</p>
+
       <div style={{ minHeight: containerHeight }}>
         {watchedIntention ? (
           <div className="p-4 bg-primary/10 rounded-md border border-primary/20">
@@ -75,17 +74,22 @@ export default function Step4() {
             <p className="text-sm text-foreground">{watchedIntention}</p>
           </div>
         ) : (
-          <div ref={gridRef} className="grid grid-cols-2 gap-4">
+          <div ref={listRef} className="flex flex-col gap-4">
             {intentions.map((intention) => (
               <Card
                 key={intention.id}
-                className={`cursor-pointer ${watchedIntention === intention.title ? "border-primary ring-2 ring-primary" : "border-border"}`}
+                className={cn(
+                  "cursor-pointer",
+                  watchedIntention === intention.title ? "border-primary ring-2 ring-primary" : "border-border"
+                )}
                 onClick={() => setValue("intention", intention.title, { shouldValidate: true })}
               >
-                <CardHeader className="flex flex-col items-center justify-center text-center p-4">
-                  <intention.icon className="h-8 w-8 mb-2" />
-                  <CardTitle className="text-base">{intention.title}</CardTitle>
-                  <CardDescription className="text-xs">{intention.description}</CardDescription>
+                <CardHeader className="flex flex-row items-center gap-4 p-4">
+                  <intention.icon className="h-8 w-8 flex-shrink-0" />
+                  <div className="flex flex-col">
+                    <CardTitle className="text-base text-left">{intention.title}</CardTitle>
+                    <CardDescription className="text-xs text-left">{intention.description}</CardDescription>
+                  </div>
                 </CardHeader>
               </Card>
             ))}
