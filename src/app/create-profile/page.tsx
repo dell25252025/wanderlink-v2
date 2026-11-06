@@ -212,6 +212,13 @@ function ProfileCreationForm() {
   }, [watchedIntention, isGoogleOnboarding, currentStep, isSubmitting, handleGoogleOnboardingSubmit]);
 
   useEffect(() => {
+    // Auto-submit on the final step for the classic flow once an intention is selected.
+    if ( !isGoogleOnboarding && currentStep === steps.length - 1 && watchedIntention && !isSubmitting ) {
+        handleSubmit(onSubmit)();
+    }
+  }, [watchedIntention, isGoogleOnboarding, currentStep, isSubmitting, handleSubmit, onSubmit]);
+
+  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) { setCurrentUser(user); } else { router.push('/signup'); }
       setAuthLoading(false);
@@ -236,35 +243,27 @@ function ProfileCreationForm() {
         <FormProvider {...methods}>
           <form onSubmit={(e) => e.preventDefault()}>
             <CurrentStepComponent />
-            <div className="mt-8 flex justify-between items-center">
-              <div>
-                {currentStep > 0 && !isGoogleOnboarding ? (
-                  <Button type="button" variant="ghost" onClick={prevStep} disabled={isSubmitting}>Précédent</Button>
-                ) : (
-                  <Button type="button" variant="ghost" onClick={handleCancel} disabled={isSubmitting}>Annuler</Button>
-                )}
-              </div>
-
-              <div className="flex items-center gap-x-2">
-                {!(isGoogleOnboarding && watchedIntention) && (
-                   currentStep < steps.length - 1 ? (
-                    <Button type="button" onClick={nextStep}>
-                      Suivant
-                    </Button>
+            
+            {/* Only show navigation buttons BEFORE the final step. */}
+            {currentStep < steps.length - 1 && (
+              <div className="mt-8 flex justify-between items-center">
+                <div>
+                  {currentStep > 0 && !isGoogleOnboarding ? (
+                    <Button type="button" variant="ghost" onClick={prevStep} disabled={isSubmitting}>Précédent</Button>
                   ) : (
-                    <Button type="button" onClick={handleSubmit(onSubmit)} disabled={isSubmitting || showPermissionRetry}>
-                      {isSubmitting ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Création...</>) : ("Terminer l'inscription")}
-                    </Button>
-                  )
-                )}
+                    <Button type="button" variant="ghost" onClick={handleCancel} disabled={isSubmitting}>Annuler</Button>
+                  )}
+                </div>
 
-                {isGoogleOnboarding && isSubmitting && currentStep === steps.length - 1 && (
-                   <Button type="button" disabled={true}>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />Finalisation...
-                   </Button>
-                )}
+                <div className="flex items-center gap-x-2">
+                  {!(isGoogleOnboarding && watchedIntention) && (
+                    <Button type="button" onClick={nextStep}>
+                        Suivant
+                      </Button>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </form>
         </FormProvider>
       </div>
