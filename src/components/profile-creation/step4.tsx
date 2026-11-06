@@ -16,16 +16,16 @@ const intentions = [
     icon: Scale,
   },
   {
-    id: "sponsor",
-    title: "Je suis sponsorisé(e)",
-    description: "Vous êtes invité(e) et vos frais sont pris en charge.",
-    icon: Gift,
-  },
-  {
     id: "sponsoring",
     title: "Je sponsorise",
     description: "Vous invitez et prenez en charge les frais du voyage.",
     icon: DollarSign,
+  },
+  {
+    id: "sponsor",
+    title: "Je suis sponsorisé(e)",
+    description: "Vous êtes invité(e) et vos frais sont pris en charge.",
+    icon: Gift,
   },
   {
     id: "group-travel",
@@ -50,7 +50,6 @@ export default function Step4() {
       setContainerHeight(initialHeight);
     }
 
-    // Then, observe for any subsequent changes (e.g., window resize).
     const observer = new ResizeObserver(entries => {
       const newHeight = entries[0]?.contentRect.height;
       if (newHeight && newHeight > 0) {
@@ -64,8 +63,8 @@ export default function Step4() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="text-xl font-bold">Votre prochain voyage !</h2>
-      <p className="text-muted-foreground">Choisissez le type de voyage qui vous correspond le mieux.</p>
+      <h2 className="text-xl font-bold text-center">Quelle est votre intention ?</h2>
+      <p className="text-muted-foreground text-center">Choisissez le type de voyage qui vous correspond le mieux.</p>
 
       <div style={{ minHeight: containerHeight }}>
         {watchedIntention ? (
