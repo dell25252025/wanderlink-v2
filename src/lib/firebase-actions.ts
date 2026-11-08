@@ -286,6 +286,7 @@ export async function createUserProfile(userId: string, profileData: any) {
         const finalProfileData = {
             ...restOfProfileData,
             profilePictures: uploadedPhotoUrls,
+            status: 'online',
             updatedAt: new Date().toISOString(),
             onboardingCompleted: true
         };
