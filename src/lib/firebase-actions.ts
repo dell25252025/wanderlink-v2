@@ -286,9 +286,10 @@ export async function createUserProfile(userId: string, profileData: any) {
         const finalProfileData = {
             ...restOfProfileData,
             profilePictures: uploadedPhotoUrls,
-            status: 'online',
             updatedAt: new Date().toISOString(),
-            onboardingCompleted: true
+            onboardingCompleted: true,
+            isOnline: true,
+            lastSeen: serverTimestamp(),
         };
         if (finalProfileData.dates?.from) {
           finalProfileData.dates.from = new Date(finalProfileData.dates.from);
