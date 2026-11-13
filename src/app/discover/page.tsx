@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -116,7 +115,13 @@ export default function DiscoverPage() {
         }
 
         // Decide and set state for each filter, applying defaults if loaded data is invalid
-        setShowMe(loadedFilters?.showMe ?? 'Tous');
+        const validGenders = ['Homme', 'Femme', 'Autre', 'Tous'];
+        const loadedGender = loadedFilters?.showMe;
+        setShowMe(
+          typeof loadedGender === 'string' && validGenders.includes(loadedGender)
+            ? loadedGender
+            : 'Tous'
+        );
         setFlexibleDates(loadedFilters?.flexibleDates ?? true);
         setNearby(loadedFilters?.nearby ?? true);
         setCountry(loadedFilters?.country ?? '');
