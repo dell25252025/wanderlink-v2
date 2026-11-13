@@ -22,7 +22,7 @@ import { auth } from '@/lib/firebase';
 import { getUserProfile } from '@/lib/firebase-actions';
 import type { DocumentData } from 'firebase/firestore';
 import { Loader2, Search } from 'lucide-react';
-import { useAd } from '@/context/ad-context'; 
+import { useAd } from '@/context/ad-context';
 
 declare global {
     interface Window { 
@@ -62,6 +62,7 @@ async function getUsersIndex(): Promise<ReturnType<ReturnType<typeof algoliasear
 }
 
 const FILTERS_STORAGE_KEY = 'discoverFilters';
+export const SEARCH_RESULTS_STORAGE_KEY = 'searchResults';
 
 export default function DiscoverPage() {
     const router = useRouter();
@@ -91,7 +92,6 @@ export default function DiscoverPage() {
     }, [showMe, ageRange, date, flexibleDates, nearby, country, destination, intention, travelStyle, activities]);
 
     useEffect(() => {
-        // localStorage.removeItem('searchResults');
         const savedFiltersRaw = localStorage.getItem(FILTERS_STORAGE_KEY);
         if (savedFiltersRaw) {
             try {
@@ -154,76 +154,72 @@ export default function DiscoverPage() {
             return;
         }
 
-        // --- Ad Logic --- 
-        // We calculate the *next* search count to decide if we should show an ad.
-        // This avoids race conditions with React's async state updates.
         const nextSearchCount = searchCount + 1;
         incrementSearchCount();
         triggerAdShowOnSearch(nextSearchCount);
-        // --- End Ad Logic ---
 
         saveFilters();
         setIsSearching(true);
 
         try {
-            const strictFilters: string[] = [];
-            if (showMe && showMe !== 'Tous') strictFilters.push(`gender:"${showMe}"`);
-            if (country && !nearby) strictFilters.push(`location:"${country}"`);
-            if (destination && destination !== 'Toutes') strictFilters.push(`destination:"${destination}"`);
-            if (intention) strictFilters.push(`intention:"${intention}"`);
-            if (travelStyle && travelStyle !== 'Tous') strictFilters.push(`travelStyle:"${travelStyle}"`);
-            if (activities && activities !== 'Toutes') strictFilters.push(`activities:"${activities}"`);
-            strictFilters.push(`NOT objectID:${currentUser.uid}`);
-
-            if (userProfile.blockedUsers && userProfile.blockedUsers.length > 0) {
-                userProfile.blockedUsers.forEach((blockedId: string) => {
-                    strictFilters.push(`NOT objectID:${blockedId}`);
-                });
-            }
-    
-            const numericFilters = [`age >= ${ageRange[0]}`, `age <= ${ageRange[1]}`];
-    
-            const strictSearchOptions: any = {
-                filters: strictFilters.join(' AND '),
-                numericFilters: numericFilters.join(' AND '),
-            };
-
-            if (nearby && userProfile.latitude && userProfile.longitude) {
-              strictSearchOptions.aroundLatLng = `${userProfile.latitude}, ${userProfile.longitude}`;
-              strictSearchOptions.aroundRadius = 50000;
-            }
-    
-            console.log('[Algolia] Strict filters query: ' + JSON.stringify(strictSearchOptions, null, 2));
-            let { hits } = await index.search('', strictSearchOptions);
-            console.log(`[Algolia] Phase 1 (Strict) results: ${hits.length}`);
-    
-            if (hits.length === 0) {
-                console.warn("⚠️ No results found with strict filters – applying fallback strategy.");
-                const fallbackFiltersList: string[] = [];
-                if (showMe && showMe !== 'Tous') fallbackFiltersList.push(`gender:"${showMe}"`);
-                fallbackFiltersList.push(`NOT objectID:${currentUser.uid}`);
+            const buildSearchOptions = (isFallback: boolean) => {
+                const filters: string[] = [];
+                if (showMe && showMe !== 'Tous') filters.push(`gender:"${showMe}"`);
+                filters.push(`NOT objectID:${currentUser.uid}`);
 
                 if (userProfile.blockedUsers && userProfile.blockedUsers.length > 0) {
                     userProfile.blockedUsers.forEach((blockedId: string) => {
-                        fallbackFiltersList.push(`NOT objectID:${blockedId}`);
+                        filters.push(`NOT objectID:${blockedId}`);
                     });
                 }
 
-                const fallbackNumericFilters = [`age >= ${ageRange[0]}`, `age <= ${ageRange[1]}`];
-                const fallbackSearchOptions: any = {
-                    filters: fallbackFiltersList.join(' AND '),
-                    numericFilters: fallbackNumericFilters.join(' AND '),
+                if (!isFallback) {
+                    if (country && !nearby) filters.push(`location:"${country}"`);
+                    if (destination && destination !== 'Toutes') filters.push(`destination:"${destination}"`);
+                    if (intention) filters.push(`intention:"${intention}"`);
+                    if (travelStyle && travelStyle !== 'Tous') filters.push(`travelStyle:"${travelStyle}"`);
+                    if (activities && activities !== 'Toutes') filters.push(`activities:"${activities}"`);
+                }
+
+                const searchOptions: any = {
+                    filters: filters.join(' AND '),
+                    numericFilters: [`age >= ${ageRange[0]}`, `age <= ${ageRange[1]}`],
+                    page: 0,
+                    hitsPerPage: 20
                 };
-                console.log('[Algolia] Fallback filters query: ' + JSON.stringify(fallbackSearchOptions, null, 2));
-                const fallbackResults = await index.search('', fallbackSearchOptions);
-                hits = fallbackResults.hits;
-                console.log(`[Algolia] Phase 2 (Fallback) results: ${hits.length}`);
+                
+                if (!isFallback && nearby && userProfile.latitude && userProfile.longitude) {
+                    searchOptions.aroundLatLng = `${userProfile.latitude}, ${userProfile.longitude}`;
+                    searchOptions.aroundRadius = 50000;
+                }
+                
+                return searchOptions;
+            };
+
+            let searchOptions = buildSearchOptions(false);
+            console.log('[Algolia] Strict filters query: ' + JSON.stringify(searchOptions, null, 2));
+
+            let searchResponse = await index.search('', searchOptions);
+            let hits = searchResponse.hits;
+            
+            if (hits.length === 0) {
+                console.warn("⚠️ No results found with strict filters – applying fallback strategy.");
+                searchOptions = buildSearchOptions(true); // Fallback search
+                console.log('[Algolia] Fallback filters query: ' + JSON.stringify(searchOptions, null, 2));
+                searchResponse = await index.search('', searchOptions);
+                hits = searchResponse.hits;
             }
-    
-            console.log('[Algolia] Final results:', hits.length);
-    
-            const searchResults = hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined }));
-            localStorage.setItem('searchResults', JSON.stringify(searchResults));
+
+            console.log('[Algolia] Final results count:', hits.length);
+
+            const searchResults = {
+                hits: hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined })),
+                page: searchResponse.page,
+                nbPages: searchResponse.nbPages,
+                searchOptions: searchOptions 
+            };
+            
+            localStorage.setItem(SEARCH_RESULTS_STORAGE_KEY, JSON.stringify(searchResults));
             router.push('/');
     
         } catch (error) {

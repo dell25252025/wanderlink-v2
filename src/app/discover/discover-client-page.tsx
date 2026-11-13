@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import ProfileCard from '@/components/profile-card';
 import { Loader2, UserX } from 'lucide-react';
 import { DocumentData, collection, doc, onSnapshot, query, where } from 'firebase/firestore';
@@ -9,12 +9,53 @@ import { addFriend, getUsersOnlineStatus } from '@/lib/firebase-actions';
 import { useToast } from '@/hooks/use-toast';
 import { db, auth } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import { SEARCH_RESULTS_STORAGE_KEY } from './page';
+import type algoliasearch from 'algoliasearch/lite';
+import { Button } from '@/components/ui/button';
 
 interface DiscoverClientPageProps {
-  initialProfiles: DocumentData[]; // Default profiles from the server
+  initialProfiles: DocumentData[];
   loading: boolean;
-  currentUserProfile: DocumentData | null; // This is the initially loaded profile
+  currentUserProfile: DocumentData | null;
 }
+
+declare global {
+    interface Window { 
+        algoliasearch: typeof algoliasearch;
+        __ALGOLIA_APP_ID__: string;
+        __ALGOLIA_SEARCH_KEY__: string;
+    }
+}
+
+let usersIndexSingleton: ReturnType<ReturnType<typeof algoliasearch>['initIndex']> | null = null;
+
+async function getUsersIndex(): Promise<ReturnType<ReturnType<typeof algoliasearch>['initIndex']> | null> {
+  if (usersIndexSingleton) return usersIndexSingleton;
+  if (typeof window !== 'undefined' && !window.algoliasearch) {
+    await new Promise<void>((resolve) => {
+      const interval = setInterval(() => {
+        if (window.algoliasearch) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 100);
+    });
+  }
+  if (typeof window === 'undefined' || !window.algoliasearch) {
+      console.error("Algolia script could not be loaded or not in a browser environment.");
+      return null;
+  }
+  const appId = process.env.NEXT_PUBLIC_ALGOLIA_APP_ID || window.__ALGOLIA_APP_ID__;
+  const searchKey = process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY || window.__ALGOLIA_SEARCH_KEY__;
+  if (!appId || !searchKey) {
+    console.error("Algolia keys are missing.");
+    return null;
+  }
+  const client = window.algoliasearch(appId, searchKey);
+  usersIndexSingleton = client.initIndex("users");
+  return usersIndexSingleton;
+}
+
 
 export default function DiscoverClientPage({ initialProfiles, loading: initialLoading, currentUserProfile: initialUserProfile }: DiscoverClientPageProps) {
   const [profiles, setProfiles] = useState<DocumentData[]>([]);
@@ -26,8 +67,13 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
   const [liveCurrentUserProfile, setLiveCurrentUserProfile] = useState<DocumentData | null>(initialUserProfile);
   const [usersWhoBlockedMe, setUsersWhoBlockedMe] = useState<Set<string>>(new Set());
   const { toast } = useToast();
+  
+  const [isMoreLoading, setIsMoreLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [searchOptions, setSearchOptions] = useState<any | null>(null);
+  const currentSearchId = useRef(0);
 
-  // Effect to get the current authenticated user
   useEffect(() => {
     const authUnsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
@@ -35,7 +81,6 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
     return () => authUnsubscribe();
   }, []);
 
-  // Effect to subscribe to the current user's profile for real-time updates
   useEffect(() => {
     if (currentUser) {
       const userDocRef = doc(db, 'users', currentUser.uid);
@@ -50,7 +95,6 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
     }
   }, [currentUser]);
 
-  // Effect to find out who has blocked the current user
   useEffect(() => {
     if (currentUser) {
       const q = query(collection(db, 'users'), where('blockedUsers', 'array-contains', currentUser.uid));
@@ -62,27 +106,41 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
     }
   }, [currentUser]);
 
-  // This effect handles the initial load and updates from localStorage.
   useEffect(() => {
-    let profilesToSet = initialProfiles;
-    let loadedFromStorage = false;
+    let isMounted = true;
+    setIsLoading(true);
+    currentSearchId.current += 1;
 
-    const savedResultsRaw = localStorage.getItem('searchResults');
+    const savedResultsRaw = localStorage.getItem(SEARCH_RESULTS_STORAGE_KEY);
+    let dataToShow = initialProfiles;
+
     if (savedResultsRaw) {
-      try {
-        profilesToSet = JSON.parse(savedResultsRaw);
-        loadedFromStorage = true;
-      } catch (e) {
-        console.error("Failed to parse saved search results, falling back to initial profiles:", e);
-      }
+        try {
+            const savedData = JSON.parse(savedResultsRaw);
+            if (savedData.hits) {
+                dataToShow = savedData.hits;
+                setCurrentPage(savedData.page || 0);
+                setTotalPages(savedData.nbPages || 0);
+                setSearchOptions(savedData.searchOptions || null);
+            } else {
+                // Fallback for old format
+                dataToShow = savedData;
+                setTotalPages(0);
+            }
+        } catch (e) {
+            console.error("Failed to parse search results, falling back to initial.", e);
+            setTotalPages(0);
+        }
     }
 
-    setProfiles(profilesToSet);
-
-    if (loadedFromStorage || !initialLoading) {
-      setIsLoading(false);
+    if (isMounted) {
+        setProfiles(dataToShow);
+        setIsLoading(initialLoading);
     }
+    
+    return () => { isMounted = false; };
   }, [initialProfiles, initialLoading]);
+
 
   const profileIds = useMemo(() => 
     profiles.map(p => p.uid || p.objectID).filter(Boolean).join(',')
@@ -113,8 +171,49 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
   }, [profileIds]);
 
   const handleAddFriend = async (friendId: string) => {
-    // ... (logique inchangée)
+    if (!currentUser) {
+      toast({ variant: "destructive", title: "Vous devez être connecté" });
+      return;
+    }
+    setIsAddingFriend(friendId);
+    try {
+      await addFriend(currentUser.uid, friendId);
+      toast({ title: "Invitation envoyée !" });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Erreur", description: error.message });
+    } finally {
+      setIsAddingFriend(null);
+    }
   };
+  
+  const loadMoreResults = useCallback(async () => {
+    if (!searchOptions || isMoreLoading || currentPage >= totalPages - 1) {
+        return;
+    }
+
+    setIsMoreLoading(true);
+    const searchId = currentSearchId.current;
+
+    try {
+        const index = await getUsersIndex();
+        if (!index) return;
+
+        const nextPage = currentPage + 1;
+        const response = await index.search('', { ...searchOptions, page: nextPage });
+
+        if (searchId === currentSearchId.current) {
+            setProfiles(prev => [...prev, ...response.hits]);
+            setCurrentPage(nextPage);
+        }
+    } catch (error) {
+        console.error("Failed to load more results:", error);
+        toast({ variant: "destructive", title: "Impossible de charger plus de résultats" });
+    } finally {
+        if (searchId === currentSearchId.current) {
+            setIsMoreLoading(false);
+        }
+    }
+  }, [searchOptions, isMoreLoading, currentPage, totalPages, toast]);
 
   const iHaveBlockedIds = new Set(liveCurrentUserProfile?.blockedUsers || []);
   const allBlockedIds = new Set([...iHaveBlockedIds, ...usersWhoBlockedMe]);
@@ -136,7 +235,7 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
         travelIntention: p.intention || '50/50',
         verified: p.isVerified ?? false,
         isVerified: p.isVerified ?? false,
-        isOnline: onlineStatuses[uid] ?? false, // Fusion ici
+        isOnline: onlineStatuses[uid] ?? false,
         image: p.profilePictures?.[0] || `https://picsum.photos/seed/${uid}/800/1200`
       };
   });
@@ -159,17 +258,27 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
   }
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4">
-      {mappedProfiles.map((profile) => (
-        <ProfileCard
-          key={profile.id}
-          profile={profile}
-          isFriend={friends.includes(profile.id)}
-          onAddFriend={handleAddFriend}
-          currentUserId={currentUser?.uid || null}
-          isAddingFriend={isAddingFriend === profile.id}
-        />
-      ))}
+    <div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4">
+            {mappedProfiles.map((profile) => (
+                <ProfileCard
+                    key={profile.id}
+                    profile={profile}
+                    isFriend={friends.includes(profile.id)}
+                    onAddFriend={handleAddFriend}
+                    currentUserId={currentUser?.uid || null}
+                    isAddingFriend={isAddingFriend === profile.id}
+                />
+            ))}
+        </div>
+        {currentPage < totalPages - 1 && (
+            <div className="flex justify-center mt-8">
+                <Button onClick={loadMoreResults} disabled={isMoreLoading}>
+                    {isMoreLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Charger plus
+                </Button>
+            </div>
+        )}
     </div>
   );
 }
