@@ -101,70 +101,57 @@ export default function DiscoverPage() {
     useEffect(() => {
         setFiltersOwnerUID(null);
 
-        // Reset to defaults on any user change or logout
-        setShowMe('Tous');
-        setAgeRange([18, 45]);
-        setDate(undefined);
-        setFlexibleDates(true);
-        setNearby(true);
-        setCountry('');
-        setDestination('Toutes');
-        setIntention('');
-        setTravelStyle('Tous');
-        setActivities('Toutes');
-
+        let loadedFilters: any = null;
         if (currentUser) {
             try {
                 const storageKey = getFiltersStorageKey(currentUser.uid);
                 const savedFiltersRaw = localStorage.getItem(storageKey);
                 if (savedFiltersRaw) {
-                    const savedFilters = JSON.parse(savedFiltersRaw);
-                    
-                    // Restore non-critical filters
-                    setShowMe(savedFilters.showMe ?? 'Tous');
-                    setFlexibleDates(savedFilters.flexibleDates ?? true);
-                    setNearby(savedFilters.nearby ?? true);
-                    setCountry(savedFilters.country ?? '');
-                    setDestination(savedFilters.destination ?? 'Toutes');
-                    setIntention(savedFilters.intention ?? '');
-                    setTravelStyle(savedFilters.travelStyle ?? 'Tous');
-                    setActivities(savedFilters.activities ?? 'Toutes');
-
-                    // Validate and restore ageRange
-                    const savedAgeRange = savedFilters.ageRange;
-                    if (Array.isArray(savedAgeRange) && savedAgeRange.length === 2 &&
-                        Number.isFinite(savedAgeRange[0]) && Number.isFinite(savedAgeRange[1]) &&
-                        savedAgeRange[0] <= savedAgeRange[1] &&
-                        savedAgeRange[0] >= 18 && savedAgeRange[1] <= 75) {
-                        setAgeRange(savedAgeRange as [number, number]);
-                    } else {
-                        setAgeRange([18, 45]);
-                    }
-
-                    // Validate and restore date
-                    const savedDate = savedFilters.date;
-                    setDate(undefined); // Always reset to default first
-                    if (savedDate && typeof savedDate.from === 'string' && savedDate.from) {
-                        const fromDate = new Date(savedDate.from);
-                        if (!isNaN(fromDate.getTime())) {
-                            // Case 1: `to` is explicitly absent (null or undefined)
-                            if (savedDate.to == null) {
-                                setDate({ from: fromDate, to: undefined });
-                            } 
-                            // Case 2: `to` is present and must be a valid date string
-                            else if (typeof savedDate.to === 'string' && savedDate.to) {
-                                const toDate = new Date(savedDate.to);
-                                if (!isNaN(toDate.getTime()) && fromDate <= toDate) {
-                                    setDate({ from: fromDate, to: toDate });
-                                }
-                            }
-                        }
-                    }
+                    loadedFilters = JSON.parse(savedFiltersRaw);
                 }
             } catch (e) {
                 console.error("Failed to read or parse saved filters, using defaults:", e);
+                loadedFilters = null;
             }
         }
+
+        // Decide and set state for each filter, applying defaults if loaded data is invalid
+        setShowMe(loadedFilters?.showMe ?? 'Tous');
+        setFlexibleDates(loadedFilters?.flexibleDates ?? true);
+        setNearby(loadedFilters?.nearby ?? true);
+        setCountry(loadedFilters?.country ?? '');
+        setDestination(loadedFilters?.destination ?? 'Toutes');
+        setIntention(loadedFilters?.intention ?? '');
+        setTravelStyle(loadedFilters?.travelStyle ?? 'Tous');
+        setActivities(loadedFilters?.activities ?? 'Toutes');
+
+        const savedAgeRange = loadedFilters?.ageRange;
+        if (Array.isArray(savedAgeRange) && savedAgeRange.length === 2 &&
+            Number.isFinite(savedAgeRange[0]) && Number.isFinite(savedAgeRange[1]) &&
+            savedAgeRange[0] <= savedAgeRange[1] &&
+            savedAgeRange[0] >= 18 && savedAgeRange[1] <= 75) {
+            setAgeRange(savedAgeRange as [number, number]);
+        } else {
+            setAgeRange([18, 45]);
+        }
+
+        const savedDate = loadedFilters?.date;
+        let newDate: DateRange | undefined = undefined;
+        if (savedDate && typeof savedDate.from === 'string' && savedDate.from) {
+            const fromDate = new Date(savedDate.from);
+            if (!isNaN(fromDate.getTime())) {
+                if (savedDate.to == null) {
+                    newDate = { from: fromDate, to: undefined };
+                } else if (typeof savedDate.to === 'string' && savedDate.to) {
+                    const toDate = new Date(savedDate.to);
+                    if (!isNaN(toDate.getTime()) && fromDate <= toDate) {
+                        newDate = { from: fromDate, to: toDate };
+                    }
+                }
+            }
+        }
+        setDate(newDate);
+
         setFiltersOwnerUID(currentUser?.uid ?? null);
     }, [currentUser]);
 
