@@ -61,7 +61,7 @@ async function getUsersIndex(): Promise<ReturnType<ReturnType<typeof algoliasear
   return usersIndexSingleton;
 }
 
-const FILTERS_STORAGE_KEY = 'discoverFilters';
+const getFiltersStorageKey = (userId: string) => `discoverFilters_${userId}`;
 export const SEARCH_RESULTS_STORAGE_KEY = 'searchResults';
 
 export default function DiscoverPage() {
@@ -71,9 +71,10 @@ export default function DiscoverPage() {
     const [userProfile, setUserProfile] = useState<DocumentData | null>(null);
     const [loading, setLoading] = useState(true);
     const [isSearching, setIsSearching] = useState(false);
+    const [filtersOwnerUID, setFiltersOwnerUID] = useState<string | null>(null);
 
     const [showMe, setShowMe] = useState('Tous');
-    const [ageRange, setAgeRange] = useState<[number, number]>([25, 45]);
+    const [ageRange, setAgeRange] = useState<[number, number]>([18, 45]);
     const [date, setDate] = useState<DateRange | undefined>();
     const [flexibleDates, setFlexibleDates] = useState(true);
     const [nearby, setNearby] = useState(true);
@@ -84,35 +85,88 @@ export default function DiscoverPage() {
     const [activities, setActivities] = useState('Toutes');
 
     const saveFilters = useCallback(() => {
+        if (filtersOwnerUID !== currentUser?.uid) {
+            console.warn("Save blocked: filters do not match current user.");
+            return;
+        }
+        if (!currentUser) return;
         const filters = {
             showMe, ageRange, date: date ? { from: date.from?.toISOString(), to: date.to?.toISOString() } : undefined, 
             flexibleDates, nearby, country, destination, intention, travelStyle, activities
         };
-        localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
-    }, [showMe, ageRange, date, flexibleDates, nearby, country, destination, intention, travelStyle, activities]);
+        const storageKey = getFiltersStorageKey(currentUser.uid);
+        localStorage.setItem(storageKey, JSON.stringify(filters));
+    }, [currentUser, filtersOwnerUID, showMe, ageRange, date, flexibleDates, nearby, country, destination, intention, travelStyle, activities]);
 
     useEffect(() => {
-        const savedFiltersRaw = localStorage.getItem(FILTERS_STORAGE_KEY);
-        if (savedFiltersRaw) {
+        setFiltersOwnerUID(null);
+
+        // Reset to defaults on any user change or logout
+        setShowMe('Tous');
+        setAgeRange([18, 45]);
+        setDate(undefined);
+        setFlexibleDates(true);
+        setNearby(true);
+        setCountry('');
+        setDestination('Toutes');
+        setIntention('');
+        setTravelStyle('Tous');
+        setActivities('Toutes');
+
+        if (currentUser) {
             try {
-                const savedFilters = JSON.parse(savedFiltersRaw);
-                setShowMe(savedFilters.showMe ?? 'Tous');
-                setAgeRange(savedFilters.ageRange ?? [25, 45]);
-                if (savedFilters.date?.from) {
-                    setDate({ from: new Date(savedFilters.date.from), to: savedFilters.date.to ? new Date(savedFilters.date.to) : undefined });
+                const storageKey = getFiltersStorageKey(currentUser.uid);
+                const savedFiltersRaw = localStorage.getItem(storageKey);
+                if (savedFiltersRaw) {
+                    const savedFilters = JSON.parse(savedFiltersRaw);
+                    
+                    // Restore non-critical filters
+                    setShowMe(savedFilters.showMe ?? 'Tous');
+                    setFlexibleDates(savedFilters.flexibleDates ?? true);
+                    setNearby(savedFilters.nearby ?? true);
+                    setCountry(savedFilters.country ?? '');
+                    setDestination(savedFilters.destination ?? 'Toutes');
+                    setIntention(savedFilters.intention ?? '');
+                    setTravelStyle(savedFilters.travelStyle ?? 'Tous');
+                    setActivities(savedFilters.activities ?? 'Toutes');
+
+                    // Validate and restore ageRange
+                    const savedAgeRange = savedFilters.ageRange;
+                    if (Array.isArray(savedAgeRange) && savedAgeRange.length === 2 &&
+                        Number.isFinite(savedAgeRange[0]) && Number.isFinite(savedAgeRange[1]) &&
+                        savedAgeRange[0] <= savedAgeRange[1] &&
+                        savedAgeRange[0] >= 18 && savedAgeRange[1] <= 75) {
+                        setAgeRange(savedAgeRange as [number, number]);
+                    } else {
+                        setAgeRange([18, 45]);
+                    }
+
+                    // Validate and restore date
+                    const savedDate = savedFilters.date;
+                    setDate(undefined); // Always reset to default first
+                    if (savedDate && typeof savedDate.from === 'string' && savedDate.from) {
+                        const fromDate = new Date(savedDate.from);
+                        if (!isNaN(fromDate.getTime())) {
+                            // Case 1: `to` is explicitly absent (null or undefined)
+                            if (savedDate.to == null) {
+                                setDate({ from: fromDate, to: undefined });
+                            } 
+                            // Case 2: `to` is present and must be a valid date string
+                            else if (typeof savedDate.to === 'string' && savedDate.to) {
+                                const toDate = new Date(savedDate.to);
+                                if (!isNaN(toDate.getTime()) && fromDate <= toDate) {
+                                    setDate({ from: fromDate, to: toDate });
+                                }
+                            }
+                        }
+                    }
                 }
-                setFlexibleDates(savedFilters.flexibleDates ?? true);
-                setNearby(savedFilters.nearby ?? true);
-                setCountry(savedFilters.country ?? '');
-                setDestination(savedFilters.destination ?? 'Toutes');
-                setIntention(savedFilters.intention ?? '');
-                setTravelStyle(savedFilters.travelStyle ?? 'Tous');
-                setActivities(savedFilters.activities ?? 'Toutes');
             } catch (e) {
-                console.error("Failed to parse saved filters:", e);
+                console.error("Failed to read or parse saved filters, using defaults:", e);
             }
         }
-    }, []);
+        setFiltersOwnerUID(currentUser?.uid ?? null);
+    }, [currentUser]);
 
     useEffect(() => {
         if (!document.querySelector('script[src="https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js"]')) {
@@ -148,6 +202,11 @@ export default function DiscoverPage() {
     };
 
     const handleSearch = async () => {
+        if (filtersOwnerUID !== currentUser?.uid) {
+            console.warn("Search blocked: filters do not match current user.");
+            return;
+        }
+
         const index = await getUsersIndex();
         if (!index || !userProfile || !currentUser) {
             console.error('Search aborted. Index or profile not ready yet.');
@@ -321,7 +380,7 @@ export default function DiscoverPage() {
                 </div>
             </main>
             <footer className="fixed bottom-0 z-10 w-full p-2 bg-background/80 backdrop-blur-sm border-t">
-                <Button onClick={handleSearch} size="lg" className="w-full" disabled={isSearching || loading}>
+                <Button onClick={handleSearch} size="lg" className="w-full" disabled={isSearching || loading || filtersOwnerUID !== currentUser?.uid}>
                     {isSearching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                     {isSearching ? 'Recherche...' : 'Lancer la recherche'}
                 </Button>
