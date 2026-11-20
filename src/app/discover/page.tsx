@@ -1,7 +1,7 @@
 
-"use client";
+'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import type algoliasearch from 'algoliasearch/lite';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,7 @@ import { getUserProfile } from '@/lib/firebase-actions';
 import type { DocumentData } from 'firebase/firestore';
 import { Loader2, Search } from 'lucide-react';
 import { useAd } from '@/context/ad-context';
+import { useSearch } from '@/context/SearchContext';
 
 declare global {
     interface Window { 
@@ -62,10 +63,10 @@ async function getUsersIndex(): Promise<ReturnType<ReturnType<typeof algoliasear
 }
 
 const FILTERS_STORAGE_KEY = 'discoverFilters';
-export const SEARCH_RESULTS_STORAGE_KEY = 'searchResults';
 
 export default function DiscoverPage() {
     const router = useRouter();
+    const { setSearchResults } = useSearch();
     const { searchCount, incrementSearchCount, triggerAdShowOnSearch } = useAd();
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [userProfile, setUserProfile] = useState<DocumentData | null>(null);
@@ -197,29 +198,21 @@ export default function DiscoverPage() {
             };
 
             let searchOptions = buildSearchOptions(false);
-            console.log('[Algolia] Strict filters query: ' + JSON.stringify(searchOptions, null, 2));
-
             let searchResponse = await index.search('', searchOptions);
-            let hits = searchResponse.hits;
-            
-            if (hits.length === 0) {
-                console.warn("⚠️ No results found with strict filters – applying fallback strategy.");
+
+            if (searchResponse.hits.length === 0) {
                 searchOptions = buildSearchOptions(true); // Fallback search
-                console.log('[Algolia] Fallback filters query: ' + JSON.stringify(searchOptions, null, 2));
                 searchResponse = await index.search('', searchOptions);
-                hits = searchResponse.hits;
             }
 
-            console.log('[Algolia] Final results count:', hits.length);
-
             const searchResults = {
-                hits: hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined })),
+                hits: searchResponse.hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined })),
                 page: searchResponse.page,
                 nbPages: searchResponse.nbPages,
                 searchOptions: searchOptions 
             };
             
-            localStorage.setItem(SEARCH_RESULTS_STORAGE_KEY, JSON.stringify(searchResults));
+            setSearchResults(searchResults);
             router.push('/');
     
         } catch (error) {
@@ -313,7 +306,7 @@ export default function DiscoverPage() {
                                 <Separator />
                                 <div className="flex items-center justify-between py-1 px-1 text-sm">
                                     <span className='text-muted-foreground'>Activités</span>
-                                    <GenericSelect className={uniformSelectClass} value={activities} onValueChange={setActivities} options={travelActivities} placeholder="Toutes" />
+                                    <GenericSelect className={uniformSelectClass} value={activities} onValue-change={setActivities} options={travelActivities} placeholder="Toutes" />
                                 </div>
                             </div>
                         </div>

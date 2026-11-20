@@ -18,6 +18,7 @@ import { NavigationProvider } from '@/context/navigation-context';
 import NavigationExecutor from '@/components/navigation-executor';
 import AdMobSetup from '@/components/admob-setup';
 import { AdProvider } from '@/context/ad-context';
+import { SearchProvider } from '@/context/SearchContext';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -71,23 +72,25 @@ export default function RootLayout({
             <NotificationProvider>
               <NavigationProvider>
                 <AdProvider>
-                  <ThemeProvider
-                    attribute="class"
-                    defaultTheme="system"
-                    enableSystem
-                    disableTransitionOnChange
-                  >
-                    <CapacitorSetup />
-                    <AdMobSetup />
-                    <AuthHandler />
-                    <BackButtonHandler />
-                    <CallManager />
-                    <OnboardingOverlay />
-                    <NotificationHandler />
-                    <NavigationExecutor />
-                    <main>{children}</main>
-                    <Toaster />
-                  </ThemeProvider>
+                  <SearchProvider>
+                    <ThemeProvider
+                      attribute="class"
+                      defaultTheme="system"
+                      enableSystem
+                      disableTransitionOnChange
+                    >
+                      <CapacitorSetup />
+                      <AdMobSetup />
+                      <AuthHandler />
+                      <BackButtonHandler />
+                      <CallManager />
+                      <OnboardingOverlay />
+                      <NotificationHandler />
+                      <NavigationExecutor />
+                      <main>{children}</main>
+                      <Toaster />
+                    </ThemeProvider>
+                  </SearchProvider>
                 </AdProvider>
               </NavigationProvider>
             </NotificationProvider>
