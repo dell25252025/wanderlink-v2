@@ -75,7 +75,7 @@ export default function DiscoverPage() {
 
     // States for filters
     const [showMe, setShowMe] = useState('Tous');
-    const [ageRange, setAgeRange] = useState<[number, number]>([25, 45]);
+    const [ageRange, setAgeRange] = useState<[number, number]>([18, 45]);
     const [date, setDate] = useState<DateRange | undefined>();
     const [flexibleDates, setFlexibleDates] = useState(true);
     const [nearby, setNearby] = useState(true);
@@ -89,7 +89,7 @@ export default function DiscoverPage() {
 
     const resetFilters = useCallback(() => {
         setShowMe('Tous');
-        setAgeRange([25, 45]);
+        setAgeRange([18, 45]);
         setDate(undefined);
         setFlexibleDates(true);
         setNearby(true);
@@ -122,7 +122,7 @@ export default function DiscoverPage() {
                 try {
                     const savedFilters = JSON.parse(savedFiltersRaw);
                     setShowMe(savedFilters.showMe ?? 'Tous');
-                    setAgeRange(savedFilters.ageRange ?? [25, 45]);
+                    setAgeRange(savedFilters.ageRange ?? [18, 45]);
                     if (savedFilters.date?.from) {
                         setDate({ from: new Date(savedFilters.date.from), to: savedFilters.date.to ? new Date(savedFilters.date.to) : undefined });
                     }
