@@ -88,7 +88,8 @@ function DiscoverClient() {
     const [travelStyle, setTravelStyle] = useState('Tous');
     const [activities, setActivities] = useState('Toutes');
 
-    const hasHandledInitialLoad = useRef(false); // Verrou pour l'exécution unique
+    const hasRestoredFilters = useRef(false);
+    const hasTriggeredAutoSearch = useRef(false);
     const operationUidRef = useRef<string | null>(null);
 
     useEffect(() => {
@@ -121,6 +122,44 @@ function DiscoverClient() {
         return () => authUnsubscribe();
     }, [router]);
 
+    // *** HOOK #1: RESTAURATION DES FILTRES (STRICTEMENT UNIQUE) ***
+    useEffect(() => {
+        if (userProfile && currentUser && !hasRestoredFilters.current) {
+            hasRestoredFilters.current = true; // Verrouillage pour exécution unique
+
+            let filtersToApply = null;
+            if (userProfile.discoverFilters) {
+                console.log("Restoring filters from Firestore.");
+                filtersToApply = userProfile.discoverFilters;
+                localStorage.setItem(`${FILTERS_STORAGE_KEY}_${currentUser.uid}`, JSON.stringify(filtersToApply));
+            } else {
+                const savedFiltersRaw = localStorage.getItem(`${FILTERS_STORAGE_KEY}_${currentUser.uid}`);
+                if (savedFiltersRaw) {
+                    try { filtersToApply = JSON.parse(savedFiltersRaw); } catch (e) { console.error(e); }
+                }
+            }
+            
+            if (filtersToApply) {
+                setShowMe(filtersToApply.showMe ?? 'Tous');
+                setAgeRange(filtersToApply.ageRange ?? [18, 45]);
+                if (filtersToApply.date?.from) {
+                    setDate({ from: new Date(filtersToApply.date.from), to: filtersToApply.date.to ? new Date(filtersToApply.date.to) : undefined });
+                } else {
+                    setDate(undefined);
+                }
+                setFlexibleDates(filtersToApply.flexibleDates ?? true);
+                setNearby(filtersToApply.nearby ?? true);
+                setCountry(filtersToApply.country ?? '');
+                setDestination(filtersToApply.destination ?? 'Toutes');
+                setIntention(filtersToApply.intention ?? '');
+                setTravelStyle(filtersToApply.travelStyle ?? 'Tous');
+                setActivities(filtersToApply.activities ?? 'Toutes');
+            }
+            
+            setFiltersLoaded(true);
+        }
+    }, [userProfile, currentUser]); // Dépendances minimales pour une exécution unique post-chargement
+
     const handleNearbyChange = (checked: boolean) => {
         setNearby(checked);
         if (checked) setCountry('');
@@ -132,11 +171,7 @@ function DiscoverClient() {
     };
 
     const handleSearch = useCallback(async () => {
-        if (!userProfile || !currentUser) {
-            console.error('Search aborted. Profile not ready yet.');
-            return;
-        }
-
+        if (!userProfile || !currentUser) return;
         setIsSearching(true);
         
         const filtersToSave = {
@@ -146,33 +181,27 @@ function DiscoverClient() {
 
         try {
             const saveResult = await updateUserDiscoverFilters(currentUser.uid, filtersToSave);
-            if (!saveResult.success) {
-                throw new Error(saveResult.error || "La sauvegarde des préférences a échoué.");
-            }
+            if (!saveResult.success) throw new Error(saveResult.error || "La sauvegarde des préférences a échoué.");
 
-            const userFiltersKey = `${FILTERS_STORAGE_KEY}_${currentUser.uid}`;
-            localStorage.setItem(userFiltersKey, JSON.stringify(filtersToSave));
+            localStorage.setItem(`${FILTERS_STORAGE_KEY}_${currentUser.uid}`, JSON.stringify(filtersToSave));
 
             const index = await getUsersIndex();
             if (!index) throw new Error("Le client de recherche n'a pas pu être initialisé.");
 
-            const nextSearchCount = searchCount + 1;
             incrementSearchCount();
-            triggerAdShowOnSearch(nextSearchCount);
+            triggerAdShowOnSearch(searchCount + 1);
 
             const buildSearchOptions = (isFallback: boolean) => {
-                const filters: string[] = [];
-                if (showMe && showMe !== 'Tous') filters.push(`gender:"${showMe}"`);
-                filters.push(`NOT objectID:${currentUser.uid}`);
-                if (userProfile.blockedUsers?.length > 0) {
-                    userProfile.blockedUsers.forEach((id: string) => filters.push(`NOT objectID:${id}`));
-                }
+                const filters: string[] = [`NOT objectID:${currentUser.uid}`];
+                if (showMe !== 'Tous') filters.push(`gender:"${showMe}"`);
+                userProfile.blockedUsers?.forEach((id: string) => filters.push(`NOT objectID:${id}`));
+
                 if (!isFallback) {
                     if (country && !nearby) filters.push(`location:"${country}"`);
-                    if (destination && destination !== 'Toutes') filters.push(`destination:"${destination}"`);
+                    if (destination !== 'Toutes') filters.push(`destination:"${destination}"`);
                     if (intention) filters.push(`intention:"${intention}"`);
-                    if (travelStyle && travelStyle !== 'Tous') filters.push(`travelStyle:"${travelStyle}"`);
-                    if (activities && activities !== 'Toutes') filters.push(`activities:"${activities}"`);
+                    if (travelStyle !== 'Tous') filters.push(`travelStyle:"${travelStyle}"`);
+                    if (activities !== 'Toutes') filters.push(`activities:"${activities}"`);
                 }
                 const searchOptions: any = {
                     filters: filters.join(' AND '),
@@ -199,7 +228,7 @@ function DiscoverClient() {
             router.push('/');
 
         } catch (error) {
-            console.error("Erreur lors de la recherche ou de la sauvegarde:", error);
+            console.error("Search/Save Error:", error);
             toast({ variant: "destructive", title: "Erreur", description: error instanceof Error ? error.message : "Une erreur est survenue." });
         } finally {
             setIsSearching(false);
@@ -209,59 +238,18 @@ function DiscoverClient() {
         searchCount, incrementSearchCount, triggerAdShowOnSearch, router, toast
     ]);
 
-    // *** NOUVELLE LOGIQUE DE RESTAURATION ET RECHERCHE AUTOMATIQUE ***
+    // *** HOOK #2: RECHERCHE AUTOMATIQUE (APRÈS RESTAURATION) ***
     useEffect(() => {
-        // Ne s'exécute que si le profil est chargé et que l'initialisation n'a pas encore eu lieu.
-        if (userProfile && currentUser && !hasHandledInitialLoad.current) {
-            hasHandledInitialLoad.current = true; // Verrouillage immédiat pour exécution unique
-
-            let hadSavedFilters = false;
-            let filtersToApply = null;
-
-            // Priorité 1: Firestore
-            if (userProfile.discoverFilters) {
-                console.log("Unique Restore: Loading filters from Firestore.");
-                filtersToApply = userProfile.discoverFilters;
-                hadSavedFilters = true;
-                localStorage.setItem(`${FILTERS_STORAGE_KEY}_${currentUser.uid}`, JSON.stringify(filtersToApply));
-            } 
-            // Priorité 2: localStorage (cache)
-            else {
-                const savedFiltersRaw = localStorage.getItem(`${FILTERS_STORAGE_KEY}_${currentUser.uid}`);
-                if (savedFiltersRaw) {
-                    console.log("Unique Restore: Loading filters from localStorage.");
-                    try { filtersToApply = JSON.parse(savedFiltersRaw); } catch (e) { console.error(e); }
-                }
-            }
+        if (filtersLoaded && userProfile && !hasTriggeredAutoSearch.current) {
+            hasTriggeredAutoSearch.current = true; // Verrouillage pour exécution unique
             
-            // Application des filtres trouvés
-            if (filtersToApply) {
-                setShowMe(filtersToApply.showMe ?? 'Tous');
-                setAgeRange(filtersToApply.ageRange ?? [18, 45]);
-                if (filtersToApply.date?.from) {
-                    setDate({ from: new Date(filtersToApply.date.from), to: filtersToApply.date.to ? new Date(filtersToApply.date.to) : undefined });
-                } else {
-                    setDate(undefined);
-                }
-                setFlexibleDates(filtersToApply.flexibleDates ?? true);
-                setNearby(filtersToApply.nearby ?? true);
-                setCountry(filtersToApply.country ?? '');
-                setDestination(filtersToApply.destination ?? 'Toutes');
-                setIntention(filtersToApply.intention ?? '');
-                setTravelStyle(filtersToApply.travelStyle ?? 'Tous');
-                setActivities(filtersToApply.activities ?? 'Toutes');
-            }
-            
-            setFiltersLoaded(true);
-
-            // Recherche automatique, uniquement pour les nouveaux profils sans filtres déjà sauvegardés
             const isNewProfile = searchParams.get('newProfile') === 'true';
-            if (isNewProfile && !hadSavedFilters) {
-                console.log("Unique Restore: Triggering auto-search for new profile.");
+            if (isNewProfile && !userProfile.discoverFilters) {
+                console.log("Triggering auto-search for new profile.");
                 handleSearch();
             }
         }
-    }, [userProfile, currentUser, searchParams, handleSearch]);
+    }, [filtersLoaded, userProfile, searchParams, handleSearch]);
     
     const uniformSelectClass = "w-3/5 md:w-[45%] h-9 text-sm";
 
@@ -285,7 +273,7 @@ function DiscoverClient() {
                           type="single"
                           value={showMe}
                           onValueChange={(value) => {
-                            if (value) setShowMe(value); // *** CORRECTION ICI ***
+                            if (value) setShowMe(value);
                           }}
                           className="w-auto justify-start bg-slate-100 dark:bg-slate-800 p-1 rounded-full"
                         >
