@@ -283,7 +283,7 @@ export default function DiscoverPage() {
                         <ToggleGroup
                           type="single"
                           value={showMe}
-                          onValueChange={(value) => { if (value) setShowMe(value) }}
+                          onValueChange={(value) => setShowMe(value || 'Tous')}
                           className="w-auto justify-start bg-slate-100 dark:bg-slate-800 p-1 rounded-full"
                         >
                           <ToggleGroupItem value="Homme" aria-label="Montrer les hommes" className="text-sm h-9">Homme</ToggleGroupItem>
