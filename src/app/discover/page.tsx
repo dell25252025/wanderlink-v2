@@ -19,10 +19,11 @@ import type { DateRange } from 'react-day-picker';
 import { travelIntentions, travelStyles, travelActivities } from '@/lib/options';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { getUserProfile } from '@/lib/firebase-actions';
+import { getUserProfile, updateUserDiscoverFilters } from '@/lib/firebase-actions';
 import type { DocumentData } from 'firebase/firestore';
 import { Loader2, Search } from 'lucide-react';
 import { useAd } from '@/context/ad-context';
+import { useToast } from '@/hooks/use-toast';
 
 declare global {
     interface Window { 
@@ -67,12 +68,14 @@ export const SEARCH_RESULTS_STORAGE_KEY = 'searchResults';
 function DiscoverClient() {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const { toast } = useToast();
     const { searchCount, incrementSearchCount, triggerAdShowOnSearch } = useAd();
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [authReady, setAuthReady] = useState(false);
     const [userProfile, setUserProfile] = useState<DocumentData | null>(null);
     const [loading, setLoading] = useState(true);
     const [isSearching, setIsSearching] = useState(false);
+    const [filtersLoaded, setFiltersLoaded] = useState(false); // Nouvel état pour le contrôle du chargement
 
     // States for filters
     const [showMe, setShowMe] = useState('Tous');
@@ -89,67 +92,12 @@ function DiscoverClient() {
     const hasAutoSearched = useRef(false);
     const operationUidRef = useRef<string | null>(null);
 
-    const resetFilters = useCallback(() => {
-        setShowMe('Tous');
-        setAgeRange([18, 45]);
-        setDate(undefined);
-        setFlexibleDates(true);
-        setNearby(true);
-        setCountry('');
-        setDestination('Toutes');
-        setIntention('');
-        setTravelStyle('Tous');
-        setActivities('Toutes');
-    }, []);
-
-    const saveFilters = useCallback(() => {
-        if (!currentUser) return;
-        const filters = {
-            showMe, ageRange, date: date ? { from: date.from?.toISOString(), to: date.to?.toISOString() } : undefined, 
-            flexibleDates, nearby, country, destination, intention, travelStyle, activities
-        };
-        const userFiltersKey = `${FILTERS_STORAGE_KEY}_${currentUser.uid}`;
-        localStorage.setItem(userFiltersKey, JSON.stringify(filters));
-    }, [currentUser, showMe, ageRange, date, flexibleDates, nearby, country, destination, intention, travelStyle, activities]);
+    // La fonction `saveFilters` n'est plus utilisée directement, mais sa logique est déplacée dans `handleSearch`.
+    // Nous la gardons vide pour ne pas casser d'éventuelles futures dépendances, mais elle n'est plus active.
+    const saveFilters = useCallback(() => {}, []);
 
     useEffect(() => {
-        if (!authReady) return;
-        
-        resetFilters();
-
-        if (currentUser) {
-            const userFiltersKey = `${FILTERS_STORAGE_KEY}_${currentUser.uid}`;
-            const savedFiltersRaw = localStorage.getItem(userFiltersKey);
-            if (savedFiltersRaw) {
-                try {
-                    const savedFilters = JSON.parse(savedFiltersRaw);
-                    setShowMe(savedFilters.showMe ?? 'Tous');
-                    setAgeRange(savedFilters.ageRange ?? [18, 45]);
-                    if (savedFilters.date?.from) {
-                        setDate({ from: new Date(savedFilters.date.from), to: savedFilters.date.to ? new Date(savedFilters.date.to) : undefined });
-                    }
-                    setFlexibleDates(savedFilters.flexibleDates ?? true);
-                    setNearby(savedFilters.nearby ?? true);
-                    setCountry(savedFilters.country ?? '');
-                    setDestination(savedFilters.destination ?? 'Toutes');
-                    setIntention(savedFilters.intention ?? '');
-                    setTravelStyle(savedFilters.travelStyle ?? 'Tous');
-                    setActivities(savedFilters.activities ?? 'Toutes');
-                } catch (e) {
-                    console.error("Failed to parse saved filters:", e);
-                }
-            }
-        }
-    }, [authReady, currentUser, resetFilters]);
-
-    useEffect(() => {
-        if (!document.querySelector('script[src="https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js"]')) {
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js';
-            script.async = true;
-            document.body.appendChild(script);
-        }
-
+        // Effet pour l'authentification et le chargement du profil
         const authUnsubscribe = onAuthStateChanged(auth, (user) => {
             setAuthReady(true);
             setCurrentUser(user);
@@ -159,17 +107,66 @@ function DiscoverClient() {
                 getUserProfile(user.uid).then(profile => {
                     if (operationUidRef.current === user.uid) {
                         setUserProfile(profile);
-                        setLoading(false);
+                        setLoading(false); // Le chargement principal est terminé
                     }
                 });
             } else {
                 setUserProfile(null);
                 setLoading(false);
+                setFiltersLoaded(true); // Pas d'utilisateur, les filtres sont considérés "chargés" (par défaut)
                 router.push('/login');
             }
         });
+
+        if (!document.querySelector('script[src="https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js"]')) {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js';
+            script.async = true;
+            document.body.appendChild(script);
+        }
+
         return () => authUnsubscribe();
     }, [router]);
+
+    useEffect(() => {
+        // Effet pour la restauration des filtres une fois le profil chargé
+        if (userProfile && currentUser && !filtersLoaded) {
+            let filtersToApply = null;
+
+            if (userProfile.discoverFilters) {
+                console.log("Restoring filters from Firestore.");
+                filtersToApply = userProfile.discoverFilters;
+                const userFiltersKey = `${FILTERS_STORAGE_KEY}_${currentUser.uid}`;
+                localStorage.setItem(userFiltersKey, JSON.stringify(filtersToApply));
+            } else {
+                const userFiltersKey = `${FILTERS_STORAGE_KEY}_${currentUser.uid}`;
+                const savedFiltersRaw = localStorage.getItem(userFiltersKey);
+                if (savedFiltersRaw) {
+                    console.log("Restoring filters from localStorage.");
+                    try { filtersToApply = JSON.parse(savedFiltersRaw); } catch (e) { console.error(e); }
+                }
+            }
+            
+            if (filtersToApply) {
+                setShowMe(filtersToApply.showMe ?? 'Tous');
+                setAgeRange(filtersToApply.ageRange ?? [18, 45]);
+                if (filtersToApply.date?.from) {
+                    setDate({ from: new Date(filtersToApply.date.from), to: filtersToApply.date.to ? new Date(filtersToApply.date.to) : undefined });
+                } else {
+                    setDate(undefined);
+                }
+                setFlexibleDates(filtersToApply.flexibleDates ?? true);
+                setNearby(filtersToApply.nearby ?? true);
+                setCountry(filtersToApply.country ?? '');
+                setDestination(filtersToApply.destination ?? 'Toutes');
+                setIntention(filtersToApply.intention ?? '');
+                setTravelStyle(filtersToApply.travelStyle ?? 'Tous');
+                setActivities(filtersToApply.activities ?? 'Toutes');
+            }
+
+            setFiltersLoaded(true); // Marque les filtres comme chargés
+        }
+    }, [userProfile, currentUser, filtersLoaded]);
 
     const handleNearbyChange = (checked: boolean) => {
         setNearby(checked);
@@ -182,31 +179,44 @@ function DiscoverClient() {
     };
 
     const handleSearch = useCallback(async () => {
-        const index = await getUsersIndex();
-        if (!index || !userProfile || !currentUser) {
-            console.error('Search aborted. Index or profile not ready yet.');
+        if (!userProfile || !currentUser) {
+            console.error('Search aborted. Profile not ready yet.');
             return;
         }
 
-        const nextSearchCount = searchCount + 1;
-        incrementSearchCount();
-        triggerAdShowOnSearch(nextSearchCount);
-
-        saveFilters();
         setIsSearching(true);
+        
+        const filtersToSave = {
+            showMe, ageRange, date: date ? { from: date.from?.toISOString(), to: date.to?.toISOString() } : undefined, 
+            flexibleDates, nearby, country, destination, intention, travelStyle, activities
+        };
 
         try {
+            // Étape 1 : Sauvegarde fiable dans Firestore
+            const saveResult = await updateUserDiscoverFilters(currentUser.uid, filtersToSave);
+            if (!saveResult.success) {
+                throw new Error(saveResult.error || "La sauvegarde des préférences a échoué.");
+            }
+
+            // Étape 2 : Si la sauvegarde réussit, mise à jour du cache local
+            const userFiltersKey = `${FILTERS_STORAGE_KEY}_${currentUser.uid}`;
+            localStorage.setItem(userFiltersKey, JSON.stringify(filtersToSave));
+
+            // Étape 3 : Lancement de la recherche Algolia
+            const index = await getUsersIndex();
+            if (!index) throw new Error("Le client de recherche n'a pas pu être initialisé.");
+
+            const nextSearchCount = searchCount + 1;
+            incrementSearchCount();
+            triggerAdShowOnSearch(nextSearchCount);
+
             const buildSearchOptions = (isFallback: boolean) => {
                 const filters: string[] = [];
                 if (showMe && showMe !== 'Tous') filters.push(`gender:"${showMe}"`);
                 filters.push(`NOT objectID:${currentUser.uid}`);
-
-                if (userProfile.blockedUsers && userProfile.blockedUsers.length > 0) {
-                    userProfile.blockedUsers.forEach((blockedId: string) => {
-                        filters.push(`NOT objectID:${blockedId}`);
-                    });
+                if (userProfile.blockedUsers?.length > 0) {
+                    userProfile.blockedUsers.forEach((id: string) => filters.push(`NOT objectID:${id}`));
                 }
-
                 if (!isFallback) {
                     if (country && !nearby) filters.push(`location:"${country}"`);
                     if (destination && destination !== 'Toutes') filters.push(`destination:"${destination}"`);
@@ -214,72 +224,55 @@ function DiscoverClient() {
                     if (travelStyle && travelStyle !== 'Tous') filters.push(`travelStyle:"${travelStyle}"`);
                     if (activities && activities !== 'Toutes') filters.push(`activities:"${activities}"`);
                 }
-
                 const searchOptions: any = {
                     filters: filters.join(' AND '),
                     numericFilters: [`age >= ${ageRange[0]}`, `age <= ${ageRange[1]}`],
                     page: 0,
                     hitsPerPage: 20
                 };
-                
                 if (!isFallback && nearby && userProfile.latitude && userProfile.longitude) {
                     searchOptions.aroundLatLng = `${userProfile.latitude}, ${userProfile.longitude}`;
                     searchOptions.aroundRadius = 50000;
                 }
-                
                 return searchOptions;
             };
 
             let searchOptions = buildSearchOptions(false);
-            console.log('[Algolia] Strict filters query: ' + JSON.stringify(searchOptions, null, 2));
-
             let searchResponse = await index.search('', searchOptions);
-            let hits = searchResponse.hits;
-            
-            if (hits.length === 0) {
-                console.warn("⚠️ No results found with strict filters – applying fallback strategy.");
-                searchOptions = buildSearchOptions(true); // Fallback search
-                console.log('[Algolia] Fallback filters query: ' + JSON.stringify(searchOptions, null, 2));
+            if (searchResponse.hits.length === 0) {
+                searchOptions = buildSearchOptions(true);
                 searchResponse = await index.search('', searchOptions);
-                hits = searchResponse.hits;
             }
-
-            console.log('[Algolia] Final results count:', hits.length);
-
-            const searchResults = {
-                hits: hits.map((hit: any) => ({ ...hit, _highlightResult: undefined, _snippetResult: undefined })),
-                page: searchResponse.page,
-                nbPages: searchResponse.nbPages,
-                searchOptions: searchOptions 
-            };
             
-            const userSearchResultsKey = `${SEARCH_RESULTS_STORAGE_KEY}_${currentUser.uid}`;
-            localStorage.setItem(userSearchResultsKey, JSON.stringify(searchResults));
+            const searchResults = { hits: searchResponse.hits.map((h: any) => ({...h, _highlightResult: undefined})), page: searchResponse.page, nbPages: searchResponse.nbPages, searchOptions };
+            localStorage.setItem(`${SEARCH_RESULTS_STORAGE_KEY}_${currentUser.uid}`, JSON.stringify(searchResults));
             router.push('/');
-    
+
         } catch (error) {
-            console.error("Error searching with Algolia:", error); 
+            console.error("Erreur lors de la recherche ou de la sauvegarde:", error);
+            toast({ variant: "destructive", title: "Erreur", description: error instanceof Error ? error.message : "Une erreur est survenue." });
         } finally {
             setIsSearching(false);
         }
     }, [
-        currentUser, userProfile, saveFilters, showMe, ageRange, country, destination, intention, travelStyle, activities, nearby, 
-        incrementSearchCount, searchCount, triggerAdShowOnSearch, router
+        currentUser, userProfile, showMe, ageRange, date, flexibleDates, nearby, country, destination, intention, travelStyle, activities,
+        searchCount, incrementSearchCount, triggerAdShowOnSearch, router, toast
     ]);
 
     useEffect(() => {
+        // Effet pour la recherche automatique (après inscription)
         const isNewProfile = searchParams.get('newProfile') === 'true';
 
-        if (isNewProfile && userProfile && currentUser && !hasAutoSearched.current) {
-            const userFiltersKey = `${FILTERS_STORAGE_KEY}_${currentUser.uid}`;
-            const savedFilters = localStorage.getItem(userFiltersKey);
-            
-            if (!savedFilters) {
+        // Ne se déclenche que si les filtres sont chargés et si le profil le permet
+        if (isNewProfile && userProfile && filtersLoaded && !hasAutoSearched.current) {
+            // La recherche ne part que si l'utilisateur n'a jamais sauvegardé de filtres auparavant.
+            if (!userProfile.discoverFilters) {
                 hasAutoSearched.current = true;
+                console.log("Lancement de la recherche automatique pour le nouveau profil.");
                 handleSearch();
             }
         }
-    }, [userProfile, currentUser, searchParams, handleSearch]);
+    }, [userProfile, filtersLoaded, searchParams, handleSearch]);
     
     const uniformSelectClass = "w-3/5 md:w-[45%] h-9 text-sm";
 
@@ -360,12 +353,12 @@ function DiscoverClient() {
                                 <Separator />
                                 <div className="flex items-center justify-between py-1 px-1 text-sm">
                                     <span className='text-muted-foreground'>Style de voyage</span>
-                                    <GenericSelect className={uniformSelectClass} value={travelStyle} onValueChange={setTravelStyle} options={travelStyles} placeholder="Tous" />
+                                    <GenericSelect className={uniformSelectClass} value={travelStyle} onValue-change={setTravelStyle} options={travelStyles} placeholder="Tous" />
                                 </div>
                                 <Separator />
                                 <div className="flex items-center justify-between py-1 px-1 text-sm">
                                     <span className='text-muted-foreground'>Activités</span>
-                                    <GenericSelect className={uniformSelectClass} value={activities} onValueChange={setActivities} options={travelActivities} placeholder="Toutes" />
+                                    <GenericSelect className={uniformSelectClass} value={activities} onValue-change={setActivities} options={travelActivities} placeholder="Toutes" />
                                 </div>
                             </div>
                         </div>
@@ -373,9 +366,9 @@ function DiscoverClient() {
                 </div>
             </main>
             <footer className="fixed bottom-0 z-10 w-full p-2 bg-background/80 backdrop-blur-sm border-t">
-                <Button onClick={handleSearch} size="lg" className="w-full" disabled={isSearching || loading}>
+                <Button onClick={handleSearch} size="lg" className="w-full" disabled={isSearching || loading || !filtersLoaded}>
                     {isSearching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-                    {isSearching ? 'Recherche...' : 'Lancer la recherche'}
+                    {isSearching ? 'Recherche...' : (filtersLoaded ? 'Lancer la recherche' : 'Chargement...')}
                 </Button>
             </footer>
         </div>

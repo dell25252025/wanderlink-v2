@@ -39,7 +39,7 @@ export async function signOutFromGoogle(uid: string) {
   }
 }
 
-// --- FONCTION DE GESTION DE L'UTILISATEUR CORRIGEE ---
+// --- FONCTION DE GESTION DE L'UTILISATEUR CORRIGEE --- //
 async function handleUser(user: any) {
   const userRef = doc(db, "users", user.uid);
   const userDoc = await getDoc(userRef);
@@ -329,6 +329,24 @@ export async function updateUserProfile(userId: string, profileData: any) {
         return { success: false, error: e.message || "An unknown error occurred." };
     }
 }
+
+// +++ NOUVELLE FONCTION POUR LA PERSISTANCE DES FILTRES +++
+export async function updateUserDiscoverFilters(userId: string, filters: object) {
+    if (!userId) {
+        return { success: false, error: "User is not authenticated for saving filters." };
+    }
+    try {
+        const userRef = doc(db, "users", userId);
+        await updateDoc(userRef, {
+            discoverFilters: sanitizeData(filters)
+        });
+        return { success: true };
+    } catch (e: any) {
+        console.error("Error in updateUserDiscoverFilters:", e);
+        return { success: false, error: e.message || "An unknown error occurred." };
+    }
+}
+// +++ FIN DE LA NOUVELLE FONCTION +++
 
 export async function addProfilePicture(userId: string, photoDataUri: string) {
     if (!userId) {
