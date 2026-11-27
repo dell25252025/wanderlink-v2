@@ -41,6 +41,9 @@ function AuthenticatedHomePage({ user }: { user: User }) {
       <WanderlinkHeader />
       <main className="flex-1 pb-24 pt-10 md:pt-12">
         <div className="container mx-auto max-w-7xl px-2">
+          <p className="text-center text-xs text-muted-foreground mb-2">
+            Test de déploiement
+          </p>
           <DiscoverClientPage 
             initialProfiles={initialProfiles} 
             loading={profilesLoading} 
