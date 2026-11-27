@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type algoliasearch from 'algoliasearch/lite';
 import { Button } from '@/components/ui/button';
@@ -64,7 +64,7 @@ async function getUsersIndex(): Promise<ReturnType<ReturnType<typeof algoliasear
 const FILTERS_STORAGE_KEY = 'discoverFilters';
 export const SEARCH_RESULTS_STORAGE_KEY = 'searchResults';
 
-export default function DiscoverPage() {
+function DiscoverClient() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { searchCount, incrementSearchCount, triggerAdShowOnSearch } = useAd();
@@ -380,4 +380,16 @@ export default function DiscoverPage() {
             </footer>
         </div>
     );
+}
+
+export default function DiscoverPage() {
+  return (
+    <Suspense fallback={
+        <div className="flex h-screen w-full flex-col items-center justify-center bg-background">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+    }>
+      <DiscoverClient />
+    </Suspense>
+  );
 }
