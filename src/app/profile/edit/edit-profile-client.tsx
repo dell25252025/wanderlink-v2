@@ -253,7 +253,7 @@ export default function EditProfileClientPage() {
                 const result = await updateUserProfile(currentUser.uid, dataToSubmit);
                 if (!result.success) throw new Error(result.error);
                 toast({ title: 'Profil finalisé avec succès !', description: 'Bienvenue sur WanderLink !' });
-                router.push('/');
+                router.push('/discover?newProfile=true');
             } else {
                 const result = await updateUserProfile(currentUser.uid, sanitizedData);
                 if (!result.success) throw new Error(result.error);

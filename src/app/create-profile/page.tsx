@@ -179,7 +179,7 @@ function ProfileCreationForm() {
       const result = await createUserProfile(currentUser.uid, data);
       if (!result.success || !result.id) { throw new Error(result.error || "La création du profil a échoué."); }
       toast({ title: 'Profil créé avec succès !', description: "Bienvenue sur WanderLink !" });
-      router.push('/');
+      router.push('/discover?newProfile=true');
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Une erreur inconnue est survenue.';
       toast({ variant: 'destructive', title: 'Erreur lors de la création du profil', description: msg });

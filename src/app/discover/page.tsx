@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type algoliasearch from 'algoliasearch/lite';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -66,6 +66,7 @@ export const SEARCH_RESULTS_STORAGE_KEY = 'searchResults';
 
 export default function DiscoverPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { searchCount, incrementSearchCount, triggerAdShowOnSearch } = useAd();
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [authReady, setAuthReady] = useState(false);
@@ -85,6 +86,7 @@ export default function DiscoverPage() {
     const [travelStyle, setTravelStyle] = useState('Tous');
     const [activities, setActivities] = useState('Toutes');
 
+    const hasAutoSearched = useRef(false);
     const operationUidRef = useRef<string | null>(null);
 
     const resetFilters = useCallback(() => {
@@ -179,7 +181,7 @@ export default function DiscoverPage() {
         if (checked) setDate(undefined);
     };
 
-    const handleSearch = async () => {
+    const handleSearch = useCallback(async () => {
         const index = await getUsersIndex();
         if (!index || !userProfile || !currentUser) {
             console.error('Search aborted. Index or profile not ready yet.');
@@ -256,11 +258,28 @@ export default function DiscoverPage() {
             router.push('/');
     
         } catch (error) {
-            console.error("Error searching with Algolia:", error);
+            console.error("Error searching with Algolia:", error); 
         } finally {
             setIsSearching(false);
         }
-    };
+    }, [
+        currentUser, userProfile, saveFilters, showMe, ageRange, country, destination, intention, travelStyle, activities, nearby, 
+        incrementSearchCount, searchCount, triggerAdShowOnSearch, router
+    ]);
+
+    useEffect(() => {
+        const isNewProfile = searchParams.get('newProfile') === 'true';
+
+        if (isNewProfile && userProfile && currentUser && !hasAutoSearched.current) {
+            const userFiltersKey = `${FILTERS_STORAGE_KEY}_${currentUser.uid}`;
+            const savedFilters = localStorage.getItem(userFiltersKey);
+            
+            if (!savedFilters) {
+                hasAutoSearched.current = true;
+                handleSearch();
+            }
+        }
+    }, [userProfile, currentUser, searchParams, handleSearch]);
     
     const uniformSelectClass = "w-3/5 md:w-[45%] h-9 text-sm";
 
