@@ -24,6 +24,7 @@ import type { DocumentData } from 'firebase/firestore';
 import { Loader2, Search } from 'lucide-react';
 import { useAd } from '@/context/ad-context';
 import { useToast } from '@/hooks/use-toast';
+import { useDebounce } from '@/hooks/useDebounce';
 
 declare global {
     interface Window { 
@@ -92,6 +93,12 @@ function DiscoverClient() {
     const hasTriggeredAutoSearch = useRef(false);
     const operationUidRef = useRef<string | null>(null);
 
+    const currentFilters = {
+        showMe, ageRange, date: date ? { from: date.from?.toISOString(), to: date.to?.toISOString() } : undefined,
+        flexibleDates, nearby, country, destination, intention, travelStyle, activities
+    };
+    const debouncedFilters = useDebounce(currentFilters, 1500);
+
     useEffect(() => {
         const authUnsubscribe = onAuthStateChanged(auth, (user) => {
             setCurrentUser(user);
@@ -122,16 +129,13 @@ function DiscoverClient() {
         return () => authUnsubscribe();
     }, [router]);
 
-    // *** HOOK #1: RESTAURATION DES FILTRES (STRICTEMENT UNIQUE) ***
     useEffect(() => {
         if (userProfile && currentUser && !hasRestoredFilters.current) {
-            hasRestoredFilters.current = true; // Verrouillage pour exécution unique
-
+            hasRestoredFilters.current = true;
             let filtersToApply = null;
             if (userProfile.discoverFilters) {
                 console.log("Restoring filters from Firestore.");
                 filtersToApply = userProfile.discoverFilters;
-                localStorage.setItem(`${FILTERS_STORAGE_KEY}_${currentUser.uid}`, JSON.stringify(filtersToApply));
             } else {
                 const savedFiltersRaw = localStorage.getItem(`${FILTERS_STORAGE_KEY}_${currentUser.uid}`);
                 if (savedFiltersRaw) {
@@ -156,34 +160,41 @@ function DiscoverClient() {
                 setActivities(filtersToApply.activities ?? 'Toutes');
             }
             
-            setFiltersLoaded(true);
+            // Utilisation d'un timeout pour s'assurer que l'état est bien appliqué avant de le marquer comme chargé.
+            setTimeout(() => setFiltersLoaded(true), 50);
         }
-    }, [userProfile, currentUser]); // Dépendances minimales pour une exécution unique post-chargement
+    }, [userProfile, currentUser]);
 
-    const handleNearbyChange = (checked: boolean) => {
-        setNearby(checked);
-        if (checked) setCountry('');
-    };
+    // *** HOOK DE SAUVEGARDE AUTOMATIQUE (DEBOUNCED) ***
+    useEffect(() => {
+        // Ne sauvegarde que si l'initialisation est terminée et si l'utilisateur est connecté.
+        if (filtersLoaded && currentUser) {
+            console.log("Debounced save triggered.");
+            updateUserDiscoverFilters(currentUser.uid, debouncedFilters).then(result => {
+                if (result.success) {
+                    console.log("Filters auto-saved to Firestore.");
+                    localStorage.setItem(`${FILTERS_STORAGE_KEY}_${currentUser.uid}`, JSON.stringify(debouncedFilters));
+                } else {
+                    console.error("Failed to auto-save filters:", result.error);
+                }
+            });
+        }
+    }, [debouncedFilters, currentUser, filtersLoaded]); // Se déclenche quand la valeur débattue change.
 
-    const handleFlexibleDatesChange = (checked: boolean) => {
-        setFlexibleDates(checked);
-        if (checked) setDate(undefined);
-    };
+    const handleNearbyChange = (checked: boolean) => setNearby(checked);
+    const handleFlexibleDatesChange = (checked: boolean) => setFlexibleDates(checked);
 
     const handleSearch = useCallback(async () => {
         if (!userProfile || !currentUser) return;
         setIsSearching(true);
         
-        const filtersToSave = {
-            showMe, ageRange, date: date ? { from: date.from?.toISOString(), to: date.to?.toISOString() } : undefined, 
-            flexibleDates, nearby, country, destination, intention, travelStyle, activities
-        };
-
         try {
-            const saveResult = await updateUserDiscoverFilters(currentUser.uid, filtersToSave);
+            // Conserve la sauvegarde immédiate pour une réactivité parfaite lors de la recherche manuelle.
+            const saveResult = await updateUserDiscoverFilters(currentUser.uid, currentFilters);
             if (!saveResult.success) throw new Error(saveResult.error || "La sauvegarde des préférences a échoué.");
 
-            localStorage.setItem(`${FILTERS_STORAGE_KEY}_${currentUser.uid}`, JSON.stringify(filtersToSave));
+            localStorage.setItem(`${FILTERS_STORAGE_KEY}_${currentUser.uid}`, JSON.stringify(currentFilters));
+            console.log("Filters saved on search-click.")
 
             const index = await getUsersIndex();
             if (!index) throw new Error("Le client de recherche n'a pas pu être initialisé.");
@@ -233,19 +244,13 @@ function DiscoverClient() {
         } finally {
             setIsSearching(false);
         }
-    }, [
-        currentUser, userProfile, showMe, ageRange, date, flexibleDates, nearby, country, destination, intention, travelStyle, activities,
-        searchCount, incrementSearchCount, triggerAdShowOnSearch, router, toast
-    ]);
+    }, [currentUser, userProfile, currentFilters, searchCount, incrementSearchCount, triggerAdShowOnSearch, router, toast]);
 
-    // *** HOOK #2: RECHERCHE AUTOMATIQUE (APRÈS RESTAURATION) ***
     useEffect(() => {
         if (filtersLoaded && userProfile && !hasTriggeredAutoSearch.current) {
-            hasTriggeredAutoSearch.current = true; // Verrouillage pour exécution unique
-            
+            hasTriggeredAutoSearch.current = true;
             const isNewProfile = searchParams.get('newProfile') === 'true';
             if (isNewProfile && !userProfile.discoverFilters) {
-                console.log("Triggering auto-search for new profile.");
                 handleSearch();
             }
         }
@@ -272,9 +277,7 @@ function DiscoverClient() {
                         <ToggleGroup
                           type="single"
                           value={showMe}
-                          onValueChange={(value) => {
-                            if (value) setShowMe(value);
-                          }}
+                          onValueChange={(value) => { if (value) setShowMe(value); }}
                           className="w-auto justify-start bg-slate-100 dark:bg-slate-800 p-1 rounded-full"
                         >
                           <ToggleGroupItem value="Homme" aria-label="Montrer les hommes" className="text-sm h-9">Homme</ToggleGroupItem>
@@ -301,7 +304,6 @@ function DiscoverClient() {
                                 <div className="flex items-center justify-between py-1 px-1 text-sm">
                                     <span className={cn('text-muted-foreground', nearby && 'opacity-50')}>Pays</span>
                                     <CountrySelect className={uniformSelectClass} value={country} onValueChange={setCountry} disabled={nearby} />
-
                                 </div>
                                 <Separator />
                                 <div className="flex items-center justify-between py-1 px-1 text-sm">
