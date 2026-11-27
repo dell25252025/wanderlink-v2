@@ -64,6 +64,7 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
   const [friends, setFriends] = useState<string[]>([]);
   const [isAddingFriend, setIsAddingFriend] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [liveCurrentUserProfile, setLiveCurrentUserProfile] = useState<DocumentData | null>(initialUserProfile);
   const [usersWhoBlockedMe, setUsersWhoBlockedMe] = useState<Set<string>>(new Set());
   const { toast } = useToast();
@@ -72,74 +73,102 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [searchOptions, setSearchOptions] = useState<any | null>(null);
-  const currentSearchId = useRef(0);
+
+  const operationUidRef = useRef<string | null>(null);
 
   useEffect(() => {
     const authUnsubscribe = onAuthStateChanged(auth, (user) => {
+      operationUidRef.current = user ? user.uid : null;
       setCurrentUser(user);
+      setAuthReady(true);
     });
     return () => authUnsubscribe();
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
     if (currentUser) {
       const userDocRef = doc(db, 'users', currentUser.uid);
       const unsubscribe = onSnapshot(userDocRef, (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          setLiveCurrentUserProfile(data);
-          setFriends(data.friends || []);
+        if (isMounted && operationUidRef.current === currentUser.uid) {
+            if (snapshot.exists()) {
+                const data = snapshot.data();
+                setLiveCurrentUserProfile(data);
+                setFriends(data.friends || []);
+            } else {
+                setLiveCurrentUserProfile(null);
+                setFriends([]);
+            }
         }
       });
-      return () => unsubscribe();
+      return () => { isMounted = false; unsubscribe(); };
+    } else {
+      setLiveCurrentUserProfile(null);
+      setFriends([]);
     }
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (currentUser) {
-      const q = query(collection(db, 'users'), where('blockedUsers', 'array-contains', currentUser.uid));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const ids = new Set(snapshot.docs.map(doc => doc.id));
-        setUsersWhoBlockedMe(ids);
-      });
-      return () => unsubscribe();
-    }
+    return () => { isMounted = false; };
   }, [currentUser]);
 
   useEffect(() => {
     let isMounted = true;
-    setIsLoading(true);
-    currentSearchId.current += 1;
+    if (currentUser) {
+      const q = query(collection(db, 'users'), where('blockedUsers', 'array-contains', currentUser.uid));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+          if (isMounted && operationUidRef.current === currentUser.uid) {
+            const ids = new Set(snapshot.docs.map(doc => doc.id));
+            setUsersWhoBlockedMe(ids);
+          }
+      });
+      return () => { isMounted = false; unsubscribe() };
+    } else {
+      setUsersWhoBlockedMe(new Set());
+    }
+    return () => { isMounted = false; };
+  }, [currentUser]);
 
-    const savedResultsRaw = localStorage.getItem(SEARCH_RESULTS_STORAGE_KEY);
-    let dataToShow = initialProfiles;
+  useEffect(() => {
+    let isMounted = true;
 
+    if (!authReady) {
+      setIsLoading(true);
+      return;
+    }
+
+    // Always reset state on user change
+    setProfiles(initialProfiles);
+    setCurrentPage(0);
+    setTotalPages(0);
+    setSearchOptions(null);
+    setIsMoreLoading(false);
+    setIsLoading(initialLoading);
+
+    if (!currentUser) {
+      return;
+    }
+    
+    const userSearchResultsKey = `${SEARCH_RESULTS_STORAGE_KEY}_${currentUser.uid}`;
+    const savedResultsRaw = localStorage.getItem(userSearchResultsKey);
+    
     if (savedResultsRaw) {
         try {
             const savedData = JSON.parse(savedResultsRaw);
-            if (savedData.hits) {
-                dataToShow = savedData.hits;
-                setCurrentPage(savedData.page || 0);
-                setTotalPages(savedData.nbPages || 0);
-                setSearchOptions(savedData.searchOptions || null);
-            } else {
-                // Fallback for old format
-                dataToShow = savedData;
-                setTotalPages(0);
+            if (isMounted && operationUidRef.current === currentUser.uid) {
+                if (savedData.hits) {
+                    setProfiles(savedData.hits);
+                    setCurrentPage(savedData.page || 0);
+                    setTotalPages(savedData.nbPages || 0);
+                    setSearchOptions(savedData.searchOptions || null);
+                } else {
+                    setProfiles(savedData);
+                }
             }
         } catch (e) {
             console.error("Failed to parse search results, falling back to initial.", e);
-            setTotalPages(0);
         }
-    }
-
-    if (isMounted) {
-        setProfiles(dataToShow);
-        setIsLoading(initialLoading);
     }
     
     return () => { isMounted = false; };
-  }, [initialProfiles, initialLoading]);
+  }, [authReady, currentUser, initialProfiles, initialLoading]);
 
 
   const profileIds = useMemo(() => 
@@ -187,12 +216,12 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
   };
   
   const loadMoreResults = useCallback(async () => {
-    if (!searchOptions || isMoreLoading || currentPage >= totalPages - 1) {
+    if (!searchOptions || isMoreLoading || currentPage >= totalPages - 1 || !currentUser) {
         return;
     }
 
+    const requestUid = currentUser.uid;
     setIsMoreLoading(true);
-    const searchId = currentSearchId.current;
 
     try {
         const index = await getUsersIndex();
@@ -201,7 +230,7 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
         const nextPage = currentPage + 1;
         const response = await index.search('', { ...searchOptions, page: nextPage });
 
-        if (searchId === currentSearchId.current) {
+        if (operationUidRef.current === requestUid) {
             setProfiles(prev => [...prev, ...response.hits]);
             setCurrentPage(nextPage);
         }
@@ -209,11 +238,11 @@ export default function DiscoverClientPage({ initialProfiles, loading: initialLo
         console.error("Failed to load more results:", error);
         toast({ variant: "destructive", title: "Impossible de charger plus de résultats" });
     } finally {
-        if (searchId === currentSearchId.current) {
+        if (operationUidRef.current === requestUid) {
             setIsMoreLoading(false);
         }
     }
-  }, [searchOptions, isMoreLoading, currentPage, totalPages, toast]);
+  }, [searchOptions, isMoreLoading, currentPage, totalPages, toast, currentUser]);
 
   const iHaveBlockedIds = new Set(liveCurrentUserProfile?.blockedUsers || []);
   const allBlockedIds = new Set([...iHaveBlockedIds, ...usersWhoBlockedMe]);

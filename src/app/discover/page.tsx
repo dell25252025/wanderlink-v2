@@ -68,10 +68,12 @@ export default function DiscoverPage() {
     const router = useRouter();
     const { searchCount, incrementSearchCount, triggerAdShowOnSearch } = useAd();
     const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [authReady, setAuthReady] = useState(false);
     const [userProfile, setUserProfile] = useState<DocumentData | null>(null);
     const [loading, setLoading] = useState(true);
     const [isSearching, setIsSearching] = useState(false);
 
+    // States for filters
     const [showMe, setShowMe] = useState('Tous');
     const [ageRange, setAgeRange] = useState<[number, number]>([25, 45]);
     const [date, setDate] = useState<DateRange | undefined>();
@@ -83,36 +85,60 @@ export default function DiscoverPage() {
     const [travelStyle, setTravelStyle] = useState('Tous');
     const [activities, setActivities] = useState('Toutes');
 
+    const operationUidRef = useRef<string | null>(null);
+
+    const resetFilters = useCallback(() => {
+        setShowMe('Tous');
+        setAgeRange([25, 45]);
+        setDate(undefined);
+        setFlexibleDates(true);
+        setNearby(true);
+        setCountry('');
+        setDestination('Toutes');
+        setIntention('');
+        setTravelStyle('Tous');
+        setActivities('Toutes');
+    }, []);
+
     const saveFilters = useCallback(() => {
+        if (!currentUser) return;
         const filters = {
             showMe, ageRange, date: date ? { from: date.from?.toISOString(), to: date.to?.toISOString() } : undefined, 
             flexibleDates, nearby, country, destination, intention, travelStyle, activities
         };
-        localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
-    }, [showMe, ageRange, date, flexibleDates, nearby, country, destination, intention, travelStyle, activities]);
+        const userFiltersKey = `${FILTERS_STORAGE_KEY}_${currentUser.uid}`;
+        localStorage.setItem(userFiltersKey, JSON.stringify(filters));
+    }, [currentUser, showMe, ageRange, date, flexibleDates, nearby, country, destination, intention, travelStyle, activities]);
 
     useEffect(() => {
-        const savedFiltersRaw = localStorage.getItem(FILTERS_STORAGE_KEY);
-        if (savedFiltersRaw) {
-            try {
-                const savedFilters = JSON.parse(savedFiltersRaw);
-                setShowMe(savedFilters.showMe ?? 'Tous');
-                setAgeRange(savedFilters.ageRange ?? [25, 45]);
-                if (savedFilters.date?.from) {
-                    setDate({ from: new Date(savedFilters.date.from), to: savedFilters.date.to ? new Date(savedFilters.date.to) : undefined });
+        if (!authReady) return;
+        
+        resetFilters();
+
+        if (currentUser) {
+            const userFiltersKey = `${FILTERS_STORAGE_KEY}_${currentUser.uid}`;
+            const savedFiltersRaw = localStorage.getItem(userFiltersKey);
+            if (savedFiltersRaw) {
+                try {
+                    const savedFilters = JSON.parse(savedFiltersRaw);
+                    setShowMe(savedFilters.showMe ?? 'Tous');
+                    setAgeRange(savedFilters.ageRange ?? [25, 45]);
+                    if (savedFilters.date?.from) {
+                        setDate({ from: new Date(savedFilters.date.from), to: savedFilters.date.to ? new Date(savedFilters.date.to) : undefined });
+                    }
+                    setFlexibleDates(savedFilters.flexibleDates ?? true);
+                    setNearby(savedFilters.nearby ?? true);
+                    setCountry(savedFilters.country ?? '');
+                    setDestination(savedFilters.destination ?? 'Toutes');
+                    setIntention(savedFilters.intention ?? '');
+                    setTravelStyle(savedFilters.travelStyle ?? 'Tous');
+                    setActivities(savedFilters.activities ?? 'Toutes');
+                } catch (e) {
+                    console.error("Failed to parse saved filters:", e);
                 }
-                setFlexibleDates(savedFilters.flexibleDates ?? true);
-                setNearby(savedFilters.nearby ?? true);
-                setCountry(savedFilters.country ?? '');
-                setDestination(savedFilters.destination ?? 'Toutes');
-                setIntention(savedFilters.intention ?? '');
-                setTravelStyle(savedFilters.travelStyle ?? 'Tous');
-                setActivities(savedFilters.activities ?? 'Toutes');
-            } catch (e) {
-                console.error("Failed to parse saved filters:", e);
             }
         }
-    }, []);
+    }, [authReady, currentUser, resetFilters]);
 
     useEffect(() => {
         if (!document.querySelector('script[src="https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js"]')) {
@@ -123,13 +149,19 @@ export default function DiscoverPage() {
         }
 
         const authUnsubscribe = onAuthStateChanged(auth, (user) => {
+            setAuthReady(true);
             setCurrentUser(user);
+            operationUidRef.current = user ? user.uid : null;
+
             if (user) {
                 getUserProfile(user.uid).then(profile => {
-                    setUserProfile(profile);
-                    setLoading(false);
+                    if (operationUidRef.current === user.uid) {
+                        setUserProfile(profile);
+                        setLoading(false);
+                    }
                 });
             } else {
+                setUserProfile(null);
                 setLoading(false);
                 router.push('/login');
             }
@@ -219,7 +251,8 @@ export default function DiscoverPage() {
                 searchOptions: searchOptions 
             };
             
-            localStorage.setItem(SEARCH_RESULTS_STORAGE_KEY, JSON.stringify(searchResults));
+            const userSearchResultsKey = `${SEARCH_RESULTS_STORAGE_KEY}_${currentUser.uid}`;
+            localStorage.setItem(userSearchResultsKey, JSON.stringify(searchResults));
             router.push('/');
     
         } catch (error) {
