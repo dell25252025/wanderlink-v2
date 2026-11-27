@@ -71,11 +71,10 @@ function DiscoverClient() {
     const { toast } = useToast();
     const { searchCount, incrementSearchCount, triggerAdShowOnSearch } = useAd();
     const [currentUser, setCurrentUser] = useState<User | null>(null);
-    const [authReady, setAuthReady] = useState(false);
     const [userProfile, setUserProfile] = useState<DocumentData | null>(null);
     const [loading, setLoading] = useState(true);
     const [isSearching, setIsSearching] = useState(false);
-    const [filtersLoaded, setFiltersLoaded] = useState(false); // Nouvel état pour le contrôle du chargement
+    const [filtersLoaded, setFiltersLoaded] = useState(false);
 
     // States for filters
     const [showMe, setShowMe] = useState('Tous');
@@ -89,17 +88,11 @@ function DiscoverClient() {
     const [travelStyle, setTravelStyle] = useState('Tous');
     const [activities, setActivities] = useState('Toutes');
 
-    const hasAutoSearched = useRef(false);
+    const hasHandledInitialLoad = useRef(false); // Verrou pour l'exécution unique
     const operationUidRef = useRef<string | null>(null);
 
-    // La fonction `saveFilters` n'est plus utilisée directement, mais sa logique est déplacée dans `handleSearch`.
-    // Nous la gardons vide pour ne pas casser d'éventuelles futures dépendances, mais elle n'est plus active.
-    const saveFilters = useCallback(() => {}, []);
-
     useEffect(() => {
-        // Effet pour l'authentification et le chargement du profil
         const authUnsubscribe = onAuthStateChanged(auth, (user) => {
-            setAuthReady(true);
             setCurrentUser(user);
             operationUidRef.current = user ? user.uid : null;
 
@@ -107,13 +100,13 @@ function DiscoverClient() {
                 getUserProfile(user.uid).then(profile => {
                     if (operationUidRef.current === user.uid) {
                         setUserProfile(profile);
-                        setLoading(false); // Le chargement principal est terminé
+                        setLoading(false);
                     }
                 });
             } else {
                 setUserProfile(null);
                 setLoading(false);
-                setFiltersLoaded(true); // Pas d'utilisateur, les filtres sont considérés "chargés" (par défaut)
+                setFiltersLoaded(true);
                 router.push('/login');
             }
         });
@@ -127,46 +120,6 @@ function DiscoverClient() {
 
         return () => authUnsubscribe();
     }, [router]);
-
-    useEffect(() => {
-        // Effet pour la restauration des filtres une fois le profil chargé
-        if (userProfile && currentUser && !filtersLoaded) {
-            let filtersToApply = null;
-
-            if (userProfile.discoverFilters) {
-                console.log("Restoring filters from Firestore.");
-                filtersToApply = userProfile.discoverFilters;
-                const userFiltersKey = `${FILTERS_STORAGE_KEY}_${currentUser.uid}`;
-                localStorage.setItem(userFiltersKey, JSON.stringify(filtersToApply));
-            } else {
-                const userFiltersKey = `${FILTERS_STORAGE_KEY}_${currentUser.uid}`;
-                const savedFiltersRaw = localStorage.getItem(userFiltersKey);
-                if (savedFiltersRaw) {
-                    console.log("Restoring filters from localStorage.");
-                    try { filtersToApply = JSON.parse(savedFiltersRaw); } catch (e) { console.error(e); }
-                }
-            }
-            
-            if (filtersToApply) {
-                setShowMe(filtersToApply.showMe ?? 'Tous');
-                setAgeRange(filtersToApply.ageRange ?? [18, 45]);
-                if (filtersToApply.date?.from) {
-                    setDate({ from: new Date(filtersToApply.date.from), to: filtersToApply.date.to ? new Date(filtersToApply.date.to) : undefined });
-                } else {
-                    setDate(undefined);
-                }
-                setFlexibleDates(filtersToApply.flexibleDates ?? true);
-                setNearby(filtersToApply.nearby ?? true);
-                setCountry(filtersToApply.country ?? '');
-                setDestination(filtersToApply.destination ?? 'Toutes');
-                setIntention(filtersToApply.intention ?? '');
-                setTravelStyle(filtersToApply.travelStyle ?? 'Tous');
-                setActivities(filtersToApply.activities ?? 'Toutes');
-            }
-
-            setFiltersLoaded(true); // Marque les filtres comme chargés
-        }
-    }, [userProfile, currentUser, filtersLoaded]);
 
     const handleNearbyChange = (checked: boolean) => {
         setNearby(checked);
@@ -192,17 +145,14 @@ function DiscoverClient() {
         };
 
         try {
-            // Étape 1 : Sauvegarde fiable dans Firestore
             const saveResult = await updateUserDiscoverFilters(currentUser.uid, filtersToSave);
             if (!saveResult.success) {
                 throw new Error(saveResult.error || "La sauvegarde des préférences a échoué.");
             }
 
-            // Étape 2 : Si la sauvegarde réussit, mise à jour du cache local
             const userFiltersKey = `${FILTERS_STORAGE_KEY}_${currentUser.uid}`;
             localStorage.setItem(userFiltersKey, JSON.stringify(filtersToSave));
 
-            // Étape 3 : Lancement de la recherche Algolia
             const index = await getUsersIndex();
             if (!index) throw new Error("Le client de recherche n'a pas pu être initialisé.");
 
@@ -259,20 +209,59 @@ function DiscoverClient() {
         searchCount, incrementSearchCount, triggerAdShowOnSearch, router, toast
     ]);
 
+    // *** NOUVELLE LOGIQUE DE RESTAURATION ET RECHERCHE AUTOMATIQUE ***
     useEffect(() => {
-        // Effet pour la recherche automatique (après inscription)
-        const isNewProfile = searchParams.get('newProfile') === 'true';
+        // Ne s'exécute que si le profil est chargé et que l'initialisation n'a pas encore eu lieu.
+        if (userProfile && currentUser && !hasHandledInitialLoad.current) {
+            hasHandledInitialLoad.current = true; // Verrouillage immédiat pour exécution unique
 
-        // Ne se déclenche que si les filtres sont chargés et si le profil le permet
-        if (isNewProfile && userProfile && filtersLoaded && !hasAutoSearched.current) {
-            // La recherche ne part que si l'utilisateur n'a jamais sauvegardé de filtres auparavant.
-            if (!userProfile.discoverFilters) {
-                hasAutoSearched.current = true;
-                console.log("Lancement de la recherche automatique pour le nouveau profil.");
+            let hadSavedFilters = false;
+            let filtersToApply = null;
+
+            // Priorité 1: Firestore
+            if (userProfile.discoverFilters) {
+                console.log("Unique Restore: Loading filters from Firestore.");
+                filtersToApply = userProfile.discoverFilters;
+                hadSavedFilters = true;
+                localStorage.setItem(`${FILTERS_STORAGE_KEY}_${currentUser.uid}`, JSON.stringify(filtersToApply));
+            } 
+            // Priorité 2: localStorage (cache)
+            else {
+                const savedFiltersRaw = localStorage.getItem(`${FILTERS_STORAGE_KEY}_${currentUser.uid}`);
+                if (savedFiltersRaw) {
+                    console.log("Unique Restore: Loading filters from localStorage.");
+                    try { filtersToApply = JSON.parse(savedFiltersRaw); } catch (e) { console.error(e); }
+                }
+            }
+            
+            // Application des filtres trouvés
+            if (filtersToApply) {
+                setShowMe(filtersToApply.showMe ?? 'Tous');
+                setAgeRange(filtersToApply.ageRange ?? [18, 45]);
+                if (filtersToApply.date?.from) {
+                    setDate({ from: new Date(filtersToApply.date.from), to: filtersToApply.date.to ? new Date(filtersToApply.date.to) : undefined });
+                } else {
+                    setDate(undefined);
+                }
+                setFlexibleDates(filtersToApply.flexibleDates ?? true);
+                setNearby(filtersToApply.nearby ?? true);
+                setCountry(filtersToApply.country ?? '');
+                setDestination(filtersToApply.destination ?? 'Toutes');
+                setIntention(filtersToApply.intention ?? '');
+                setTravelStyle(filtersToApply.travelStyle ?? 'Tous');
+                setActivities(filtersToApply.activities ?? 'Toutes');
+            }
+            
+            setFiltersLoaded(true);
+
+            // Recherche automatique, uniquement pour les nouveaux profils sans filtres déjà sauvegardés
+            const isNewProfile = searchParams.get('newProfile') === 'true';
+            if (isNewProfile && !hadSavedFilters) {
+                console.log("Unique Restore: Triggering auto-search for new profile.");
                 handleSearch();
             }
         }
-    }, [userProfile, filtersLoaded, searchParams, handleSearch]);
+    }, [userProfile, currentUser, searchParams, handleSearch]);
     
     const uniformSelectClass = "w-3/5 md:w-[45%] h-9 text-sm";
 
@@ -295,7 +284,9 @@ function DiscoverClient() {
                         <ToggleGroup
                           type="single"
                           value={showMe}
-                          onValueChange={(value) => setShowMe(value || 'Tous')}
+                          onValueChange={(value) => {
+                            if (value) setShowMe(value); // *** CORRECTION ICI ***
+                          }}
                           className="w-auto justify-start bg-slate-100 dark:bg-slate-800 p-1 rounded-full"
                         >
                           <ToggleGroupItem value="Homme" aria-label="Montrer les hommes" className="text-sm h-9">Homme</ToggleGroupItem>
@@ -353,12 +344,12 @@ function DiscoverClient() {
                                 <Separator />
                                 <div className="flex items-center justify-between py-1 px-1 text-sm">
                                     <span className='text-muted-foreground'>Style de voyage</span>
-                                    <GenericSelect className={uniformSelectClass} value={travelStyle} onValue-change={setTravelStyle} options={travelStyles} placeholder="Tous" />
+                                    <GenericSelect className={uniformSelectClass} value={travelStyle} onValueChange={setTravelStyle} options={travelStyles} placeholder="Tous" />
                                 </div>
                                 <Separator />
                                 <div className="flex items-center justify-between py-1 px-1 text-sm">
                                     <span className='text-muted-foreground'>Activités</span>
-                                    <GenericSelect className={uniformSelectClass} value={activities} onValue-change={setActivities} options={travelActivities} placeholder="Toutes" />
+                                    <GenericSelect className={uniformSelectClass} value={activities} onValueChange={setActivities} options={travelActivities} placeholder="Toutes" />
                                 </div>
                             </div>
                         </div>
